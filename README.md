@@ -21,6 +21,20 @@ npm run dev
 - **v1.5: Ask** - Conversational layer over data.
 - **P5: Settings** - Configuration and global controls.
 
+## Data sources
+
+This dashboard reads from project-miru's filesystem at the paths below.
+Both repos must be checked out on the same machine for local dev to work.
+
+| Env var | Default | Purpose |
+| :--- | :--- | :--- |
+| LOGUEOS_COMPLETION_LOG_PATH | D:\\dev\\miru\\data\\cc_completion_log.jsonl | Source for the Runs feed (P1b) |
+| LOGUEOS_RUN_POLL_MS | 5000 | How often the Runs feed re-fetches |
+| LOGUEOS_RUN_FEED_LIMIT | 50 | Most recent N rows shown |
+
+Future P-tickets will add Linear and GitHub API integrations + WebSocket
+for live in-flight state. P1b is read-only filesystem polling.
+
 ## Locked Design References
 
 Canonical visual sources in `project-miru` repo:

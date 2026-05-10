@@ -1,0 +1,45 @@
+export function formatDuration(ms: number | null | undefined): string {
+	if (ms === null || ms === undefined) return '';
+	if (ms < 1000) return `${ms}ms`;
+	const seconds = ms / 1000;
+	if (seconds < 60) return `${seconds.toFixed(1)}s`;
+	const minutes = seconds / 60;
+	return `${minutes.toFixed(1)}m`;
+}
+
+export function formatRelativeTime(timestamp: string): string {
+	const date = new Date(timestamp);
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffSec = Math.floor(diffMs / 1000);
+	if (diffSec < 60) return `${diffSec}s ago`;
+	const diffMin = Math.floor(diffSec / 60);
+	if (diffMin < 60) return `${diffMin}m ago`;
+	const diffHour = Math.floor(diffMin / 60);
+	if (diffHour < 24) return `${diffHour}h ago`;
+	const diffDay = Math.floor(diffHour / 24);
+	return `${diffDay}d ago`;
+}
+
+export function truncateTraceId(traceId: string | null | undefined): string {
+	// CodeRabbit Minor: previously was 'â€”' (mojibake — UTF-8 em-dash
+	// bytes interpreted as Latin-1 by gemini's PowerShell pipe). Now
+	// the actual em-dash codepoint U+2014.
+	if (!traceId) return '—';
+	// Extract the last 8 chars if it's a long trace ID (e.g. cc-LOS-1-...)
+	// Usually they end with a hash
+	const parts = traceId.split('-');
+	const lastPart = parts[parts.length - 1];
+	if (lastPart.length === 8) return lastPart;
+	return traceId.slice(-8);
+}
+
+export function deriveWorkerFromTraceId(traceId: string | null | undefined): string {
+	if (!traceId) return 'unknown';
+	if (traceId.startsWith('cc-')) return 'claude-code';
+	if (traceId.startsWith('gemini-') || traceId.startsWith('gmi-')) return 'gemini';
+	if (traceId.startsWith('cursor-')) return 'cursor';
+	if (traceId.startsWith('codex-')) return 'codex';
+	if (traceId.startsWith('operator-')) return 'operator';
+	return 'unknown';
+}
