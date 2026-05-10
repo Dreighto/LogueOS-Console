@@ -45,9 +45,20 @@ $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
 # CodeRabbit fix on PR #6: respect deployment-supplied env vars; fall back to
 # defaults only when not provided. Lets a future operator override at runtime
 # (e.g. testing against a non-default port or origin) without editing this file.
+#
+# ORIGIN default updated 2026-05-10: was https://room.taila28611.ts.net (Tailscale
+# Funnel hostname) but the operator's tailnet root is owned by n8n — the Console
+# subpath gets shadowed and the Funnel TLS cert resolves to n8n. Operator
+# accesses the Console via the raw Tailscale IP instead, which serves plain
+# HTTP on this port. adapter-node's CSRF middleware requires the ORIGIN env
+# var to match the request origin exactly (single value, no comma-separated
+# list — adapter-node rejects that with ERR_INVALID_URL). Defaulting to the
+# operator-reachable URL. If the network topology changes (n8n moves, dedicated
+# Console hostname appears, etc.) update both this default AND any worker
+# prompts/canon that reference the URL.
 $PORT   = if ($env:PORT)   { $env:PORT }   else { "18767" }
 $HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
-$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "https://room.taila28611.ts.net" }
+$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:18767" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
