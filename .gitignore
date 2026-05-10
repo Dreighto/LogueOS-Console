@@ -50,3 +50,7 @@ test-results/
 data/peer_reviews/
 data/*.jsonl
 *.local
+
+# Per-worktree MCP config (written by dispatch_listener at spawn time, never tracked)
+.mcp.json
+mcp.json
