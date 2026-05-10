@@ -12,7 +12,7 @@
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
 		{ name: 'Settings', path: '/settings', icon: Settings }
-	];
+	] as const;
 </script>
 
 <div
