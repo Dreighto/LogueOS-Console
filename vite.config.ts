@@ -8,16 +8,24 @@ import { defineConfig } from 'vite';
 // without needing localhost forwarding. This is the dev-server config; LOS-4
 // will replace `pnpm dev` with a built `node build/index.js` running under a
 // scheduled-task watchdog like the other Miru services.
+// Vite 5+ blocks unrecognized Host headers with HTTP 403 by default. For a
+// dev server intended to be reached from any device on the operator's tailnet
+// (room.taila28611.ts.net, plus iPhone / iPad / NAS / additional machines we
+// might add), allowing every Host header is the pragmatic call. Production
+// (LOS-4) will use adapter-node behind a real reverse proxy with proper host
+// validation. This is the dev-mode shortcut.
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		host: '0.0.0.0',
 		port: 18767,
-		strictPort: true
+		strictPort: true,
+		allowedHosts: true
 	},
 	preview: {
 		host: '0.0.0.0',
 		port: 18767,
-		strictPort: true
+		strictPort: true,
+		allowedHosts: true
 	}
 });
