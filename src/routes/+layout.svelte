@@ -31,9 +31,10 @@
 	<!-- Bottom Navigation -->
 	<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-background/90 backdrop-blur-lg border-t border-border px-2 py-3 z-20">
 		<div class="flex justify-around items-center">
-			{#each tabs as tab}
+			{#each tabs as tab (tab.path)}
 				<a
 					href={tab.path}
+					aria-current={page.url.pathname === tab.path ? 'page' : undefined}
 					class="flex flex-col items-center gap-1 group relative transition-colors duration-200"
 					class:text-cta={page.url.pathname === tab.path}
 					class:text-muted-foreground={page.url.pathname !== tab.path}
@@ -52,6 +53,6 @@
 
 <style>
 	:global(body) {
-		background-color: #050505; /* Deepest black for surroundings */
+		background-color: #0d1117; /* Match the locked design token (bg) — no separate "surroundings" color in spec */
 	}
 </style>
