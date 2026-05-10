@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-background: #0d1117;
+  --color-surface: #161b22;
+  --color-cta: #a3e635;
+
+  --color-status-green: #22c55e;
+  --color-status-amber: #f59e0b;
+  --color-status-red: #ef4444;
+  --color-status-blue: #3b82f6;
+  --color-status-grey: #6b7280;
+
+  --color-worker-claude: #8b5cf6;
+  --color-worker-gemini: #3b82f6;
+  --color-worker-codex: #10b981;
+  --color-worker-cursor: #f59e0b;
+  --color-worker-operator: #ef4444;
+
+  /* shadcn-svelte compatibility */
+  --radius: 0.5rem;
+
+  --color-primary: #a3e635;
+  --color-primary-foreground: #0d1117;
+
+  --color-secondary: #21262d;
+  --color-secondary-foreground: #ffffff;
+
+  --color-muted: #21262d;
+  --color-muted-foreground: #8b949e;
+
+  --color-accent: #21262d;
+  --color-accent-foreground: #ffffff;
+
+  --color-destructive: #f85149;
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: #30363d;
+  --color-input: #30363d;
+  --color-ring: #a3e635;
+}
+
+@layer base {
+  :root {
+    --background: #0d1117;
+    --foreground: #ffffff;
+    --card: #161b22;
+    --card-foreground: #ffffff;
+    --popover: #161b22;
+    --popover-foreground: #ffffff;
+    --primary: #a3e635;
+    --primary-foreground: #0d1117;
+    --secondary: #21262d;
+    --secondary-foreground: #ffffff;
+    --muted: #21262d;
+    --muted-foreground: #8b949e;
+    --accent: #21262d;
+    --accent-foreground: #ffffff;
+    --destructive: #f85149;
+    --destructive-foreground: #ffffff;
+    --border: #30363d;
+    --input: #30363d;
+    --ring: #a3e635;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
