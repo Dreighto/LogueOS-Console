@@ -2,6 +2,7 @@
 	import RunCard from '$lib/components/RunCard.svelte';
 	import RunCardSkeleton from '$lib/components/RunCardSkeleton.svelte';
 	import type { Run, RunsResponse } from '$lib/types/run';
+	import { resolve } from '$app/paths';
 	import { AlertCircle, RefreshCcw } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
@@ -17,7 +18,11 @@
 
 	async function fetchRuns() {
 		try {
-			const resp = await fetch('/api/runs');
+			// Use resolve() so the URL respects kit.paths.base. Without it,
+			// the bare '/api/runs' resolves to the SITE root not the app's
+			// base — when served behind Tailscale at /console, that request
+			// goes to n8n at root and returns HTML, breaking JSON.parse.
+			const resp = await fetch(resolve('/api/runs'));
 			if (!resp.ok) {
 				const errData = await resp.json();
 				throw new Error(errData.error || `HTTP ${resp.status}`);
@@ -91,7 +96,13 @@
 				<p class="mt-1 font-mono text-xs text-dim">Dispatch a worker to see it appear here.</p>
 			</div>
 		{:else}
-			{#each runs as run (run.trace_id || run.timestamp)}
+			{#each runs as run, i (run.trace_id ?? `${run.timestamp}|${run.ticket_id ?? ''}|${i}`)}
+				<!-- Fallback key uses index disambiguator: historical rows that
+				     pre-date the trace_id field can collide on timestamp alone
+				     (multiple workers shipped the same day with identical
+				     `2026-05-06T00:00:00Z` markers). The composite key with
+				     index keeps Svelte's keyed-each happy without losing the
+				     real trace_id stability for newer rows. -->
 				<RunCard {run} />
 			{/each}
 		{/if}
