@@ -58,7 +58,11 @@ $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
 # prompts/canon that reference the URL.
 $PORT   = if ($env:PORT)   { $env:PORT }   else { "18767" }
 $HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
-$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:18767" }
+# CodeRabbit R1: interpolate the resolved $PORT (NOT $env:PORT) so that if the
+# operator overrides PORT at launch time, the ORIGIN default tracks it. Without
+# this, an operator setting PORT=19000 would still get ORIGIN pinned to :18767
+# and adapter-node CSRF would reject every request.
+$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
