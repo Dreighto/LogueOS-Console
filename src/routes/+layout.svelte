@@ -27,6 +27,21 @@
 		class="z-10 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 	>
 		<div class="flex items-center gap-2">
+			<!-- Operator-supplied LogueOS logo. resolve() honors kit.paths.base
+			     so the src is correctly prefixed with /console/ when served
+			     behind tailscale/IP. Using favicon.png (192x192, ~5KB) instead
+			     of the 1024x1024 source — plenty for a 28x28 header display
+			     even at iPhone 3x DPR. h-7 keeps the logo visually balanced
+			     with the text-lg heading. alt is empty because the heading
+			     next to it is the accessible label — avoids screen-reader
+			     duplication. -->
+			<img
+				src="{resolve('/favicon.png')}"
+				alt=""
+				width="28"
+				height="28"
+				class="h-7 w-7 shrink-0"
+			/>
 			<h1 class="font-sans text-lg font-bold tracking-tight">LogueOS Console</h1>
 			<span
 				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
