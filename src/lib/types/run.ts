@@ -1,4 +1,26 @@
-export type RunStatus = 'CONFIRMED_WORKING' | 'INCONCLUSIVE' | 'FAILED' | 'ESCALATE' | string;
+// CodeRabbit Major: previously included `| string` which silently
+// neutered exhaustiveness on every consumer. Now an explicit union
+// with a dedicated 'unknown' fallback. The /api/runs parser coerces
+// any unrecognized backend value to 'unknown' so the type stays
+// honest end-to-end (status-color/icon mappings can switch on
+// RunStatus exhaustively without an `as never` escape hatch).
+export type RunStatus = 'CONFIRMED_WORKING' | 'INCONCLUSIVE' | 'FAILED' | 'ESCALATE' | 'unknown';
+
+export const RUN_STATUSES: readonly RunStatus[] = [
+	'CONFIRMED_WORKING',
+	'INCONCLUSIVE',
+	'FAILED',
+	'ESCALATE',
+	'unknown'
+] as const;
+
+// Helper: coerce any backend status string to a typed RunStatus.
+// Used by the /api/runs parser to normalize log rows. Keeps the
+// type guarantee at the type-check level and at runtime.
+export function coerceRunStatus(raw: unknown): RunStatus {
+	if (typeof raw !== 'string') return 'unknown';
+	return (RUN_STATUSES as readonly string[]).includes(raw) ? (raw as RunStatus) : 'unknown';
+}
 
 export interface Run {
 	timestamp: string;

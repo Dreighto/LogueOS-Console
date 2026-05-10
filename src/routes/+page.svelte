@@ -2,8 +2,14 @@
 	import RunCard from '$lib/components/RunCard.svelte';
 	import RunCardSkeleton from '$lib/components/RunCardSkeleton.svelte';
 	import type { Run, RunsResponse } from '$lib/types/run';
-	import { config } from '$lib/config';
 	import { AlertCircle, RefreshCcw } from 'lucide-svelte';
+	import type { PageData } from './$types';
+
+	// CodeRabbit Critical fix: client-side display config (poll interval,
+	// feed limit) is supplied via +page.server.ts load() instead of
+	// importing $lib/config — which used $env/dynamic/private and broke
+	// SvelteKit's server-only-module rule.
+	let { data }: { data: PageData } = $props();
 
 	let runs = $state<Run[]>([]);
 	let loading = $state(true);
@@ -13,14 +19,15 @@
 		try {
 			const resp = await fetch('/api/runs');
 			if (!resp.ok) {
-				const data = await resp.json();
-				throw new Error(data.error || `HTTP ${resp.status}`);
+				const errData = await resp.json();
+				throw new Error(errData.error || `HTTP ${resp.status}`);
 			}
-			const data: RunsResponse = await resp.json();
-			runs = data.runs;
+			const respData: RunsResponse = await resp.json();
+			runs = respData.runs;
 			errorMsg = null;
-		} catch (e: any) {
-			errorMsg = e.message;
+		} catch (e: unknown) {
+			// CodeRabbit Major: catch (e: any) violates strict TS. Use unknown + narrow.
+			errorMsg = e instanceof Error ? e.message : 'Unknown error';
 			console.error('Runs fetch error:', e);
 		} finally {
 			loading = false;
@@ -33,7 +40,7 @@
 			if (document.visibilityState === 'visible') {
 				fetchRuns();
 			}
-		}, config.pollIntervalMs);
+		}, data.pollIntervalMs);
 
 		const onVisibilityChange = () => {
 			if (document.visibilityState === 'visible') {

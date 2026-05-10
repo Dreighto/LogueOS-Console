@@ -22,7 +22,10 @@ export function formatRelativeTime(timestamp: string): string {
 }
 
 export function truncateTraceId(traceId: string | null | undefined): string {
-	if (!traceId) return 'â€”';
+	// CodeRabbit Minor: previously was 'â€”' (mojibake — UTF-8 em-dash
+	// bytes interpreted as Latin-1 by gemini's PowerShell pipe). Now
+	// the actual em-dash codepoint U+2014.
+	if (!traceId) return '—';
 	// Extract the last 8 chars if it's a long trace ID (e.g. cc-LOS-1-...)
 	// Usually they end with a hash
 	const parts = traceId.split('-');

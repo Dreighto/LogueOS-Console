@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Run } from '$lib/types/run';
+	import type { Run, RunStatus } from '$lib/types/run';
 	import { formatDuration, formatRelativeTime, truncateTraceId } from '$lib/utils/format';
-	import { CheckCircle2, XCircle, AlertCircle, Loader2, CircleHelp } from 'lucide-svelte';
+	import { CheckCircle2, XCircle, AlertCircle, CircleHelp } from 'lucide-svelte';
 
 	interface Props {
 		run: Run;
@@ -9,24 +9,31 @@
 
 	let { run }: Props = $props();
 
-	const statusColors: Record<string, string> = {
+	// Exhaustive on RunStatus — the type-checker enforces all 5 values are
+	// represented. Adding a 6th status to RunStatus would surface as a
+	// type error here. Per CodeRabbit Major on PR #2 (RunStatus | string
+	// removed in src/lib/types/run.ts).
+	const statusColors: Record<RunStatus, string> = {
 		CONFIRMED_WORKING: '#3FB950',
 		INCONCLUSIVE: '#F5A623',
 		FAILED: '#F85149',
-		ESCALATE: '#3B82F6'
+		ESCALATE: '#3B82F6',
+		unknown: '#6B7280'
 	};
 
 	const workerColors: Record<string, string> = {
 		'claude-code': '#D97757',
-		'gemini': '#AD89EB',
-		'cursor': '#3B82F6',
-		'codex': '#64748B',
-		'operator': '#F5A623'
+		gemini: '#AD89EB',
+		cursor: '#3B82F6',
+		codex: '#64748B',
+		operator: '#F5A623'
 	};
 
-	let statusColor = $derived(statusColors[run.status] || '#6B7280');
+	let statusColor = $derived(statusColors[run.status]);
 	let workerColor = $derived(workerColors[run.worker || ''] || '#6B7280');
-	let summaryPreview = $derived(run.summary.slice(0, 200) + (run.summary.length > 200 ? '...' : ''));
+	let summaryPreview = $derived(
+		run.summary.slice(0, 200) + (run.summary.length > 200 ? '...' : '')
+	);
 </script>
 
 <div
@@ -46,13 +53,12 @@
 				<CheckCircle2 size={16} color={statusColor} />
 			{:else if run.status === 'FAILED'}
 				<XCircle size={16} color={statusColor} />
-			{:else if run.status === 'INCONCLUSIVE'}
+			{:else if run.status === 'INCONCLUSIVE' || run.status === 'ESCALATE'}
 				<AlertCircle size={16} color={statusColor} />
-			{:else if run.status === 'ESCALATE'}
-				<AlertCircle size={16} color={statusColor} />
-			{:else if run.status === 'running'}
-				<Loader2 size={16} color="#3B82F6" class="animate-spin" />
 			{:else}
+				<!-- 'unknown' fallback. Live in-flight state (Loader2 spin) is
+				     deferred to P1c per the spec — completion log only contains
+				     terminal rows, so we never hit a 'running' state here. -->
 				<CircleHelp size={16} color={statusColor} />
 			{/if}
 		</div>
@@ -71,16 +77,16 @@
 		<span class="rounded bg-[#21262D] px-1.5 py-0.5 text-[#8A8A9A]">
 			{truncateTraceId(run.trace_id)}
 		</span>
-		<span class="flex items-center before:mr-2 before:content-['Â·']">
+		<span class="flex items-center before:mr-2 before:content-['·']">
 			{formatRelativeTime(run.timestamp)}
 		</span>
 		{#if run.duration_ms}
-			<span class="flex items-center before:mr-2 before:content-['Â·']">
+			<span class="flex items-center before:mr-2 before:content-['·']">
 				{formatDuration(run.duration_ms)}
 			</span>
 		{/if}
 		{#if run.pr_number}
-			<span class="flex items-center before:mr-2 before:content-['Â·']">
+			<span class="flex items-center before:mr-2 before:content-['·']">
 				PR #{run.pr_number}
 			</span>
 		{/if}
