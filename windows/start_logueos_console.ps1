@@ -71,21 +71,24 @@ if (-not $nodeCmd) {
     exit 3
 }
 
-# Guard: if port 18767 is already bound, exit gracefully (idempotent).
-$portBound = Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction SilentlyContinue |
+# CodeRabbit R2 fix: use resolved $PORT for idempotency check, not hardcoded
+# 18767. If operator overrides $env:PORT at launch time, both the bind and the
+# already-listening guard must agree on the same port.
+$portInt = [int]$PORT
+$portBound = Get-NetTCPConnection -LocalPort $portInt -State Listen -ErrorAction SilentlyContinue |
              Select-Object -First 1
 if ($portBound) {
-    Write-WrapperLog "port 18767 already listening (PID=$($portBound.OwningProcess)) -- already running, exiting gracefully"
+    Write-WrapperLog "port $PORT already listening (PID=$($portBound.OwningProcess)) -- already running, exiting gracefully"
     exit 0
 }
 
 $respawns = 0
 $lastExit = -1
 while ($respawns -lt $MAX_RESPAWNS) {
-    $portCheck = Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction SilentlyContinue |
+    $portCheck = Get-NetTCPConnection -LocalPort $portInt -State Listen -ErrorAction SilentlyContinue |
                  Select-Object -First 1
     if ($portCheck) {
-        Write-WrapperLog "pre-spawn port check: 18767 already listening (PID=$($portCheck.OwningProcess)) -- exiting gracefully"
+        Write-WrapperLog "pre-spawn port check: $PORT already listening (PID=$($portCheck.OwningProcess)) -- exiting gracefully"
         $lastExit = 0
         break
     }
