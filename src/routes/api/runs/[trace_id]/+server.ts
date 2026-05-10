@@ -44,19 +44,13 @@ export const GET: RequestHandler = async ({ params }) => {
 	// size. Tracks the most-recent matching row (newest wins on the rare
 	// trace_id collision) by reading forward and overwriting `match` until
 	// the stream ends.
-	let stream: fs.ReadStream;
-	try {
-		stream = fs.createReadStream(resolvedPath, { encoding: 'utf-8' });
-	} catch (e: unknown) {
-		const err = e as NodeJS.ErrnoException;
-		if (err.code === 'ENOENT') {
-			console.error('completion_log_not_found', { resolvedPath });
-			return json({ error: 'completion_log_not_found' }, { status: 503 });
-		}
-		console.error('API Error opening log:', err);
-		return json({ error: 'internal_server_error' }, { status: 500 });
-	}
-
+	//
+	// CodeRabbit R3 fix: fs.createReadStream does NOT throw synchronously
+	// on a missing file — the ENOENT surfaces asynchronously via the
+	// stream's 'error' event, which propagates as a thrown exception in
+	// the for-await loop below. So the ENOENT branch lives in the for-await
+	// catch, not at stream-construction time.
+	const stream = fs.createReadStream(resolvedPath, { encoding: 'utf-8' });
 	const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 	let match: Run | null = null;
 
@@ -83,7 +77,12 @@ export const GET: RequestHandler = async ({ params }) => {
 			}
 		}
 	} catch (e: unknown) {
-		console.error('API Error during stream read:', e);
+		const err = e as NodeJS.ErrnoException;
+		if (err.code === 'ENOENT') {
+			console.error('completion_log_not_found', { resolvedPath });
+			return json({ error: 'completion_log_not_found' }, { status: 503 });
+		}
+		console.error('API Error during stream read:', err);
 		return json({ error: 'internal_server_error' }, { status: 500 });
 	} finally {
 		rl.close();
