@@ -42,9 +42,12 @@ $stdoutLog  = Join-Path $logDir "logueos_console_stdout.log"
 $stderrLog  = Join-Path $logDir "logueos_console_stderr.log"
 $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
 
-$PORT   = "18767"
-$HOST_  = "0.0.0.0"
-$ORIGIN = "https://room.taila28611.ts.net"
+# CodeRabbit fix on PR #6: respect deployment-supplied env vars; fall back to
+# defaults only when not provided. Lets a future operator override at runtime
+# (e.g. testing against a non-default port or origin) without editing this file.
+$PORT   = if ($env:PORT)   { $env:PORT }   else { "18767" }
+$HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
+$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "https://room.taila28611.ts.net" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
@@ -140,7 +143,7 @@ exit $lastExit
 #                    -LogonType S4U `
 #                    -RunLevel Limited
 #   Register-ScheduledTask `
-#       -TaskName    "LogueOSConsole" `
+#       -TaskName    "MiruRestartLogueOSConsole" `
 #       -TaskPath    "\Miru\" `
 #       -Action      $action `
 #       -Trigger     $trigger `
@@ -149,12 +152,12 @@ exit $lastExit
 #       -Description "LogueOS Console production server (port 18767, adapter-node)"
 #
 # Verify it starts:
-#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "LogueOSConsole"
+#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
 #   Start-Sleep 5
 #   (Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction SilentlyContinue).OwningProcess
 #
 # To restart later (from any PowerShell, no elevation needed if LogonType=S4U and
 # the process is in your interactive session):
-#   Stop-ScheduledTask -TaskPath "\Miru\" -TaskName "LogueOSConsole"
-#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "LogueOSConsole"
+#   Stop-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
+#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
 # ---------------------------------------------------------------------------

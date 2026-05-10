@@ -8,7 +8,10 @@ const config = {
 	},
 	kit: {
 		// adapter-node produces a standalone Node.js server (build/index.js).
-		// Launch with: PORT=18767 HOST=0.0.0.0 LOGUEOS_CONSOLE_BASE_PATH=/console node build/index.js
+		// Launch with:
+		//   POSIX:      PORT=18767 HOST=0.0.0.0 LOGUEOS_CONSOLE_BASE_PATH=/console node build/index.js
+		//   PowerShell: $env:PORT='18767'; $env:HOST='0.0.0.0'; $env:LOGUEOS_CONSOLE_BASE_PATH='/console'; node build/index.js
+		// In production this is wrapped by windows\start_logueos_console.ps1 which sets the env.
 		adapter: adapter(),
 		paths: {
 			// Console is exposed via Tailscale Serve at
