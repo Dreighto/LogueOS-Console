@@ -41,6 +41,10 @@ export const serverConfig = {
 		'LOGUEOS_COMPLETION_LOG_PATH',
 		'D:\\dev\\miru\\data\\cc_completion_log.jsonl'
 	),
+	workerLogPath: getEnv(
+		'LOGUEOS_WORKER_LOG_PATH',
+		'D:\\dev\\miru\\logs\\dispatch_listener_stdout.log'
+	),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
 	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
 };
