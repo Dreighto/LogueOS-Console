@@ -21,3 +21,9 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Per-worktree MCP config (written by dispatch_listener at spawn time, never tracked).
+# Without this, verifyWorktreeParked rejects the worktree as dirty (untracked
+# .mcp.json) and dispatch fails with pre_spawn_dirty_refusal. Mirror project-miru.
+.mcp.json
+mcp.json
