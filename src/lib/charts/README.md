@@ -1,0 +1,1 @@
+Chart isolation pattern: keep all chart usage in this directory. One wrapper component per chart type. This allows for easier pivots between chart libraries (e.g. LayerChart to Chart.js) by isolating the dependency.

@@ -1,25 +1,33 @@
 # LogueOS Console
 
-The operator-facing dashboard for the LogueOS multi-agent dispatch loop.
+Operator-facing dashboard for LogueOS dispatch loop. Mobile-first, 5 tabs, SvelteKit + Svelte 5 runes + TailwindCSS + shadcn-svelte + lucide-svelte + LayerChart.
 
-**Stack:** SvelteKit + Svelte 5 (runes) + TailwindCSS + shadcn-svelte + LayerChart + lucide-svelte
+## How to run
 
-**Status:** Bootstrap phase. See LOS-1 in Linear for the P1a build spec (5-tab nav shell, hero metrics, dispatch chain visualization, activity feed, run-detail screens).
+```bash
+npm install
+npm run dev
+```
 
-## Relationship to other repos
+(pnpm is preferred if available in your environment).
 
-| Repo | Purpose |
-|------|---------|
-| [Dreighto/project-miru](https://github.com/Dreighto/project-miru) | The dispatch loop runtime (workers, gateway, audit logs, Hermes shadow predictor). All worker rule files (CLAUDE.md, AGENTS.md, `.miru/overlays/`, `.miru/reference/`) live here — they are the canon for any repo any worker operates in. |
-| **Dreighto/LogueOS-Console (this repo)** | The dashboard that watches the loop. Reads dispatch state via the dispatch_listener API (port 19100) and the `miru_memory.db` SQLite store. Writes nothing to project-miru's runtime. |
-| [LogueOS framework docs](https://github.com/Dreighto/LogueOS) (planned) | The methodology framework that Project Miru runs on. Currently lives at `D:\dev\LogueOS\` as 7 markdown docs; not yet a separate repo. |
+## Roadmap
 
-## How workers operate on this repo
+- **P1a: Shell + 5-tab nav (current)** - Foundation with placeholder content and design system.
+- **P1b: Runs data** - Real data wiring + run cards.
+- **P1c: Run detail** - Detail view + waterfall view.
+- **P2: Workers** - Worker roster, heartbeat, and control actions.
+- **P3: Activity** - Cross-system event chronology.
+- **v1.5: Ask** - Conversational layer over data.
+- **P5: Settings** - Configuration and global controls.
 
-Workers dispatched against LOS tickets land in `D:\dev\LogueOS-Console-w*` worktrees, separate from the `D:\dev\miru-w*` pool. They load worker-rule canon from the project-miru repo (CLAUDE.md, AGENTS.md, etc.) but write code into this repo only. PRs land here. CI lives here.
+## Locked Design References
 
-See `.miru/reference/source-of-truth.md` in project-miru for the full truth hierarchy and multi-repo dispatch model.
+Canonical visual sources in `project-miru` repo:
+- `data/peer_reviews/logueos-map-and-plan.html`
+- `data/peer_reviews/logueos-runs-tab.html`
+- `data/peer_reviews/logueos-button-icon-system.html`
 
-## Getting started
+## Cross-repo Note
 
-Once LOS-1 ships, this README will be replaced with proper SvelteKit-project quickstart instructions (`pnpm install`, `pnpm dev`, etc.).
+Worker rule canon (CLAUDE.md, AGENTS.md, .miru/) lives in the `project-miru` repo and is shared. Workers operating in this repo follow rules from there but write code here.

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "miru-gateway": {
+      "type": "http",
+      "url": "http://127.0.0.1:18766/mcp",
+      "headers": {
+        "X-Miru-Tool-Profile": "${MIRU_TOOL_PROFILE}",
+        "X-Miru-Trace-Id": "${MIRU_TRACE_ID}"
+      }
+    }
+  }
+}
