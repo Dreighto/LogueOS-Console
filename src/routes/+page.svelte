@@ -96,13 +96,18 @@
 				<p class="mt-1 font-mono text-xs text-dim">Dispatch a worker to see it appear here.</p>
 			</div>
 		{:else}
-			{#each runs as run, i (run.trace_id ?? `${run.timestamp}|${run.ticket_id ?? ''}|${i}`)}
-				<!-- Fallback key uses index disambiguator: historical rows that
-				     pre-date the trace_id field can collide on timestamp alone
-				     (multiple workers shipped the same day with identical
-				     `2026-05-06T00:00:00Z` markers). The composite key with
-				     index keeps Svelte's keyed-each happy without losing the
-				     real trace_id stability for newer rows. -->
+			{#each runs as run, i (`${run.trace_id ?? ''}|${run.timestamp}|${run.ticket_id ?? ''}|${i}`)}
+				<!-- Composite key ALWAYS includes index. Two failure modes covered:
+				     (1) historical rows pre-dating trace_id collide on timestamp
+				         (multiple workers shipped same day with identical
+				         `2026-05-06T00:00:00Z` markers).
+				     (2) workers re-emit completion markers with the same trace_id
+				         (LOS-4 ran emit_completion that included LOS-3's row by
+				         mistake — see PR #168). The trace_id alone is therefore
+				         not unique even when present.
+				     Index breaks the tie in both cases without losing stability
+				     across renders (the runs array is reverse-chronological so
+				     index-N is consistently the same row across polls). -->
 				<RunCard {run} />
 			{/each}
 		{/if}

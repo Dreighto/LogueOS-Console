@@ -53,6 +53,9 @@ function deriveSummary(event: any): string {
 function deriveLevel(event: any): ActivityEvent['level'] {
     switch (event.msg as ActivityEventType) {
         case 'worker_exit':
+            // Take HEAD: non-CONFIRMED exits are 'error' (red) so they stand out
+            // visually in the activity feed. 'info' would treat all non-success
+            // worker exits the same as routine spawn events.
             return event.status === 'CONFIRMED_WORKING' ? 'success' : 'error';
         case 'worktree_cleanup_stashed':
             return 'warning';

@@ -6,6 +6,9 @@
 
 	let { children } = $props();
 
+	// Use SvelteKit's typed route IDs (the const-asserted tuples) so resolve()
+	// type-checks. SvelteKit 2.59 generates these from the file-system routes
+	// and rejects bare-string route IDs at the type level.
 	const tabs = [
 		{ name: 'Runs', path: '/', icon: Play },
 		{ name: 'Workers', path: '/workers', icon: Cpu },
