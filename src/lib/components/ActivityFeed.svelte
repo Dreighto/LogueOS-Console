@@ -13,31 +13,31 @@
         switch (level) {
             case 'success':
                 return {
-                    bg: 'bg-[#3FB950]22',
+                    bg: 'bg-[#3FB950]/[0.13]',
                     text: 'text-[#3FB950]',
-                    border: 'border-[#3FB950]44',
+                    border: 'border-[#3FB950]/[0.27]',
                     icon: CheckCircle2
                 };
             case 'warning':
                 return {
-                    bg: 'bg-[#D29922]22',
+                    bg: 'bg-[#D29922]/[0.13]',
                     text: 'text-[#D29922]',
-                    border: 'border-[#D29922]44',
+                    border: 'border-[#D29922]/[0.27]',
                     icon: AlertCircle
                 };
             case 'error':
                 return {
-                    bg: 'bg-[#F85149]22',
+                    bg: 'bg-[#F85149]/[0.13]',
                     text: 'text-[#F85149]',
-                    border: 'border-[#F85149]44',
+                    border: 'border-[#F85149]/[0.27]',
                     icon: XCircle
                 };
             case 'info':
             default:
                 return {
-                    bg: 'bg-[#8B949E]22',
+                    bg: 'bg-[#8B949E]/[0.13]',
                     text: 'text-[#8B949E]',
-                    border: 'border-[#8B949E]44',
+                    border: 'border-[#8B949E]/[0.27]',
                     icon: Info
                 };
         }

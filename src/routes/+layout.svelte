@@ -12,7 +12,7 @@
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
 		{ name: 'Settings', path: '/settings', icon: Settings }
-	];
+	] as const;
 </script>
 
 <div
@@ -52,7 +52,7 @@
 		<div class="flex items-center justify-around">
 			{#each tabs as tab (tab.path)}
 				<a
-					href={resolve(tab.path as any)}
+					href={resolve(tab.path)}
 					aria-current={page.url.pathname === tab.path ? 'page' : undefined}
 					class="group relative flex flex-col items-center gap-1 transition-colors duration-200"
 					class:text-cta={page.url.pathname === tab.path}

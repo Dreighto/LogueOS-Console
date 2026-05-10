@@ -53,7 +53,7 @@ function deriveSummary(event: any): string {
 function deriveLevel(event: any): ActivityEvent['level'] {
     switch (event.msg as ActivityEventType) {
         case 'worker_exit':
-            return event.status === 'CONFIRMED_WORKING' ? 'success' : 'info';
+            return event.status === 'CONFIRMED_WORKING' ? 'success' : 'error';
         case 'worktree_cleanup_stashed':
             return 'warning';
         case 'dispatch_rejected':
