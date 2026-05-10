@@ -39,7 +39,6 @@ export function truncateTraceId(traceId: string | null | undefined): string {
 
 export function deriveWorkerFromTraceId(traceId: string | null | undefined): string {
 	if (!traceId) return 'unknown';
-	if (traceId.startsWith('cc-LOS-')) return 'gemini';
 	if (traceId.startsWith('cc-')) return 'claude-code';
 	if (traceId.startsWith('gemini-') || traceId.startsWith('gmi-')) return 'gemini';
 	if (traceId.startsWith('cursor-')) return 'cursor';
