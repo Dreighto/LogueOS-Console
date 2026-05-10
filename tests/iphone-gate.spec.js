@@ -13,11 +13,18 @@ test('iPhone gate verification', async ({ page }) => {
     }
   });
 
-  console.log('Navigating to https://room.taila28611.ts.net/console/ ...');
-  await page.goto('https://room.taila28611.ts.net/console/', { waitUntil: 'networkidle' });
-  
+  console.log('Navigating to /console/ ...');
+  await page.goto('/console/', { waitUntil: 'networkidle' });
+
   console.log('Taking screenshot...');
   await page.screenshot({ path: 'los-7-iphone-verified.png' });
-  
+
+  // LOS-7 acceptance criteria: verify em-dash timestamp fallback and worker badges
+  const timestampElements = await page.locator('span:has-text("—")').all();
+  expect(timestampElements.length).toBeGreaterThan(0);
+
+  const workerBadges = await page.locator('span:has-text("claude-code"), span:has-text("gemini"), span:has-text("cursor"), span:has-text("operator"), span:has-text("unknown")').all();
+  expect(workerBadges.length).toBeGreaterThan(0);
+
   expect(errors).toHaveLength(0);
 });
