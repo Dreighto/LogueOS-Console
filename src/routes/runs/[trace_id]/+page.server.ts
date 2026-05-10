@@ -24,28 +24,39 @@ export const load: PageServerLoad = async ({ params, fetch }): Promise<RunDetail
 		return { run: null, notFoundTraceId: null, errorMsg: 'No trace_id supplied' };
 	}
 
-	const resp = await fetch(`/api/runs/${traceId}`);
+	// CodeRabbit R2 Major: encode the path segment + wrap fetch/json in
+	// try/catch. Without encoding, a stray slash in trace_id would 404 on
+	// the wrong route. Without try/catch, a network blip throws into
+	// SvelteKit's error.svelte instead of rendering our in-page error UI.
+	try {
+		const resp = await fetch(`/api/runs/${encodeURIComponent(traceId)}`);
 
-	// 404 → friendly empty state (RunNotFound rendered by +page.svelte).
-	// Don't `error()` throw here — that would render the global error page;
-	// we want an in-app empty card with a Back-to-Runs CTA.
-	if (resp.status === 404) {
-		return { run: null, notFoundTraceId: traceId, errorMsg: null };
-	}
-
-	// 400 (invalid trace_id pattern) and 5xx → render an error banner with
-	// the message from the endpoint. Same not-throwing rationale.
-	if (!resp.ok) {
-		let errorMsg = `HTTP ${resp.status}`;
-		try {
-			const errData = await resp.json();
-			errorMsg = errData.error || errorMsg;
-		} catch {
-			// Endpoint returned non-JSON; keep the HTTP status as the message.
+		// 404 → friendly empty state (RunNotFound rendered by +page.svelte).
+		// Don't `error()` throw here — that would render the global error
+		// page; we want an in-app empty card with a Back-to-Runs CTA.
+		if (resp.status === 404) {
+			return { run: null, notFoundTraceId: traceId, errorMsg: null };
 		}
+
+		// 400 (invalid trace_id pattern) and 5xx → render an error banner
+		// with the message from the endpoint.
+		if (!resp.ok) {
+			let errorMsg = `HTTP ${resp.status}`;
+			try {
+				const errData = await resp.json();
+				errorMsg = errData.error || errorMsg;
+			} catch {
+				// Endpoint returned non-JSON; keep the HTTP status as the message.
+			}
+			return { run: null, notFoundTraceId: null, errorMsg };
+		}
+
+		const data = await resp.json();
+		return { run: data.run as Run, notFoundTraceId: null, errorMsg: null };
+	} catch (e: unknown) {
+		// Network failure / JSON parse failure / endpoint unreachable. Stay in-page.
+		const errorMsg = e instanceof Error ? e.message : 'Unknown error fetching run detail';
+		console.error('Run detail load error:', e);
 		return { run: null, notFoundTraceId: null, errorMsg };
 	}
-
-	const data = await resp.json();
-	return { run: data.run as Run, notFoundTraceId: null, errorMsg: null };
 };

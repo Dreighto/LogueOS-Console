@@ -1,6 +1,7 @@
 <script lang="ts">
 	import RunDetail from '$lib/components/RunDetail.svelte';
 	import { AlertCircle, ChevronLeft, Search } from 'lucide-svelte';
+	import { base } from '$app/paths';
 	import type { PageData } from './$types';
 
 	// CodeRabbit Major fix: server-side load via +page.server.ts means there
@@ -17,7 +18,7 @@
 <div class="flex flex-col gap-6">
 	<div class="flex items-center gap-4">
 		<a
-			href="/"
+			href="{base}/"
 			class="flex items-center gap-1 font-sans text-sm text-[#8A8A9A] transition-colors hover:text-[#F0F0F0]"
 		>
 			<ChevronLeft size={16} />
@@ -46,7 +47,7 @@
 				The run may have happened before the log started, or the URL may have a typo.
 			</p>
 			<a
-				href="/"
+				href="{base}/"
 				class="mt-6 inline-flex items-center gap-1 rounded-md bg-[#A3E635] px-3 py-1.5 text-xs font-semibold text-[#0D1117] transition-all hover:shadow-[0_0_12px_rgba(163,230,53,0.4)]"
 			>
 				<ChevronLeft size={12} />
