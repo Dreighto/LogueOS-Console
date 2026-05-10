@@ -55,8 +55,11 @@ export const GET: RequestHandler = async ({ url }) => {
 					summary: data.summary || '',
 					worker: data.worker || deriveWorkerFromTraceId(data.trace_id),
 					trace_id: data.trace_id || null,
-					duration_ms: data.duration_ms || null,
-					pr_number: data.pr_number || null,
+					// ?? not ||: a legitimate 0 ms duration or PR #0 is meaningful
+					// data; falsy coercion would silently drop them. CodeRabbit
+					// Round 2 minor.
+					duration_ms: data.duration_ms ?? null,
+					pr_number: data.pr_number ?? null,
 					branch: data.branch || null,
 					files_touched: data.files_touched || []
 				});

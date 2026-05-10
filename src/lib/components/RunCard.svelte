@@ -80,7 +80,10 @@
 		<span class="flex items-center before:mr-2 before:content-['·']">
 			{formatRelativeTime(run.timestamp)}
 		</span>
-		{#if run.duration_ms}
+		{#if run.duration_ms != null}
+			<!-- != null catches both undefined and null but keeps 0 visible.
+			     Pre-Round-2 the truthiness check `{#if run.duration_ms}` would
+			     hide a legitimate 0 ms duration (e.g. an instant-failure spawn). -->
 			<span class="flex items-center before:mr-2 before:content-['·']">
 				{formatDuration(run.duration_ms)}
 			</span>

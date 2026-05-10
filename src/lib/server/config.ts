@@ -15,9 +15,13 @@ import { env as privateEnv } from '$env/dynamic/private';
 // secret manager), then process.env (local dev with raw shell exports),
 // then the literal default. This survives both `vite dev` and a built
 // `node build/` deployment.
+//
+// Nullish coalescing (??) instead of || so an env var explicitly set to ''
+// (empty string, no value) doesn't silently fall through to the next tier.
+// CodeRabbit Round 2 nit: previously used (privateEnv as Record<string,string>)
+// which masked the actual `string | undefined` return type from $env.
 const getEnv = (key: string, fallback: string): string =>
-	(privateEnv as Record<string, string>)[key] ||
-	(typeof process !== 'undefined' ? (process.env[key] ?? fallback) : fallback);
+	privateEnv[key] ?? (typeof process !== 'undefined' ? (process.env[key] ?? fallback) : fallback);
 
 // Validate parsed integers — CodeRabbit Major: parseInt accepts NaN,
 // negatives, and "1foo", any of which would silently break the polling
