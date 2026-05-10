@@ -7,8 +7,21 @@ import { deriveWorkerFromTraceId } from '$lib/utils/format';
 import type { Run } from '$lib/types/run';
 import { coerceRunStatus } from '$lib/types/run';
 
+// Per-spec trace_id format: prefix-shape worker tags + hex hashes. Allowing
+// alphanumeric + hyphen + underscore. 6-char floor rules out trivially-short
+// inputs that couldn't be a real trace; 128-char ceiling rules out URL-bomb
+// abuse. Validated BEFORE filesystem access to fail fast on malformed paths.
+// (CodeRabbit Major on PR #3.)
+const TRACE_ID_PATTERN = /^[a-zA-Z0-9_-]{6,128}$/;
+
 export const GET: RequestHandler = async ({ params }) => {
 	const { trace_id } = params;
+	if (!trace_id || !TRACE_ID_PATTERN.test(trace_id)) {
+		return json(
+			{ error: 'invalid_trace_id', trace_id: trace_id ?? null },
+			{ status: 400 }
+		);
+	}
 	const logPath = serverConfig.completionLogPath;
 
 	const resolvedPath = path.resolve(logPath);

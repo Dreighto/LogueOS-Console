@@ -12,6 +12,20 @@
 
 	let statusColor = $derived(statusColors[run.status]);
 	let workerColor = $derived(workerColors[run.worker || ''] || '#6B7280');
+
+	// CodeRabbit Major fix: derive the PR repo from the ticket_id prefix
+	// instead of hardcoding `Dreighto/LogueOS-Console`. LOS-* tickets ship
+	// PRs in LogueOS-Console; PRO-* (and any other prefix) ship in
+	// project-miru. If ticket_id is missing, default to project-miru —
+	// historically that's where the bulk of the work lives.
+	function repoForTicket(ticketId: string | null): string {
+		if (ticketId && /^LOS-\d+$/i.test(ticketId)) return 'Dreighto/LogueOS-Console';
+		return 'Dreighto/project-miru';
+	}
+	let prRepo = $derived(repoForTicket(run.ticket_id));
+	let linearTeamSlug = $derived(
+		run.ticket_id && /^LOS-\d+$/i.test(run.ticket_id) ? 'logueos' : 'project-miru'
+	);
 </script>
 
 <div class="rounded-lg border border-[#21262D] bg-[#161B22] p-4 shadow-xl">
@@ -20,9 +34,19 @@
 		<div class="flex flex-col gap-4">
 			<div class="flex items-start justify-between">
 				<div class="flex flex-col gap-1.5">
-					<h1 class="font-mono text-xl font-bold text-[#F0F0F0]">
-						{run.ticket_id || '---'}
-					</h1>
+					{#if run.ticket_id}
+						<a
+							href="https://linear.app/{linearTeamSlug}/issue/{run.ticket_id.toLowerCase()}"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="font-mono text-xl font-bold text-[#F0F0F0] hover:text-[#A3E635] transition-colors"
+							title="Open in Linear"
+						>
+							{run.ticket_id}
+						</a>
+					{:else}
+						<h1 class="font-mono text-xl font-bold text-[#F0F0F0]">---</h1>
+					{/if}
 					<span
 						class="w-fit rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
 						style="background-color: {workerColor}22; color: {workerColor}; border: 1px solid {workerColor}44"
@@ -81,13 +105,18 @@
 			{/if}
 
 			{#if run.pr_number}
-				<a href="https://github.com/Dreighto/LogueOS-Console/pull/{run.pr_number}" target="_blank" class="flex items-center gap-2 hover:bg-[#1C2128] transition-colors rounded p-1 -m-1">
+				<a
+					href="https://github.com/{prRepo}/pull/{run.pr_number}"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="flex items-center gap-2 hover:bg-[#1C2128] transition-colors rounded p-1 -m-1"
+				>
 					<div class="p-1.5 rounded bg-[#21262D]">
 						<ExternalLink size={14} class="text-[#8A8A9A]" />
 					</div>
 					<div class="flex flex-col">
 						<span class="text-[9px] uppercase text-[#6B7280] font-semibold tracking-wider">PR</span>
-						<span class="text-xs font-mono text-[#3B82F6]">#{run.pr_number}</span>
+						<span class="text-xs font-mono text-[#3B82F6]">{prRepo}#{run.pr_number}</span>
 					</div>
 				</a>
 			{/if}
@@ -118,7 +147,7 @@
 			<div class="flex flex-col gap-2">
 				<h3 class="text-[10px] font-semibold text-[#8A8A9A] uppercase tracking-wider">Touched Files</h3>
 				<div class="flex flex-col gap-1.5">
-					{#each run.files_touched as file}
+					{#each run.files_touched as file (file)}
 						<div class="flex items-center gap-2 p-1.5 rounded bg-[#0D1117] border border-[#21262D] font-mono text-[10px] text-[#8A8A9A] truncate hover:text-[#F0F0F0] transition-colors">
 							<div class="w-1 h-1 rounded-full bg-[#3FB950]"></div>
 							<span class="truncate">{file}</span>
