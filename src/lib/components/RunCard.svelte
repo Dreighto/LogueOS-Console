@@ -2,32 +2,13 @@
 	import type { Run, RunStatus } from '$lib/types/run';
 	import { formatDuration, formatRelativeTime, truncateTraceId } from '$lib/utils/format';
 	import { CheckCircle2, XCircle, AlertCircle, CircleHelp } from 'lucide-svelte';
+	import { statusColors, workerColors } from '$lib/styles/colors';
 
 	interface Props {
 		run: Run;
 	}
 
 	let { run }: Props = $props();
-
-	// Exhaustive on RunStatus — the type-checker enforces all 5 values are
-	// represented. Adding a 6th status to RunStatus would surface as a
-	// type error here. Per CodeRabbit Major on PR #2 (RunStatus | string
-	// removed in src/lib/types/run.ts).
-	const statusColors: Record<RunStatus, string> = {
-		CONFIRMED_WORKING: '#3FB950',
-		INCONCLUSIVE: '#F5A623',
-		FAILED: '#F85149',
-		ESCALATE: '#3B82F6',
-		unknown: '#6B7280'
-	};
-
-	const workerColors: Record<string, string> = {
-		'claude-code': '#D97757',
-		gemini: '#AD89EB',
-		cursor: '#3B82F6',
-		codex: '#64748B',
-		operator: '#F5A623'
-	};
 
 	let statusColor = $derived(statusColors[run.status]);
 	let workerColor = $derived(workerColors[run.worker || ''] || '#6B7280');
@@ -36,7 +17,9 @@
 	);
 </script>
 
-<div
+<a
+	href="/runs/{run.trace_id}"
+	data-sveltekit-preload-data="hover"
 	class="flex h-[100px] cursor-pointer flex-col justify-between rounded-lg border border-[#21262D] bg-[#161B22] p-3 transition-all hover:bg-[#1C2128] hover:shadow-[0_0_8px_rgba(163,230,53,0.1)]"
 >
 	<div class="flex items-center justify-between">
@@ -94,4 +77,5 @@
 			</span>
 		{/if}
 	</div>
-</div>
+</a>
+
