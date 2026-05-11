@@ -36,14 +36,18 @@ const parsePositiveInt = (raw: string, name: string): number => {
 	return value;
 };
 
+// LOS-20: post-LOS-10 cutover (2026-05-11). Audit chain + listener logs now
+// live in LogueOS-Orchestrator/data and /logs. Defaults updated; both env
+// vars still overridable for dev/test isolation. Old miru paths are now the
+// frozen v1 chain — Console reads the live v2 chain by default.
 export const serverConfig = {
 	completionLogPath: getEnv(
 		'LOGUEOS_COMPLETION_LOG_PATH',
-		'D:\\dev\\miru\\data\\cc_completion_log.jsonl'
+		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_completion_log.jsonl'
 	),
 	workerLogPath: getEnv(
 		'LOGUEOS_WORKER_LOG_PATH',
-		'D:\\dev\\miru\\logs\\dispatch_listener_stdout.log'
+		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
 	),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
 	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
