@@ -10,8 +10,13 @@
 	// Seed from SSR so the first paint is already correct. Polling keeps it
 	// fresh — important because the halt file can be touched/removed by any
 	// process on the box (operator's PowerShell, another worker, etc.).
-	let killSwitch = $state<KillSwitchState>(data.killSwitch);
+	function getInitialKS() { return data.killSwitch; }
+	let killSwitch = $state<KillSwitchState>(getInitialKS());
 	let fetchError = $state<string | null>(null);
+
+	$effect(() => {
+		killSwitch = data.killSwitch;
+	});
 
 	// Modal + form state. We require an explicit confirm tap before any
 	// toggle — the kill switch stopping every in-flight worker is a high-
@@ -203,6 +208,7 @@
 		tabindex="-1"
 	>
 		<!-- Stop propagation so taps INSIDE the dialog don't dismiss it. -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-border bg-background p-5 shadow-2xl"
 			role="document"

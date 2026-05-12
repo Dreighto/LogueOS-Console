@@ -45,6 +45,10 @@ export const serverConfig = {
 		'LOGUEOS_COMPLETION_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_completion_log.jsonl'
 	),
+	decisionsLogPath: getEnv(
+		'LOGUEOS_DECISIONS_LOG_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\agent_decisions.jsonl'
+	),
 	workerLogPath: getEnv(
 		'LOGUEOS_WORKER_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
@@ -67,6 +71,10 @@ export const serverConfig = {
 	memoryDbPath: getEnv(
 		'LOGUEOS_MEMORY_DB_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\data\\logueos_memory.db'
+	),
+	adoptedLessonsPath: getEnv(
+		'LOGUEOS_ADOPTED_LESSONS_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\.logueos\\overlays\\adopted-lessons.md'
 	),
 	// Dispatch listener address (Console -> listener for /kill and future
 	// /restart). Same machine in production; configurable for dev so we can

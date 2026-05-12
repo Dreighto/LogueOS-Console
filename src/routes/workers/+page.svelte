@@ -11,7 +11,12 @@
 
 	let { data }: Props = $props();
 
-	let workers = $state<WorkerStatus[]>(data.workers);
+	function getInitial() { return data.workers; }
+	let workers = $state<WorkerStatus[]>(getInitial());
+
+	$effect(() => {
+		workers = data.workers;
+	});
 
 	async function refreshWorkers() {
 		try {

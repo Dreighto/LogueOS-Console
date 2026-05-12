@@ -2,10 +2,12 @@
 	import RunCard from '$lib/components/RunCard.svelte';
 	import RunCardSkeleton from '$lib/components/RunCardSkeleton.svelte';
 	import MemoryFeed from '$lib/components/MemoryFeed.svelte';
+	import UsageTracker from '$lib/components/UsageTracker.svelte';
 	import type { Run, RunsResponse } from '$lib/types/run';
-	import type { ProvisionalLesson } from '$lib/types/memory';
+	import type { ProvisionalLesson, AdoptedLesson, Observation } from '$lib/types/memory';
+	import type { UsageMetrics } from './api/usage/+server';
 	import { resolve } from '$app/paths';
-	import { AlertCircle, RefreshCcw, Brain } from 'lucide-svelte';
+	import { AlertCircle, RefreshCcw, Brain, Activity } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	// CodeRabbit Critical fix: client-side display config (poll interval,
@@ -14,20 +16,31 @@
 	// SvelteKit's server-only-module rule.
 	let { data }: { data: PageData } = $props();
 
-	let runs = $state<Run[]>([]);
-	let lessons = $state<ProvisionalLesson[]>([]);
-	let loading = $state(true);
+	function getInitialRuns() { return data.runs || []; }
+	function getInitialProvisional() { return data.memory?.provisional || []; }
+	function getInitialAdopted() { return data.memory?.adopted || []; }
+	function getInitialRaw() { return data.memory?.raw || []; }
+	function getInitialUsage() { return data.usage || null; }
+
+	let runs = $state<Run[]>(getInitialRuns());
+	let provisional = $state<ProvisionalLesson[]>(getInitialProvisional());
+	let adopted = $state<AdoptedLesson[]>(getInitialAdopted());
+	let raw = $state<Observation[]>(getInitialRaw());
+	let usage = $state<UsageMetrics | null>(getInitialUsage());
+	let loading = $state(false);
 	let errorMsg = $state<string | null>(null);
 
 	async function fetchDashboard() {
+		loading = true;
 		try {
 			// Use resolve() so the URL respects kit.paths.base. Without it,
 			// the bare '/api/runs' resolves to the SITE root not the app's
 			// base — when served behind Tailscale at /console, that request
 			// goes to n8n at root and returns HTML, breaking JSON.parse.
-			const [runsResp, memoryResp] = await Promise.all([
+			const [runsResp, memoryResp, usageResp] = await Promise.all([
 				fetch(resolve('/api/runs')),
-				fetch(resolve('/api/memory'))
+				fetch(resolve('/api/memory')),
+				fetch(resolve('/api/usage'))
 			]);
 
 			if (!runsResp.ok) {
@@ -39,7 +52,14 @@
 
 			if (memoryResp.ok) {
 				const memoryData = await memoryResp.json();
-				lessons = memoryData.lessons;
+				provisional = memoryData.provisional || [];
+				adopted = memoryData.adopted || [];
+				raw = memoryData.raw || [];
+			}
+
+			if (usageResp.ok) {
+				const usageData = await usageResp.json();
+				usage = usageData.metrics;
 			}
 
 			errorMsg = null;
@@ -53,7 +73,7 @@
 	}
 
 	$effect(() => {
-		fetchDashboard();
+		// fetchDashboard() is no longer called immediately on mount since SSR handles it.
 		const interval = setInterval(() => {
 			if (document.visibilityState === 'visible') {
 				fetchDashboard();
@@ -87,6 +107,16 @@
 				Sync
 			</button>
 		</div>
+
+		{#if usage}
+			<div class="flex flex-col gap-2 rounded-xl border border-border bg-surface/10 p-4">
+				<div class="flex items-center gap-2 mb-1">
+					<Activity size={14} class="text-blue-400" />
+					<span class="text-[10px] font-bold uppercase tracking-widest text-dim">System Usage</span>
+				</div>
+				<UsageTracker metrics={usage} />
+			</div>
+		{/if}
 
 		{#if errorMsg}
 			<div
@@ -128,7 +158,7 @@
 		</div>
 
 		<div class="sticky top-24">
-			<MemoryFeed {lessons} />
+			<MemoryFeed {provisional} {adopted} {raw} />
 		</div>
 	</div>
 </div>

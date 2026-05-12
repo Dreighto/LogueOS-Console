@@ -11,7 +11,8 @@
 
 	let { data }: Props = $props();
 
-	let events = $state<ActivityEvent[]>(data.events);
+	function getInitial() { return data.events; }
+	let events = $state<ActivityEvent[]>(getInitial());
 
 	// Keep events in sync if data changes (e.g. on navigation)
 	$effect(() => {

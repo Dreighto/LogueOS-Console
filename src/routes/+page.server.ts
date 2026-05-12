@@ -10,9 +10,35 @@
 
 import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
+import { resolve } from '$app/paths';
 
-export const load: PageServerLoad = () => ({
-	// Spread the client-safe subset (pollIntervalMs, feedLimit). Do
-	// NOT include completionLogPath — that stays server-only.
-	...clientSafeConfig
-});
+export const load: PageServerLoad = async ({ fetch }) => {
+	// Server-side load: hands initial dashboard data to the client
+	// so we don't render an empty skeleton on first paint.
+	try {
+		const [runsResp, memoryResp, usageResp] = await Promise.all([
+			fetch(resolve('/api/runs')),
+			fetch(resolve('/api/memory')),
+			fetch(resolve('/api/usage'))
+		]);
+
+		const runsData = runsResp.ok ? await runsResp.json() : { runs: [] };
+		const memoryData = memoryResp.ok ? await memoryResp.json() : { provisional: [], adopted: [], raw: [] };
+		const usageData = usageResp.ok ? await usageResp.json() : { metrics: null };
+
+		return {
+			runs: runsData.runs,
+			memory: memoryData,
+			usage: usageData.metrics,
+			...clientSafeConfig
+		};
+	} catch (error) {
+		console.error('SSR fetch error for dashboard:', error);
+		return {
+			runs: [],
+			memory: { provisional: [], adopted: [], raw: [] },
+			usage: null,
+			...clientSafeConfig
+		};
+	}
+};
