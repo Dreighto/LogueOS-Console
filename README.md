@@ -23,25 +23,27 @@ npm run dev
 
 ## Data sources
 
-This dashboard reads from project-miru's filesystem at the paths below.
-Both repos must be checked out on the same machine for local dev to work.
+This dashboard reads from the LogueOS Orchestrator's filesystem (the "kernel")
+at the paths below. Both repos must be checked out on the same machine for
+local dev to work.
 
 | Env var | Default | Purpose |
 | :--- | :--- | :--- |
-| LOGUEOS_COMPLETION_LOG_PATH | D:\\dev\\miru\\data\\cc_completion_log.jsonl | Source for the Runs feed (P1b) |
-| LOGUEOS_RUN_POLL_MS | 5000 | How often the Runs feed re-fetches |
+| LOGUEOS_COMPLETION_LOG_PATH | D:\\dev\\LogueOS-Orchestrator\\data\\cc_completion_log.jsonl | Source for the Runs feed (P1b) |
+| LOGUEOS_WORKER_LOG_PATH | D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log | Source for the Workers/Activity feed (P2) |
+| LOGUEOS_RUN_POLL_MS | 5000 | How often the feeds re-fetch |
 | LOGUEOS_RUN_FEED_LIMIT | 50 | Most recent N rows shown |
 
 Future P-tickets will add Linear and GitHub API integrations + WebSocket
-for live in-flight state. P1b is read-only filesystem polling.
+for live in-flight state. Current implementation uses read-only filesystem polling.
 
 ## Locked Design References
 
-Canonical visual sources in `project-miru` repo:
-- `data/peer_reviews/logueos-map-and-plan.html`
-- `data/peer_reviews/logueos-runs-tab.html`
-- `data/peer_reviews/logueos-button-icon-system.html`
+Canonical visual sources in the LogueOS ecosystem:
+- `D:\\dev\\LogueOS-Orchestrator\\data\\peer_reviews\\logueos-map-and-plan.html`
+- `D:\\dev\\LogueOS-Orchestrator\\data\\peer_reviews\\logueos-runs-tab.html`
+- `D:\\dev\\LogueOS-Orchestrator\\data\\peer_reviews\\logueos-button-icon-system.html`
 
 ## Cross-repo Note
 
-Worker rule canon (CLAUDE.md, AGENTS.md, .miru/) lives in the `project-miru` repo and is shared. Workers operating in this repo follow rules from there but write code here.
+Worker rule canon (CLAUDE.md, AGENTS.md, .logueos/) lives in the `LogueOS-Orchestrator` repo and is shared. Workers operating in this repo follow rules from there but write code here. Project-specific rules (like those for `project-miru`) layer on top when a worker is dispatched to a project worktree.

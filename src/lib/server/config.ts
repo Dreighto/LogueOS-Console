@@ -38,8 +38,8 @@ const parsePositiveInt = (raw: string, name: string): number => {
 
 // LOS-20: post-LOS-10 cutover (2026-05-11). Audit chain + listener logs now
 // live in LogueOS-Orchestrator/data and /logs. Defaults updated; both env
-// vars still overridable for dev/test isolation. Old miru paths are now the
-// frozen v1 chain — Console reads the live v2 chain by default.
+// vars still overridable for dev/test isolation. Old project-miru paths are
+// now the frozen v1 chain — Console reads the live v2 chain by default.
 export const serverConfig = {
 	completionLogPath: getEnv(
 		'LOGUEOS_COMPLETION_LOG_PATH',
