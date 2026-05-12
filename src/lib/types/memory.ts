@@ -20,3 +20,13 @@ export interface AdoptedLesson {
 	severity: LessonSeverity;
 	applies_to: string[]; // project_ids or ['*']
 }
+
+export interface Observation {
+	observation_id: string;
+	ts: string;
+	project_id: string;
+	worker_id?: string;
+	task_shape: string[];
+	observation_kind: 'what-worked' | 'what-didnt-work' | 'surprise' | 'routing-correction';
+	text: string;
+}
