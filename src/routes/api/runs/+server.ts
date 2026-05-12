@@ -62,7 +62,8 @@ export const GET: RequestHandler = async ({ url }) => {
 					duration_ms: data.duration_ms ?? null,
 					pr_number: data.pr_number ?? null,
 					branch: data.branch || null,
-					files_touched: data.files_touched || []
+					files_touched: data.files_touched || [],
+					project_id: data.project_id || null
 				});
 			} catch (err) {
 				console.error(`Failed to parse run-log line: ${line}`, err);
