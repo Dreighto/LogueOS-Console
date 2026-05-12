@@ -64,6 +64,10 @@ export const serverConfig = {
 		'LOGUEOS_KILL_SWITCH_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\data\\kill_switch_log.jsonl'
 	),
+	memoryDbPath: getEnv(
+		'LOGUEOS_MEMORY_DB_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\logueos_memory.db'
+	),
 	// Dispatch listener address (Console -> listener for /kill and future
 	// /restart). Same machine in production; configurable for dev so we can
 	// point at a side-port instance without touching the live 19100. The
