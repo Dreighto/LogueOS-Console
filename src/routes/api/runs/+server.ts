@@ -6,6 +6,7 @@ import path from 'node:path';
 import { deriveWorkerFromTraceId } from '$lib/utils/format';
 import type { Run } from '$lib/types/run';
 import { coerceRunStatus } from '$lib/types/run';
+import { dedupeRuns } from '$lib/utils/runs';
 
 export const GET: RequestHandler = async ({ url }) => {
 	// CodeRabbit Major: parseInt(...) accepts 0, negatives, and "1foo".
@@ -69,8 +70,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 		}
 
-		const runs = parsedRuns.slice(-limit).reverse();
-		const truncated = parsedRuns.length > limit;
+		const dedupedRuns = dedupeRuns(parsedRuns);
+		const runs = dedupedRuns.slice(-limit).reverse();
+		const truncated = dedupedRuns.length > limit;
 
 		return json({ runs, total_in_log, truncated });
 	} catch (e: unknown) {
