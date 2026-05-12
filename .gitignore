@@ -34,3 +34,9 @@ mcp.json
 # tries to lease this worktree slot. Set 2026-05-12 after the LOS-9 retry
 # bounced on an untracked logs/logueos_console_wrapper.log file.
 logs/
+
+# Claude Code preview-server config (per-operator dev tooling, not shared).
+.claude/
+
+# Sandbox scratch dir for end-to-end smoke tests (kill switch tmpfs, etc.).
+.tmp-*/

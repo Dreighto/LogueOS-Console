@@ -49,6 +49,21 @@ export const serverConfig = {
 		'LOGUEOS_WORKER_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
 	),
+	// Kill switch contract (tools/check_kill_switch.py): file presence at
+	// killSwitchPath = ACTIVE. File absence = CLEAR. Contents are free-form;
+	// we write a small JSON payload on activate so future workers can see
+	// who/when/why before deciding what to do. killSwitchLogPath is an
+	// append-only audit of every activate/clear toggle for after-the-fact
+	// review (separate from the existence-bit because the bit is destroyed
+	// on clear).
+	killSwitchPath: getEnv(
+		'LOGUEOS_KILL_SWITCH_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\system_halt'
+	),
+	killSwitchLogPath: getEnv(
+		'LOGUEOS_KILL_SWITCH_LOG_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\kill_switch_log.jsonl'
+	),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
 	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
 };

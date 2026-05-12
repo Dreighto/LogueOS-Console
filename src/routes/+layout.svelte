@@ -2,9 +2,11 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { Play, Cpu, Activity, MessageSquare, Settings } from 'lucide-svelte';
+	import { Play, Cpu, Activity, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
+	import type { LayoutData } from './$types';
+	import type { KillSwitchState } from '$lib/types/kill-switch';
 
-	let { children } = $props();
+	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	// Use SvelteKit's typed route IDs (the const-asserted tuples) so resolve()
 	// type-checks. SvelteKit 2.59 generates these from the file-system routes
@@ -16,6 +18,41 @@
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
 		{ name: 'Settings', path: '/settings', icon: Settings }
 	] as const;
+
+	// Seed kill-switch state from SSR. Client polls so the header stays in
+	// sync with on-disk reality between navigations — important because the
+	// halt file can be touched by any process on the box, not just the
+	// Console's own toggle UI. Poll interval is fixed at 5s to keep the
+	// header responsive without piling load; the per-page polling stays on
+	// its own (longer) cadence.
+	let killSwitch = $state<KillSwitchState>(data.killSwitch);
+	const HEADER_POLL_MS = 5000;
+
+	async function refreshKillSwitch() {
+		try {
+			const resp = await fetch(resolve('/api/kill-switch'));
+			if (!resp.ok) return;
+			killSwitch = (await resp.json()) as KillSwitchState;
+		} catch {
+			// Silent — the indicator either holds its last good value or
+			// stays CLEAR. Settings page surfaces the real error if the
+			// operator opens it.
+		}
+	}
+
+	$effect(() => {
+		const interval = setInterval(() => {
+			if (document.visibilityState === 'visible') refreshKillSwitch();
+		}, HEADER_POLL_MS);
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') refreshKillSwitch();
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		return () => {
+			clearInterval(interval);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+		};
+	});
 </script>
 
 <div
@@ -35,19 +72,28 @@
 			     with the text-lg heading. alt is empty because the heading
 			     next to it is the accessible label — avoids screen-reader
 			     duplication. -->
-			<img
-				src="{resolve('/favicon.png')}"
-				alt=""
-				width="28"
-				height="28"
-				class="h-7 w-7 shrink-0"
-			/>
+			<img src={resolve('/favicon.png')} alt="" width="28" height="28" class="h-7 w-7 shrink-0" />
 			<h1 class="font-sans text-lg font-bold tracking-tight">LogueOS Console</h1>
 			<span
-				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-muted-foreground uppercase"
 				>v1a</span
 			>
 		</div>
+
+		{#if killSwitch.active}
+			<!-- Kill-switch live indicator. Tappable so the operator can jump
+			     straight to /settings to clear it, no matter which tab they
+			     are on. The aria-live region announces the state change for
+			     screen readers when the indicator first appears. -->
+			<a
+				href={resolve('/settings')}
+				aria-live="assertive"
+				class="flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-red-300 uppercase transition-colors hover:bg-red-500/20"
+			>
+				<AlertOctagon size={12} aria-hidden="true" />
+				<span>Halt</span>
+			</a>
+		{/if}
 	</header>
 
 	<!-- Main Content. pb is bottom-nav height (76px) + safe-area-inset-bottom for the
@@ -76,11 +122,8 @@
 					class:text-cta={page.url.pathname === tab.path}
 					class:text-muted-foreground={page.url.pathname !== tab.path}
 				>
-					<tab.icon
-						size={20}
-						class="transition-transform duration-200 group-hover:scale-110"
-					/>
-					<span class="font-sans text-[10px] font-medium uppercase tracking-wider">{tab.name}</span>
+					<tab.icon size={20} class="transition-transform duration-200 group-hover:scale-110" />
+					<span class="font-sans text-[10px] font-medium tracking-wider uppercase">{tab.name}</span>
 
 					{#if page.url.pathname === tab.path}
 						<div
