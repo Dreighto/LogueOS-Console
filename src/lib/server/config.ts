@@ -64,6 +64,19 @@ export const serverConfig = {
 		'LOGUEOS_KILL_SWITCH_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\data\\kill_switch_log.jsonl'
 	),
+	// Dispatch listener address (Console -> listener for /kill and future
+	// /restart). Same machine in production; configurable for dev so we can
+	// point at a side-port instance without touching the live 19100. The
+	// HMAC secret here MUST match the listener's W4_LISTENER_HMAC_SECRET
+	// (the listener reads that exact env var) -- if the secrets disagree
+	// every POST gets 401'd. Reads LOGUEOS_LISTENER_HMAC_SECRET first
+	// (post-untie convention) then W4_LISTENER_HMAC_SECRET (legacy listener
+	// env name) so an operator-side .env already configured for the
+	// listener Just Works.
+	dispatchListenerUrl: getEnv('LOGUEOS_DISPATCH_LISTENER_URL', 'http://127.0.0.1:19100'),
+	dispatchListenerHmacSecret:
+		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') ||
+		getEnv('W4_LISTENER_HMAC_SECRET', ''),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
 	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
 };
