@@ -1,7 +1,17 @@
 <script lang="ts">
 	import type { Run } from '$lib/types/run';
 	import { formatDuration, formatFullDate } from '$lib/utils/format';
-	import { CheckCircle2, XCircle, AlertCircle, CircleHelp, ExternalLink, GitBranch, Files, Clock, Hash } from 'lucide-svelte';
+	import {
+		CheckCircle2,
+		XCircle,
+		AlertCircle,
+		CircleHelp,
+		ExternalLink,
+		GitBranch,
+		Files,
+		Clock,
+		Hash
+	} from 'lucide-svelte';
 	import { statusColors, workerColors } from '$lib/styles/colors';
 
 	interface Props {
@@ -22,24 +32,20 @@
 		'logueos-orchestrator': { repo: 'Dreighto/LogueOS-Orchestrator', linear: 'logueos' }
 	};
 
-	// Logic to derive project identity.
-	// 1. Explicit project_id from the log row (authoritative)
-	// 2. Ticket-id prefix inference (legacy fallback for pre-agnostic logs)
-	// 3. Global default (project-miru)
-	function getProject(run: Run) {
+	// Derive project identity from the log row. Returns null when the project
+	// cannot be confidently resolved -- callers must guard the URL renders so
+	// we do not emit misleading cross-project links (e.g. defaulting an
+	// orchestrator ticket into the miru repo).
+	function getProject(run: Run): { repo: string; linear: string } | null {
 		if (run.project_id && PROJECT_REGISTRY[run.project_id]) {
 			return PROJECT_REGISTRY[run.project_id];
 		}
-		// Fallback: LOS-* tickets always belong to the console
-		if (run.ticket_id && /^LOS-\d+$/i.test(run.ticket_id)) {
-			return PROJECT_REGISTRY['logueos-console'];
-		}
-		return PROJECT_REGISTRY['project-miru'];
+		return null;
 	}
 
 	let project = $derived(getProject(run));
-	let prRepo = $derived(project.repo);
-	let linearTeamSlug = $derived(project.linear);
+	let prRepo = $derived(project?.repo ?? null);
+	let linearTeamSlug = $derived(project?.linear ?? null);
 </script>
 
 <div class="rounded-lg border border-[#21262D] bg-[#161B22] p-4 shadow-xl">
@@ -48,16 +54,20 @@
 		<div class="flex flex-col gap-4">
 			<div class="flex items-start justify-between">
 				<div class="flex flex-col gap-1.5">
-					{#if run.ticket_id}
+					{#if run.ticket_id && linearTeamSlug}
 						<a
 							href="https://linear.app/{linearTeamSlug}/issue/{run.ticket_id.toLowerCase()}"
 							target="_blank"
 							rel="noopener noreferrer"
-							class="flex items-center gap-1.5 text-xs font-mono font-medium text-[#8A8A9A] hover:text-[#F0F0F0] transition-colors"
+							class="flex items-center gap-1.5 font-mono text-xs font-medium text-[#8A8A9A] transition-colors hover:text-[#F0F0F0]"
 						>
 							{run.ticket_id}
 							<ExternalLink size={10} />
 						</a>
+					{:else if run.ticket_id}
+						<span class="flex items-center gap-1.5 font-mono text-xs font-medium text-[#8A8A9A]">
+							{run.ticket_id}
+						</span>
 					{/if}
 					<h2 class="text-xl font-bold tracking-tight text-[#F0F0F0]">
 						{run.summary.split('\n')[0]}
@@ -78,18 +88,20 @@
 
 			<div class="flex flex-wrap gap-2">
 				<span
-					class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+					class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
 					style="background-color: {workerColor}22; color: {workerColor}; border: 1px solid {workerColor}44"
 				>
 					{run.worker || 'unknown'}
 				</span>
 				<span
-					class="rounded bg-[#21262D] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#8A8A9A] border border-[#30363D]"
+					class="rounded border border-[#30363D] bg-[#21262D] px-2 py-0.5 text-[10px] font-bold tracking-wider text-[#8A8A9A] uppercase"
 				>
 					{run.status}
 				</span>
 				{#if run.branch}
-					<span class="flex items-center gap-1 rounded bg-[#21262D] px-2 py-0.5 text-[10px] font-mono text-[#8A8A9A] border border-[#30363D]">
+					<span
+						class="flex items-center gap-1 rounded border border-[#30363D] bg-[#21262D] px-2 py-0.5 font-mono text-[10px] text-[#8A8A9A]"
+					>
 						<GitBranch size={10} />
 						{run.branch}
 					</span>
@@ -100,25 +112,27 @@
 		<!-- Details Grid -->
 		<div class="grid grid-cols-2 gap-4 border-y border-[#21262D] py-4">
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Trace ID</span>
-				<span class="text-xs font-mono text-[#8A8A9A] truncate">{run.trace_id || '---'}</span>
+				<span class="text-[10px] font-bold tracking-wider text-[#6B7280] uppercase">Trace ID</span>
+				<span class="truncate font-mono text-xs text-[#8A8A9A]">{run.trace_id || '---'}</span>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Timestamp</span>
+				<span class="text-[10px] font-bold tracking-wider text-[#6B7280] uppercase">Timestamp</span>
 				<div class="flex items-center gap-1.5 text-xs text-[#8A8A9A]">
 					<Clock size={12} />
 					{formatFullDate(run.timestamp)}
 				</div>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Duration</span>
+				<span class="text-[10px] font-bold tracking-wider text-[#6B7280] uppercase">Duration</span>
 				<span class="text-xs text-[#8A8A9A]">
 					{run.duration_ms != null ? formatDuration(run.duration_ms) : '---'}
 				</span>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">Pull Request</span>
-				{#if run.pr_number}
+				<span class="text-[10px] font-bold tracking-wider text-[#6B7280] uppercase"
+					>Pull Request</span
+				>
+				{#if run.pr_number && prRepo}
 					<a
 						href="https://github.com/{prRepo}/pull/{run.pr_number}"
 						target="_blank"
@@ -128,6 +142,8 @@
 						PR #{run.pr_number}
 						<ExternalLink size={10} />
 					</a>
+				{:else if run.pr_number}
+					<span class="text-xs text-[#8A8A9A]">PR #{run.pr_number}</span>
 				{:else}
 					<span class="text-xs text-[#6B7280]">No PR created</span>
 				{/if}
@@ -139,14 +155,16 @@
 			<div class="flex flex-col gap-3">
 				<div class="flex items-center gap-2">
 					<Files size={14} class="text-[#6B7280]" />
-					<span class="text-[10px] uppercase tracking-wider text-[#6B7280] font-bold">
+					<span class="text-[10px] font-bold tracking-wider text-[#6B7280] uppercase">
 						Files Touched ({run.files_touched.length})
 					</span>
 				</div>
-				<div class="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+				<div class="custom-scrollbar flex max-h-[200px] flex-col gap-1.5 overflow-y-auto pr-2">
 					{#each run.files_touched as file}
-						<div class="flex items-center gap-2 text-xs font-mono text-[#8A8A9A] bg-[#21262D]/30 px-2 py-1.5 rounded border border-[#30363D]/50 hover:bg-[#21262D]/50 transition-colors">
-							<div class="w-1 h-1 rounded-full bg-[#3FB950]"></div>
+						<div
+							class="flex items-center gap-2 rounded border border-[#30363D]/50 bg-[#21262D]/30 px-2 py-1.5 font-mono text-xs text-[#8A8A9A] transition-colors hover:bg-[#21262D]/50"
+						>
+							<div class="h-1 w-1 rounded-full bg-[#3FB950]"></div>
 							<span class="truncate">{file}</span>
 						</div>
 					{/each}
@@ -164,10 +182,10 @@
 		background: transparent;
 	}
 	.custom-scrollbar::-webkit-scrollbar-thumb {
-		background: #30363D;
+		background: #30363d;
 		border-radius: 10px;
 	}
 	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-		background: #484F58;
+		background: #484f58;
 	}
 </style>

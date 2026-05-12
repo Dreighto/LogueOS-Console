@@ -14,6 +14,7 @@ describe('dedupeRuns', () => {
 		pr_number: 1,
 		branch: 'feature/los-1',
 		files_touched: ['src/index.ts'],
+		project_id: null,
 		...overrides
 	});
 
@@ -27,8 +28,8 @@ describe('dedupeRuns', () => {
 		const result = dedupeRuns(runs);
 
 		expect(result).toHaveLength(2);
-		expect(result.find(r => r.trace_id === 'trace-1')?.summary).toBe('Second');
-		expect(result.find(r => r.trace_id === 'trace-2')?.summary).toBe('Third');
+		expect(result.find((r) => r.trace_id === 'trace-1')?.summary).toBe('Second');
+		expect(result.find((r) => r.trace_id === 'trace-2')?.summary).toBe('Third');
 	});
 
 	it('should keep both rows if null trace_id but different ticket_id', () => {
@@ -40,8 +41,8 @@ describe('dedupeRuns', () => {
 		const result = dedupeRuns(runs);
 
 		expect(result).toHaveLength(2);
-		expect(result.some(r => r.ticket_id === 'LOS-2')).toBe(true);
-		expect(result.some(r => r.ticket_id === 'LOS-3')).toBe(true);
+		expect(result.some((r) => r.ticket_id === 'LOS-2')).toBe(true);
+		expect(result.some((r) => r.ticket_id === 'LOS-3')).toBe(true);
 	});
 
 	it('should dedupe null trace_id if same (ticket_id, branch, pr_number)', () => {
@@ -74,8 +75,8 @@ describe('dedupeRuns', () => {
 		const result = dedupeRuns(runs);
 
 		expect(result).toHaveLength(2);
-		expect(result.find(r => r.trace_id === 'trace-1')?.summary).toBe('T1-V2');
-		expect(result.find(r => r.ticket_id === 'LOS-5')?.summary).toBe('L5-V2');
+		expect(result.find((r) => r.trace_id === 'trace-1')?.summary).toBe('T1-V2');
+		expect(result.find((r) => r.ticket_id === 'LOS-5')?.summary).toBe('L5-V2');
 	});
 
 	it('should move re-inserted keys to the end to preserve chronological order', () => {

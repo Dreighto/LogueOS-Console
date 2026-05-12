@@ -35,7 +35,10 @@ export const GET: RequestHandler = async ({ params }) => {
 		// CodeRabbit R2 Major: do not leak the resolved server-side path
 		// in the response body — that's filesystem-structure disclosure.
 		// Log it server-side instead so operators can debug from logs.
-		console.error('path_traversal_blocked: resolvedPath outside dataDir', { resolvedPath, dataDir });
+		console.error('path_traversal_blocked: resolvedPath outside dataDir', {
+			resolvedPath,
+			dataDir
+		});
 		return json({ error: 'path_traversal_blocked' }, { status: 403 });
 	}
 
@@ -70,7 +73,8 @@ export const GET: RequestHandler = async ({ params }) => {
 					duration_ms: data.duration_ms ?? null,
 					pr_number: data.pr_number ?? null,
 					branch: data.branch || null,
-					files_touched: data.files_touched || []
+					files_touched: data.files_touched || [],
+					project_id: data.project_id || null
 				};
 			} catch {
 				// Skip malformed JSONL line. CodeRabbit R2 lint: drop unused err binding.
