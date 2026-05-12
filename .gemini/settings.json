@@ -1,11 +1,11 @@
 {
-	"_meta": "Workspace-tier MCP config for LogueOS-Console. Gemini CLI discovers this when CWD is anywhere inside this repo (including the LogueOS-Console-w* worktrees that the dispatch_listener spawns into). DESIGN: 'logueos-gateway' is the SOLE audited-writes path — workers go through the LogueOS-Orchestrator MCP gateway for git/linear/docs/notion, which gates tools per the X-Miru-Tool-Profile header injected at spawn time. The other servers are READ-ONLY frontend toolkit + local test runners — they query docs/components (svelte, shadcn-svelte, lucide-icons), run local tests (vitest, playwright, a11y-scanner), or assist with reasoning (sequential-thinking). None of them write to the audit chain or Linear/GitHub/Notion, so they don't bypass per-trace access control. Operator interactive sessions in this repo get the same set. For direct write access cd into D:\\dev\\miru and use the full MCP set there.",
+	"_meta": "Workspace-tier MCP config for LogueOS-Console. Gemini CLI discovers this when CWD is anywhere inside this repo (including the LogueOS-Console-w* worktrees that the dispatch_listener spawns into). DESIGN: 'logueos-gateway' is the SOLE audited-writes path — workers go through the LogueOS-Orchestrator MCP gateway for git/linear/docs/notion, which gates tools per the X-LogueOS-Tool-Profile header injected at spawn time. The other servers are READ-ONLY frontend toolkit + local test runners — they query docs/components (svelte, shadcn-svelte, lucide-icons), run local tests (vitest, playwright, a11y-scanner), or assist with reasoning (sequential-thinking). None of them write to the audit chain or Linear/GitHub/Notion, so they don't bypass per-trace access control. Operator interactive sessions in this repo get the same set. For direct write access cd into D:\\dev\\miru and use the full MCP set there.",
 	"mcpServers": {
 		"logueos-gateway": {
 			"httpUrl": "http://127.0.0.1:18766/mcp",
 			"headers": {
-				"X-Miru-Tool-Profile": "${env:MIRU_TOOL_PROFILE}",
-				"X-Miru-Trace-Id": "${env:MIRU_TRACE_ID}"
+				"X-LogueOS-Tool-Profile": "${env:LOGUEOS_TOOL_PROFILE}",
+				"X-LogueOS-Trace-Id": "${env:LOGUEOS_TRACE_ID}"
 			},
 			"trust": true,
 			"timeout": 600000
