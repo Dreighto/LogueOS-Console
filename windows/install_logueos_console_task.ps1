@@ -6,18 +6,32 @@
 # Mirrored from the TODO block in start_logueos_console.ps1; lifted into a
 # standalone file so CC (or any worker) can execute it via Bash without
 # heredoc quoting hell.
+#
+# Task action: wscript.exe launches windows\tasks\run_start_logueos_console.vbs,
+# which in turn launches powershell.exe with SW_HIDE at CreateProcess time.
+# This is the canon pattern (matches windows\tasks\run_dispatch_listener.vbs
+# in LogueOS-Orchestrator). Running powershell.exe directly with -WindowStyle
+# Hidden races the hide flag and flashes a console on Windows 11 24H2 every
+# time the task fires or restarts on failure -- 2026-05-11 popup post-mortem.
 
 $repoRoot  = $PSScriptRoot | Split-Path -Parent
 $script    = Join-Path $PSScriptRoot 'start_logueos_console.ps1'
+$vbsScript = Join-Path $PSScriptRoot 'tasks\run_start_logueos_console.vbs'
 
 if (-not (Test-Path $script)) {
     Write-Output "INSTALL_FAIL: start script not found at $script"
     exit 1
 }
+if (-not (Test-Path $vbsScript)) {
+    Write-Output "INSTALL_FAIL: VBS wrapper not found at $vbsScript"
+    exit 1
+}
 
+# wscript.exe is Window-subsystem (no console) so it never flashes. The VBS
+# then launches powershell.exe with SW_HIDE at process-creation time.
 $action    = New-ScheduledTaskAction `
-                 -Execute 'powershell.exe' `
-                 -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`"" `
+                 -Execute 'wscript.exe' `
+                 -Argument "`"$vbsScript`"" `
                  -WorkingDirectory $repoRoot
 $trigger   = New-ScheduledTaskTrigger -AtStartup
 $settings  = New-ScheduledTaskSettingsSet `
