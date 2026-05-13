@@ -23,11 +23,10 @@ state-handoff-log viewer. SvelteKit. Local checkout `D:\dev\LogueOS-Console`.
 
 `.gemini/settings.json` here wires the audited `logueos-gateway` (sole writes path: git /
 Linear / docs / Notion, gated per the `X-LogueOS-Tool-Profile` header set at spawn time)
-plus the frontend toolkit (`svelte`, `shadcn-svelte`, `lucide-icons`, `a11y-scanner`,
-`vitest`, `playwright`) and `sequential-thinking`. Interactive sessions launched via the
-operator's `gmi` shorthand already carry the full toolkit from the global config; this
-workspace config is what makes the frontend toolkit available to dispatched workers landing
-in a worktree here.
+plus the frontend toolkit (`svelte`, `shadcn-svelte`, `lucide-icons`, `vitest`, `playwright`)
+and `sequential-thinking`. Interactive sessions launched via the operator's `gmi` shorthand
+already carry the full toolkit from the global config; this workspace config is what makes
+the frontend toolkit available to dispatched workers landing in a worktree here.
 
 ## Frontend craft
 
