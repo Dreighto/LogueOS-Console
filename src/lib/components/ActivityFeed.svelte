@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ActivityEvent } from '$lib/types/activity';
-	import { formatRelativeTime } from '$lib/utils/format';
-	import { Info, CheckCircle2, AlertCircle, XCircle, Clock } from 'lucide-svelte';
+	import { formatRelativeTime, formatFullDate } from '$lib/utils/format';
+	import { Info, CheckCircle2, AlertCircle, XCircle, Clock, ChevronDown, ChevronRight, Activity, Terminal, Hash, Fingerprint } from 'lucide-svelte';
 
 	interface Props {
 		events: ActivityEvent[];
@@ -9,11 +9,20 @@
 
 	let { events }: Props = $props();
 
+	// Keep track of which event IDs are expanded to show details
+	let expandedEvents = $state(new Set<string>());
+
+	function toggleExpand(id: string) {
+		const newSet = new Set(expandedEvents);
+		if (newSet.has(id)) {
+			newSet.delete(id);
+		} else {
+			newSet.add(id);
+		}
+		expandedEvents = newSet;
+	}
+
 	function getLevelStyles(level: ActivityEvent['level']) {
-		// Tailwind 4 opacity-modifier syntax for arbitrary hex colors:
-		// `bg-[#XXXXXX]/[0.13]` is preferred over the legacy `bg-[#XXXXXX]22`
-		// hex-alpha append (which works but isn't part of the canonical
-		// Tailwind 4 utility-class spec).
 		switch (level) {
 			case 'success':
 				return {
@@ -57,33 +66,103 @@
 		<div class="overflow-y-auto max-h-[calc(100vh-280px)]">
 			{#each events as event (event.id)}
 				{@const styles = getLevelStyles(event.level)}
-				<div
-					class="flex items-center gap-4 p-4 border-b border-[#30363D] last:border-0 hover:bg-[#1C2128] transition-colors"
-				>
-					<div class="flex-shrink-0">
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-full border {styles.bg} {styles.text} {styles.border}"
-						>
-							<styles.icon size={16} />
-						</div>
-					</div>
-
-					<div class="flex-grow min-w-0">
-						<div class="flex items-center justify-between gap-2">
-							<span
-								class="text-xs font-medium px-2 py-0.5 rounded-full border {styles.bg} {styles.text} {styles.border} uppercase tracking-wider"
+				{@const isExpanded = expandedEvents.has(event.id)}
+				<div class="border-b border-[#30363D] last:border-0 hover:bg-[#1C2128] transition-colors">
+					<!-- Clickable Header Row -->
+					<button
+						type="button"
+						class="w-full flex items-start sm:items-center gap-4 p-4 text-left cursor-pointer focus:outline-none focus:bg-[#1C2128]"
+						onclick={() => toggleExpand(event.id)}
+						aria-expanded={isExpanded}
+					>
+						<div class="flex-shrink-0 mt-1 sm:mt-0">
+							<div
+								class="flex h-8 w-8 items-center justify-center rounded-full border {styles.bg} {styles.text} {styles.border}"
 							>
-								{event.msg.replace(/_/g, ' ')}
-							</span>
-							<span class="flex items-center gap-1 text-xs text-[#8B949E] whitespace-nowrap">
-								<Clock size={12} />
-								{formatRelativeTime(event.ts)}
-							</span>
+								<styles.icon size={16} />
+							</div>
 						</div>
-						<p class="mt-1 text-sm text-[#F0F6FC] truncate" title={event.summary}>
-							{event.summary}
-						</p>
-					</div>
+
+						<div class="flex-grow min-w-0">
+							<div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+								<span
+									class="text-[10px] font-bold px-2 py-0.5 rounded-full border {styles.bg} {styles.text} {styles.border} uppercase tracking-wider whitespace-nowrap"
+								>
+									{event.msg.replace(/_/g, ' ')}
+								</span>
+								<span class="flex items-center gap-1 text-[11px] text-[#8B949E] whitespace-nowrap ml-auto">
+									<Clock size={12} />
+									{formatRelativeTime(event.ts)}
+								</span>
+							</div>
+							<p class="text-sm font-medium text-[#F0F6FC] break-words">
+								{event.summary}
+							</p>
+						</div>
+
+						<div class="flex-shrink-0 text-[#8B949E] self-center ml-2">
+							{#if isExpanded}
+								<ChevronDown size={16} />
+							{:else}
+								<ChevronRight size={16} />
+							{/if}
+						</div>
+					</button>
+
+					<!-- Expanded Details Section -->
+					{#if isExpanded}
+						<div class="px-4 pb-4 pt-1 sm:pl-[4.5rem]">
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-md bg-[#0D1117] border border-[#21262D]">
+								
+								<div class="flex flex-col gap-1">
+									<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+										<Clock size={10} />
+										Exact Time
+									</span>
+									<span class="font-mono text-xs text-[#F0F6FC]">
+										{formatFullDate(event.ts)}
+									</span>
+								</div>
+
+								{#if event.worker}
+									<div class="flex flex-col gap-1">
+										<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+											<Terminal size={10} />
+											Worker
+										</span>
+										<span class="font-mono text-xs text-[#F0F6FC]">
+											{event.worker}
+										</span>
+									</div>
+								{/if}
+
+								{#if event.ticket_id && event.ticket_id !== 'unknown'}
+									<div class="flex flex-col gap-1">
+										<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+											<Hash size={10} />
+											Ticket ID
+										</span>
+										<span class="font-mono text-xs text-[#F0F6FC]">
+											{event.ticket_id}
+										</span>
+									</div>
+								{/if}
+
+								{#if event.trace_id}
+									<div class="flex flex-col gap-1 sm:col-span-2">
+										<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+											<Fingerprint size={10} />
+											Trace ID
+										</span>
+										<span class="font-mono text-[11px] text-[#A3E635] break-all">
+											{event.trace_id}
+										</span>
+									</div>
+								{/if}
+								
+							</div>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>

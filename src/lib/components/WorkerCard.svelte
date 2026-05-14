@@ -3,7 +3,7 @@
 	import { workerColors } from '$lib/styles/colors';
 	import { formatRelativeTime, truncateTraceId } from '$lib/utils/format';
 	import { resolve } from '$app/paths';
-	import { Activity, Square, RotateCcw, Cpu, Clock, Terminal, AlertCircle } from 'lucide-svelte';
+	import { Activity, Square, RotateCcw, Cpu, Clock, Terminal, AlertCircle, Hash, Play, GitBranch, FileText } from 'lucide-svelte';
 
 	interface Props {
 		worker: WorkerStatus;
@@ -152,6 +152,53 @@
 		</div>
 	{/if}
 
+	{#if worker.state === 'busy'}
+		<div class="flex flex-col gap-3 rounded-md bg-[#0D1117] p-3 border border-[#21262D]">
+			<div class="flex flex-col gap-1">
+				<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+					<Play size={10} />
+					CURRENT STEP
+				</span>
+				<span class="text-sm font-medium text-[#A3E635]">
+					{worker.step || 'Initializing...'}
+				</span>
+			</div>
+			
+			<div class="grid grid-cols-2 gap-4">
+				<div class="flex flex-col gap-1">
+					<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+						<Hash size={10} />
+						TICKET
+					</span>
+					<span class="font-mono text-xs text-[#F0F6FC]">
+						{worker.ticket_id || '---'}
+					</span>
+				</div>
+				<div class="flex flex-col gap-1">
+					<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+						<GitBranch size={10} />
+						BRANCH
+					</span>
+					<span class="truncate font-mono text-xs text-[#F0F6FC]" title={worker.branch}>
+						{worker.branch || '---'}
+					</span>
+				</div>
+			</div>
+
+			{#if worker.last_file_written}
+				<div class="flex flex-col gap-1 border-t border-[#21262D] pt-2">
+					<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+						<FileText size={10} />
+						LAST WRITE
+					</span>
+					<span class="truncate font-mono text-[11px] text-[#8B949E]" title={worker.last_file_written}>
+						{worker.last_file_written}
+					</span>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="grid grid-cols-2 gap-4 border-t border-[#21262D] pt-4">
 		<div class="flex flex-col gap-1">
 			<span class="flex items-center gap-1.5 text-[11px] font-medium text-[#8B949E]">
@@ -198,7 +245,8 @@
 		{#if worker.state === 'idle' && worker.last_exit_status}
 			<div class="flex flex-col gap-1">
 				<span class="flex items-center gap-1.5 text-[11px] font-medium text-[#8B949E]">
-					LAST STATUS
+					<Activity size={12} />
+					LAST EXIT
 				</span>
 				<span class="text-xs font-semibold" style="color: {worker.last_exit_status === 'CONFIRMED_WORKING' ? '#3FB950' : '#F85149'}">
 					{worker.last_exit_status}

@@ -25,8 +25,17 @@ function formatDuration(ms: number | undefined): string {
 }
 
 function deriveSummary(event: any): string {
-    const worker = event.worker || (event.trace_id?.startsWith('cc-') ? 'CC' : 'Gemini');
-    const ticket = event.ticket_id || 'unknown';
+    const worker = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
+    
+    let ticket = event.ticket_id;
+    if (!ticket && event.trace_id) {
+        // e.g. 'rtr-LOS-60-6c811...' -> 'LOS-60' or 'cc-CANARY-003-fa37...' -> 'CANARY-003'
+        const match = event.trace_id.match(/^(?:rtr|cc)-([A-Za-z0-9]+-\d+)/i);
+        if (match) {
+            ticket = match[1];
+        }
+    }
+    ticket = ticket || 'unknown task';
 
     switch (event.msg as ActivityEventType) {
         case 'worker_spawned':

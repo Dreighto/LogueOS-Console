@@ -16,7 +16,7 @@
 	<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div class="flex items-center gap-1.5 text-dim uppercase tracking-widest text-[9px] font-bold">
-				<Coins size={10} class="text-amber-400" />
+				<Coins size={10} class="text-orange-400" />
 				Est. 24h Burn
 			</div>
 			<div class="text-lg font-bold tabular-nums text-foreground">
@@ -25,7 +25,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div class="flex items-center gap-1.5 text-dim uppercase tracking-widest text-[9px] font-bold">
-				<Zap size={10} class="text-blue-400" />
+				<Zap size={10} class="text-blue-500" />
 				Tokens
 			</div>
 			<div class="text-lg font-bold tabular-nums text-foreground">

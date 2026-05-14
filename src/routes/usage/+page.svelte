@@ -66,13 +66,13 @@
     </div>
     <div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
       <div class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-dim uppercase">
-        <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span> CC
+        <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span> CC
       </div>
       <div class="text-base font-bold tabular-nums text-foreground">${data.history.projection.ccMtd.toFixed(2)}</div>
     </div>
     <div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
       <div class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-dim uppercase">
-        <span class="h-1.5 w-1.5 rounded-full bg-blue-400"></span> GMI
+        <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span> GMI
       </div>
       <div class="text-base font-bold tabular-nums text-foreground">${data.history.projection.gmiMtd.toFixed(2)}</div>
     </div>
@@ -92,15 +92,15 @@
           {@const gmi = workerCost(day, 'gemini')}
           <div class="flex shrink-0 flex-col items-center gap-0.5" title="{fmtDate(day.date)}: CC ${cc.toFixed(3)} GMI ${gmi.toFixed(3)}">
             <div class="flex items-end gap-px">
-              <div class="w-2 rounded-t bg-amber-400/80" style="height: {barHeight(cc, maxDailyCost)}px;"></div>
-              <div class="w-2 rounded-t bg-blue-400/80" style="height: {barHeight(gmi, maxDailyCost)}px;"></div>
+              <div class="w-2 rounded-t bg-orange-400/80" style="height: {barHeight(cc, maxDailyCost)}px;"></div>
+              <div class="w-2 rounded-t bg-blue-500/80" style="height: {barHeight(gmi, maxDailyCost)}px;"></div>
             </div>
           </div>
         {/each}
       </div>
       <div class="mt-1 flex gap-3">
-        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-amber-400/80"></span><span class="text-[9px] text-dim font-mono">CC</span></div>
-        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-blue-400/80"></span><span class="text-[9px] text-dim font-mono">GMI</span></div>
+        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-orange-400/80"></span><span class="text-[9px] text-dim font-mono">CC</span></div>
+        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-blue-500/80"></span><span class="text-[9px] text-dim font-mono">GMI</span></div>
       </div>
     </div>
   {:else}
@@ -129,8 +129,8 @@
           {@const gmiD = workerDispatches(day, 'gemini')}
           <tr class="border-b border-border/20 hover:bg-surface/50">
             <td class="py-1 pr-2 text-foreground">{fmtDate(day.date)}</td>
-            <td class="py-1 pr-2 text-right text-amber-400">{cc > 0 ? `$${cc.toFixed(3)} (${ccD})` : '—'}</td>
-            <td class="py-1 pr-2 text-right text-blue-400">{gmi > 0 ? `$${gmi.toFixed(3)} (${gmiD})` : '—'}</td>
+            <td class="py-1 pr-2 text-right text-orange-400">{cc > 0 ? `$${cc.toFixed(3)} (${ccD})` : '—'}</td>
+            <td class="py-1 pr-2 text-right text-blue-500">{gmi > 0 ? `$${gmi.toFixed(3)} (${gmiD})` : '—'}</td>
             <td class="py-1 text-right text-foreground">${day.totalCost.toFixed(3)}</td>
           </tr>
         {/each}
@@ -154,7 +154,7 @@
     </div>
     <div class="relative h-2 overflow-hidden rounded-full border border-border/50 bg-surface">
       <div
-        class="absolute left-0 top-0 h-full rounded-full bg-cta/60"
+        class="absolute left-0 top-0 h-full rounded-full bg-foreground/20"
         style="width: {Math.min(100, (data.history.projection.daysElapsed / data.history.projection.daysInMonth) * 100).toFixed(1)}%"
       ></div>
     </div>

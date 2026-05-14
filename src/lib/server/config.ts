@@ -53,6 +53,10 @@ export const serverConfig = {
 		'LOGUEOS_WORKER_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
 	),
+	heartbeatsLogPath: getEnv(
+		'LOGUEOS_HEARTBEATS_LOG_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_heartbeat_log.jsonl'
+	),
 	// Kill switch contract (tools/check_kill_switch.py): file presence at
 	// killSwitchPath = ACTIVE. File absence = CLEAR. Contents are free-form;
 	// we write a small JSON payload on activate so future workers can see
