@@ -43,6 +43,14 @@ When touching Console UI:
 - New routes go under `src/routes/`; shared server logic under `src/lib/server/`; types
   under `src/lib/types/`.
 
+## Post-Ship Protocol (Mandatory)
+
+To prevent "stale code" and 500 errors, every worker must perform the following steps after a merge to the `main` branch:
+
+1.  **Rebuild:** Run `npm run build` in `D:\dev\LogueOS-Console`.
+2.  **Restart Services:** Restart the Console server (port 18080) and the Dispatch Listener (port 19100). If PM2 is available, use `pm2 restart all`. If not, manually kill and restart the processes via the provided windows startup scripts (e.g., `startup_all.ps1`).
+3.  **Verify:** Perform a manual health check (`curl http://127.0.0.1:18080/console/`) to ensure the new build is live and responding correctly.
+
 ## Repo boundary
 
 Working on other repos under `D:\dev` from an interactive session is fine (you launched at
