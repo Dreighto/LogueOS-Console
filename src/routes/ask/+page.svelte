@@ -13,6 +13,6 @@
     </div>
 
     <p class="text-xs text-slate-500 font-mono text-center">
-        Jobs are usually picked up within a few minutes. You'll see progress in What's Happening.
+        Jobs are usually picked up within a few minutes. You'll see progress in Activity.
     </p>
 </div>
