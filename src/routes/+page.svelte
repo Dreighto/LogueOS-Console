@@ -1,110 +1,145 @@
 <script lang="ts">
-	import RunCard from '$lib/components/RunCard.svelte';
-	import RunCardSkeleton from '$lib/components/RunCardSkeleton.svelte';
-	import type { Run, RunsResponse } from '$lib/types/run';
+	// LogueOS landing — status-board model.
+	//
+	// Single-screen check-in: 5 status rows + dispatch button. Each row is a
+	// link to the existing detail page where the operator can drill in. The
+	// landing page itself does NOT render lists or lesson text — that's why
+	// we have /workers, /runs, /usage, /memory, /ask. Keeps the page small
+	// (target: <10KB HTML), fast to redraw, and glanceable on phone.
+	//
+	// Polling: invalidateAll() reruns the SSR load to refresh the counts.
+	// Pauses when the tab is hidden (visibilitychange) and refetches on
+	// tab-return so the operator sees fresh data immediately when they
+	// reopen the tab.
 	import { resolve } from '$app/paths';
-	import { AlertCircle, RefreshCcw } from 'lucide-svelte';
+	import { invalidateAll } from '$app/navigation';
+	import {
+		AlertTriangle,
+		ClipboardCheck,
+		Users,
+		DollarSign,
+		Plus,
+		ChevronRight,
+		Power
+	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 
-	// CodeRabbit Critical fix: client-side display config (poll interval,
-	// feed limit) is supplied via +page.server.ts load() instead of
-	// importing $lib/config — which used $env/dynamic/private and broke
-	// SvelteKit's server-only-module rule.
 	let { data }: { data: PageData } = $props();
+	let s = $derived(data.status);
 
-	let runs = $state<Run[]>([]);
-	let loading = $state(true);
-	let errorMsg = $state<string | null>(null);
+	// Tier the rows by severity so the eye finds problems first.
+	let failureColor = $derived(
+		s.failures.count > 0
+			? 'text-red-400 bg-red-500/5 border-red-500/20 hover:bg-red-500/10'
+			: 'text-slate-400 bg-slate-900/40 border-slate-800 hover:bg-slate-900'
+	);
+	let reviewColor = $derived(
+		s.reviews.count > 0
+			? 'text-amber-400 bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10'
+			: 'text-slate-400 bg-slate-900/40 border-slate-800 hover:bg-slate-900'
+	);
+	let killColor = $derived(
+		s.killSwitch.active
+			? 'text-red-400 bg-red-500/10 border-red-500/40'
+			: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20'
+	);
 
-	async function fetchRuns() {
-		try {
-			// Use resolve() so the URL respects kit.paths.base. Without it,
-			// the bare '/api/runs' resolves to the SITE root not the app's
-			// base — when served behind Tailscale at /console, that request
-			// goes to n8n at root and returns HTML, breaking JSON.parse.
-			const resp = await fetch(resolve('/api/runs'));
-			if (!resp.ok) {
-				const errData = await resp.json();
-				throw new Error(errData.error || `HTTP ${resp.status}`);
-			}
-			const respData: RunsResponse = await resp.json();
-			runs = respData.runs;
-			errorMsg = null;
-		} catch (e: unknown) {
-			// CodeRabbit Major: catch (e: any) violates strict TS. Use unknown + narrow.
-			errorMsg = e instanceof Error ? e.message : 'Unknown error';
-			console.error('Runs fetch error:', e);
-		} finally {
-			loading = false;
-		}
+	function refresh() {
+		void invalidateAll();
 	}
 
 	$effect(() => {
-		fetchRuns();
 		const interval = setInterval(() => {
-			if (document.visibilityState === 'visible') {
-				fetchRuns();
-			}
+			if (document.visibilityState === 'visible') refresh();
 		}, data.pollIntervalMs);
-
-		const onVisibilityChange = () => {
-			if (document.visibilityState === 'visible') {
-				fetchRuns();
-			}
+		const onVis = () => {
+			if (document.visibilityState === 'visible') refresh();
 		};
-		document.addEventListener('visibilitychange', onVisibilityChange);
-
+		document.addEventListener('visibilitychange', onVis);
 		return () => {
 			clearInterval(interval);
-			document.removeEventListener('visibilitychange', onVisibilityChange);
+			document.removeEventListener('visibilitychange', onVis);
 		};
 	});
 </script>
 
-<div class="flex flex-col gap-4">
-	<div class="flex items-center justify-between">
-		<h2 class="font-sans text-xl font-bold tracking-tight">Recent Runs</h2>
-		<button
-			onclick={fetchRuns}
-			class="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-		>
-			<RefreshCcw size={12} class={loading && runs.length > 0 ? 'animate-spin' : ''} />
-			Sync
-		</button>
-	</div>
-
-	{#if errorMsg}
-		<div
-			class="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400"
-		>
-			<AlertCircle size={18} class="shrink-0" />
-			<div class="flex flex-col">
-				<span class="font-bold">Fetch Error</span>
-				<span class="font-mono text-xs opacity-80">{errorMsg}</span>
-			</div>
+<div class="mx-auto max-w-md flex flex-col gap-3 p-4 md:max-w-lg md:p-6">
+	<!-- Kill switch badge — site header already provides the page title. -->
+	<div class="flex justify-end mb-1">
+		<div data-testid="kill-switch-badge" class="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-1 rounded-full border {killColor}">
+			<Power size={12} />
+			Kill: {s.killSwitch.active ? 'ACTIVE' : 'clear'}
 		</div>
-	{/if}
-
-	<div class="flex flex-col gap-3">
-		{#if loading && runs.length === 0}
-			<RunCardSkeleton />
-			<RunCardSkeleton />
-			<RunCardSkeleton />
-		{:else if runs.length === 0}
-			<div class="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
-				<p class="font-sans text-lg font-semibold text-muted-foreground">No runs yet</p>
-				<p class="mt-1 font-mono text-xs text-dim">Dispatch a worker to see it appear here.</p>
-			</div>
-		{:else}
-			{#each runs as run, i (run.trace_id ?? `${run.timestamp}|${run.ticket_id ?? ''}|${i}`)}
-				<!-- Fallback key uses index disambiguator: historical rows that
-				     pre-date the trace_id field can collide on timestamp alone
-				     (multiple workers shipped the same day with identical
-				     `2026-05-06T00:00:00Z` markers). The composite key with
-				     index keeps Svelte's keyed-each happy without losing the
-				     real trace_id stability for newer rows. -->
-				<RunCard {run} />
-			{/each}
-		{/if}
 	</div>
+
+	<a
+		data-testid="row-failures"
+		href={resolve('/activity')}
+		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors {failureColor}"
+	>
+		<div class="flex items-center gap-3 min-w-0">
+			<AlertTriangle size={18} class="shrink-0" />
+			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Recent failures</span>
+		</div>
+		<div class="flex items-center gap-2 shrink-0">
+			<span class="font-mono text-base tabular-nums">{s.failures.count}</span>
+			<ChevronRight size={16} class="opacity-50" />
+		</div>
+	</a>
+
+	<a
+		data-testid="row-reviews"
+		href={resolve('/activity')}
+		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors {reviewColor}"
+	>
+		<div class="flex items-center gap-3 min-w-0">
+			<ClipboardCheck size={18} class="shrink-0" />
+			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Pending review</span>
+		</div>
+		<div class="flex items-center gap-2 shrink-0">
+			<span class="font-mono text-base tabular-nums">{s.reviews.count}</span>
+			<ChevronRight size={16} class="opacity-50" />
+		</div>
+	</a>
+
+	<a
+		data-testid="row-workers"
+		href={resolve('/workers')}
+		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-slate-900/40 border-slate-800 text-slate-300 hover:bg-slate-900 transition-colors"
+	>
+		<div class="flex items-center gap-3 min-w-0">
+			<Users size={18} class="text-blue-400 shrink-0" />
+			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Workers active</span>
+		</div>
+		<div class="flex items-center gap-2 shrink-0">
+			<span class="font-mono text-base tabular-nums">
+				{s.workers.active}<span class="text-slate-500"> / {s.workers.total}</span>
+			</span>
+			<ChevronRight size={16} class="opacity-50" />
+		</div>
+	</a>
+
+	<a
+		data-testid="row-usage"
+		href={resolve('/usage')}
+		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-slate-900/40 border-slate-800 text-slate-300 hover:bg-slate-900 transition-colors"
+	>
+		<div class="flex items-center gap-3 min-w-0">
+			<DollarSign size={18} class="text-blue-400 shrink-0" />
+			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Today's spend</span>
+		</div>
+		<div class="flex items-center gap-2 shrink-0">
+			<span class="font-mono text-base tabular-nums">${s.usage.todayCost.toFixed(2)}</span>
+			<ChevronRight size={16} class="opacity-50" />
+		</div>
+	</a>
+
+	<a
+		data-testid="row-dispatch"
+		href={resolve('/ask')}
+		class="mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-mono text-sm font-bold uppercase tracking-widest transition-colors"
+	>
+		<Plus size={18} />
+		Dispatch worker
+	</a>
 </div>

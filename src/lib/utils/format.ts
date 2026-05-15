@@ -8,7 +8,10 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 export function formatRelativeTime(timestamp: string): string {
+	if (!timestamp) return '—';
 	const date = new Date(timestamp);
+	if (isNaN(date.getTime())) return '—';
+
 	const now = new Date();
 	const diffMs = now.getTime() - date.getTime();
 	const diffSec = Math.floor(diffMs / 1000);
@@ -22,7 +25,7 @@ export function formatRelativeTime(timestamp: string): string {
 }
 
 export function truncateTraceId(traceId: string | null | undefined): string {
-	// CodeRabbit Minor: previously was 'â€”' (mojibake — UTF-8 em-dash
+	// CodeRabbit Minor: previously was '—' (mojibake — UTF-8 em-dash
 	// bytes interpreted as Latin-1 by gemini's PowerShell pipe). Now
 	// the actual em-dash codepoint U+2014.
 	if (!traceId) return '—';
@@ -36,6 +39,7 @@ export function truncateTraceId(traceId: string | null | undefined): string {
 
 export function deriveWorkerFromTraceId(traceId: string | null | undefined): string {
 	if (!traceId) return 'unknown';
+	if (traceId.startsWith('cc-LOS-')) return 'gemini';
 	if (traceId.startsWith('cc-')) return 'claude-code';
 	if (traceId.startsWith('gemini-') || traceId.startsWith('gmi-')) return 'gemini';
 	if (traceId.startsWith('cursor-')) return 'cursor';

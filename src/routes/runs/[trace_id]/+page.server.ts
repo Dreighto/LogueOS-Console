@@ -11,6 +11,7 @@
 // side load aligns with the spec and eliminates the symptom.
 import type { PageServerLoad } from './$types';
 import type { Run } from '$lib/types/run';
+import { resolve } from '$app/paths';
 
 interface RunDetailData {
 	run: Run | null;
@@ -29,7 +30,14 @@ export const load: PageServerLoad = async ({ params, fetch }): Promise<RunDetail
 	// the wrong route. Without try/catch, a network blip throws into
 	// SvelteKit's error.svelte instead of rendering our in-page error UI.
 	try {
-		const resp = await fetch(`/api/runs/${encodeURIComponent(traceId)}`);
+		// Use resolve() so the request hits /console/api/runs/<id> (the actual
+		// SvelteKit route) instead of the SITE root. Bare /api/runs/... lands at
+		// n8n on the operator's tailscale serve and 404s. Same base-path bug
+		// pattern as the Runs/Workers/Activity fetches — see canon
+		// adopted-lessons.md "Client-side fetch is NOT base-path-aware".
+		const resp = await fetch(
+			resolve('/api/runs/[trace_id]', { trace_id: encodeURIComponent(traceId) })
+		);
 
 		// 404 → friendly empty state (RunNotFound rendered by +page.svelte).
 		// Don't `error()` throw here — that would render the global error

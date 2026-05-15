@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
 	import WorkerCard from '$lib/components/WorkerCard.svelte';
 	import type { WorkerStatus } from '$lib/types/worker';
@@ -10,11 +11,21 @@
 
 	let { data }: Props = $props();
 
-	let workers = $state<WorkerStatus[]>(data.workers);
+	function getInitial() { return data.workers; }
+	let workers = $state<WorkerStatus[]>(getInitial());
+
+	$effect(() => {
+		workers = data.workers;
+	});
 
 	async function refreshWorkers() {
 		try {
-			const response = await fetch('/api/workers');
+			// resolve() honors kit.paths.base ('/console'). Bare fetch('/api/workers')
+			// hits the SITE root (n8n on the operator's tailscale serve) and gets
+			// back HTML 404, which the JSON parser then chokes on with "Unexpected
+			// token '<'". Same base-path-bug pattern as the server-side load fix
+			// shipped earlier today (see canon adopted-lessons.md).
+			const response = await fetch(resolve('/api/workers'));
 			if (response.ok) {
 				const result = await response.json();
 				workers = result.workers;

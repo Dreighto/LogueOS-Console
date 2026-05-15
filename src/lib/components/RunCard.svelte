@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Run, RunStatus } from '$lib/types/run';
 	import { formatDuration, formatRelativeTime, truncateTraceId } from '$lib/utils/format';
+	import { resolve } from '$app/paths';
 	import { CheckCircle2, XCircle, AlertCircle, CircleHelp } from 'lucide-svelte';
 	import { statusColors, workerColors } from '$lib/styles/colors';
 
@@ -15,10 +16,16 @@
 	let summaryPreview = $derived(
 		run.summary.slice(0, 200) + (run.summary.length > 200 ? '...' : '')
 	);
+	// resolve() honors kit.paths.base ('/console'). Bare href="/runs/..." would
+	// navigate to the SITE root (n8n) and 404. Same base-path bug pattern as the
+	// fetch fixes — codified in canon adopted-lessons.md as the recurring trap.
+	let detailHref = $derived(
+		run.trace_id ? resolve(`/runs/${run.trace_id}`) : null
+	);
 </script>
 
 <a
-	href="/runs/{run.trace_id}"
+	href={detailHref ?? '#'}
 	data-sveltekit-preload-data="hover"
 	class="flex h-[100px] cursor-pointer flex-col justify-between rounded-lg border border-[#21262D] bg-[#161B22] p-3 transition-all hover:bg-[#1C2128] hover:shadow-[0_0_8px_rgba(163,230,53,0.1)]"
 >

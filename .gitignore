@@ -24,6 +24,19 @@ vite.config.ts.timestamp-*
 
 # Per-worktree MCP config (written by dispatch_listener at spawn time, never tracked).
 # Without this, verifyWorktreeParked rejects the worktree as dirty (untracked
-# .mcp.json) and dispatch fails with pre_spawn_dirty_refusal. Mirror project-miru.
+# .mcp.json) and dispatch fails with pre_spawn_dirty_refusal. Mirror LogueOS-Orchestrator.
 .mcp.json
 mcp.json
+
+# Runtime logs written by start_logueos_console.ps1 (Console server wrapper).
+# These accumulate inside the worktree and would otherwise trip the
+# dispatch_listener's pre_spawn_dirty_refusal check whenever a new worker
+# tries to lease this worktree slot. Set 2026-05-12 after the LOS-9 retry
+# bounced on an untracked logs/logueos_console_wrapper.log file.
+logs/
+
+# Claude Code preview-server config (per-operator dev tooling, not shared).
+.claude/
+
+# Sandbox scratch dir for end-to-end smoke tests (kill switch tmpfs, etc.).
+.tmp-*/

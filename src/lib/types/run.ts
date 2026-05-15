@@ -33,6 +33,11 @@ export interface Run {
 	pr_number: number | null;
 	branch: string | null;
 	files_touched: string[];
+	// Optional project tag from the completion-log row. When present, the UI
+	// uses it to resolve repo + Linear team via PROJECT_REGISTRY. When absent
+	// (legacy rows pre-agnosticism), the UI degrades to plain text instead of
+	// guessing a default that could misroute the link.
+	project_id: string | null;
 }
 
 export interface RunsResponse {
