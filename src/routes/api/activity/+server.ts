@@ -13,63 +13,117 @@ const INTERESTING_EVENTS = new Set<string>([
     'dispatch_rejected',
     'hmac_reject',
     'listener_listening',
-    'listener_restarted'
+    'listener_restarted',
+    'hermes_predict_failed',
+    'no_worktree_available',
+    'worktree_cleanup_pull_failed',
+    'memory_injected',
+    'duplicate_prompt_in_flight',
+    'worktree_auto_clean_failed'
 ]);
+
+interface RawLogEvent {
+    msg: string;
+    ts: string;
+    trace_id?: string;
+    ticket_id?: string;
+    worker?: string;
+    status?: string;
+    duration_ms?: number;
+    reason?: string;
+    error?: string;
+    stderr?: string;
+}
+
+function deriveFriendlyWorker(event: RawLogEvent): string {
+    const workerRaw = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
+    return workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Gemini' : workerRaw;
+}
 
 function formatDuration(ms: number | undefined): string {
     if (ms === undefined) return '';
     const seconds = Math.floor(ms / 1000);
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return `${m}m ${s.toString().padStart(2, '0')}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
 }
 
-function deriveSummary(event: any): string {
-    const worker = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
+function deriveSummary(event: RawLogEvent): string {
+    const worker = deriveFriendlyWorker(event);
     
     let ticket = event.ticket_id;
     if (!ticket && event.trace_id) {
-        // e.g. 'rtr-LOS-60-6c811...' -> 'LOS-60' or 'cc-CANARY-003-fa37...' -> 'CANARY-003'
         const match = event.trace_id.match(/^(?:rtr|cc)-([A-Za-z0-9]+-\d+)/i);
         if (match) {
             ticket = match[1];
         }
     }
-    ticket = ticket || 'unknown task';
+    
+    const taskLabel = ticket && ticket !== 'unknown' ? `ticket ${ticket}` : 'a task';
 
-    switch (event.msg as ActivityEventType) {
+    switch (event.msg as ActivityEventType | string) {
         case 'worker_spawned':
-            return `${worker} started on ${ticket}`;
+            return `${worker} started working on ${taskLabel}`;
         case 'worker_exit': {
             const duration = formatDuration(event.duration_ms);
-            return `${worker} finished ${ticket} (status ${event.status}${duration ? `, ${duration}` : ''})`;
+            const timeInfo = duration ? ` in ${duration}` : '';
+            const status = event.status || 'unknown';
+            
+            if (status === 'CONFIRMED_WORKING') {
+                return `${worker} finished ${taskLabel}${timeInfo}`;
+            } else if (status === 'INCONCLUSIVE') {
+                return `${worker} stopped work on ${taskLabel} and needs a question answered${timeInfo}`;
+            } else if (status.startsWith('ESCALATE')) {
+                return `${worker} flagged ${taskLabel} for manual review${timeInfo}`;
+            } else {
+                const statusClean = status.toLowerCase().replace(/_/g, ' ');
+                return `${worker} stopped work on ${taskLabel} (${statusClean})${timeInfo}`;
+            }
         }
         case 'worktree_cleanup_stashed':
-            return `${worker} stashed work on ${ticket} (no PR created)`;
+            return `${worker} stashed progress on ${taskLabel}`;
         case 'dispatch_rejected':
-            return `Dispatch rejected: ${event.reason || 'unknown reason'}`;
+            return `Job request was denied: ${event.reason || 'unknown reason'}`;
         case 'hmac_reject':
-            return `HMAC signature rejection: ${event.error || 'invalid key'}`;
+            return `Security: Signature verification failed`;
         case 'listener_listening':
-            return 'Listener started';
+            return 'Dispatch system is live and ready for jobs';
         case 'listener_restarted':
-            return 'Listener restarted';
+            return 'Dispatch system restarted';
+        case 'hermes_predict_failed':
+            return `Cost prediction failed: ${event.error || 'timeout'}`;
+        case 'no_worktree_available':
+            return `No worktree available to start ${worker} on ${taskLabel}`;
+        case 'worktree_cleanup_pull_failed':
+            return `Failed to sync latest changes for ${worker}`;
+        case 'memory_injected':
+            return `Relevant lessons injected for ${taskLabel}`;
+        case 'duplicate_prompt_in_flight':
+            return `A duplicate request for ${taskLabel} is already being processed`;
+        case 'worktree_auto_clean_failed':
+            return `Worktree maintenance failed: ${event.stderr || 'unknown error'}`;
         default:
             return event.msg;
     }
 }
 
-function deriveLevel(event: any): ActivityEvent['level'] {
-    switch (event.msg as ActivityEventType) {
+function deriveLevel(event: RawLogEvent): ActivityEvent['level'] {
+    switch (event.msg as ActivityEventType | string) {
         case 'worker_exit':
-            // Take HEAD: non-CONFIRMED exits are 'error' (red) so they stand out
-            // visually in the activity feed. 'info' would treat all non-success
-            // worker exits the same as routine spawn events.
-            return event.status === 'CONFIRMED_WORKING' ? 'success' : 'error';
+            if (event.status === 'CONFIRMED_WORKING') return 'success';
+            if (event.status === 'INCONCLUSIVE') return 'warning';
+            return 'error';
         case 'worktree_cleanup_stashed':
+        case 'hermes_predict_failed':
+        case 'memory_injected':
             return 'warning';
         case 'dispatch_rejected':
         case 'hmac_reject':
+        case 'no_worktree_available':
+        case 'worktree_cleanup_pull_failed':
+        case 'duplicate_prompt_in_flight':
+        case 'worktree_auto_clean_failed':
             return 'error';
         case 'listener_listening':
         case 'listener_restarted':
@@ -109,15 +163,18 @@ export const GET: RequestHandler = async () => {
                 try {
                     const data = JSON.parse(line);
                     if (INTERESTING_EVENTS.has(data.msg)) {
+                        const summary = deriveSummary(data);
+                        const friendlyWorker = deriveFriendlyWorker(data);
+
                         events.push({
                             id: `${data.ts}-${lineCount++}`,
                             ts: data.ts,
                             msg: data.msg as ActivityEventType,
-                            summary: deriveSummary(data),
+                            summary: summary,
                             level: deriveLevel(data),
                             trace_id: data.trace_id,
                             ticket_id: data.ticket_id,
-                            worker: data.worker
+                            worker: friendlyWorker
                         });
                     }
                 } catch {
