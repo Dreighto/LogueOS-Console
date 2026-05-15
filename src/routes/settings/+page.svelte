@@ -2,7 +2,6 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { version } from '$app/environment';
 	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
@@ -257,7 +256,7 @@
 		class="text-dim mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
 		aria-label="Build identity"
 	>
-		{version ? `v${version}` : 'Console last updated: 2026-05-15'} · {__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
+		{__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
 	</footer>
 </div>
 
