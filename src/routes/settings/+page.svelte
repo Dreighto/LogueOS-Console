@@ -256,6 +256,16 @@
 	<p class="font-mono text-[10px] text-muted-foreground">
 		Worker controls + token usage tracker land next.
 	</p>
+
+	<!-- Build identity (LOS-73). Lets the operator know which build is
+	     running when triaging Console issues. Values are inlined at build
+	     time via vite.config.ts `define`; zero runtime cost. -->
+	<footer
+		class="text-dim mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
+		aria-label="Build identity"
+	>
+		v{__BUILD_VERSION__} · {__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
+	</footer>
 </div>
 
 {#if confirmOpen && pendingAction}
