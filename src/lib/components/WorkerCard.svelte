@@ -20,6 +20,19 @@
 	let killable = $derived(worker.state === 'busy' && typeof worker.trace_id === 'string');
 	let confirming = $state(false);
 	let submitting = $state(false);
+	const EXIT_STATUS_LABELS: Record<string, string> = {
+		'CONFIRMED_WORKING': 'Completed successfully',
+		'INCONCLUSIVE': 'Stopped — needs follow-up',
+		'FAILED': 'Failed',
+		'ESCALATE: HUMAN-REQUIRED': 'Escalated — needs your attention',
+		'ESCALATE: REPEATED_FAILURE': 'Repeated failure — escalated'
+	};
+
+	function formatExitStatus(status: string | null | undefined): string {
+		if (!status) return 'Unknown';
+		return EXIT_STATUS_LABELS[status] ?? status;
+	}
+
 	let errorMsg = $state<string | null>(null);
 	let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 	const CONFIRM_WINDOW_MS = 3000;
@@ -131,9 +144,13 @@
 				</button>
 			</div>
 		</div>
-	{:else}
+	{:else if worker.state === 'idle'}
 		<div class="flex h-[88px] items-center justify-center border border-dashed border-[#30363D] rounded bg-[#0D1117]">
 			<span class="text-[10px] uppercase tracking-widest text-[#484F58]">Available for dispatch</span>
+		</div>
+	{:else}
+		<div class="flex h-[88px] items-center justify-center border border-dashed border-[#484F58]/30 rounded bg-[#0D1117]">
+			<span class="text-[10px] uppercase tracking-widest text-[#484F58]/50">Offline</span>
 		</div>
 	{/if}
 
@@ -142,7 +159,7 @@
 			<AlertCircle size={14} class="mt-0.5 shrink-0" />
 			<div class="flex flex-col gap-0.5">
 				<span class="font-bold uppercase tracking-wider">Operational Note</span>
-				<span>{errorMsg || `Last session ended with ${worker.last_exit_status}`}</span>
+				<span>{errorMsg || formatExitStatus(worker.last_exit_status)}</span>
 			</div>
 		</div>
 	{/if}
