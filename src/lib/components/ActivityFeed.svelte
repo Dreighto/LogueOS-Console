@@ -1,9 +1,8 @@
 <script lang="ts">
 	import type { ActivityEvent } from '$lib/types/activity';
 	import { formatFullDate } from '$lib/utils/format';
-	import { 
-		Info, CheckCircle2, AlertCircle, XCircle, Clock, 
-		ChevronDown, ChevronRight, Terminal, Hash, Fingerprint,
+	import {
+		Clock, ChevronDown, ChevronRight, Terminal, Hash, Fingerprint,
 		Bot, User, Zap, ShieldAlert, AlertTriangle
 	} from 'lucide-svelte';
 
@@ -128,11 +127,11 @@
 	<div class="flex flex-col border border-[#30363D] bg-[#161B22] rounded-lg overflow-hidden">
 		{#if filteredEvents().length === 0}
 			<div class="p-12 text-center text-[#8B949E]">
-				<p>No events found for this filter.</p>
+				<p>Nothing here — the team is running clean</p>
 			</div>
 		{:else}
 			<div class="overflow-y-auto max-h-[calc(100vh-320px)] divide-y divide-[#30363D]">
-				{#each groupedEvents() as group}
+				{#each groupedEvents() as group (group.label)}
 					<!-- Date Group Header -->
 					<div class="bg-[#0D1117] px-4 py-1.5 sticky top-0 z-10 border-y border-[#30363D] first:border-t-0">
 						<span class="text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">

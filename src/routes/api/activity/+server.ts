@@ -22,6 +22,24 @@ const INTERESTING_EVENTS = new Set<string>([
     'worktree_auto_clean_failed'
 ]);
 
+interface RawLogEvent {
+    msg: string;
+    ts: string;
+    trace_id?: string;
+    ticket_id?: string;
+    worker?: string;
+    status?: string;
+    duration_ms?: number;
+    reason?: string;
+    error?: string;
+    stderr?: string;
+}
+
+function deriveFriendlyWorker(event: RawLogEvent): string {
+    const workerRaw = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
+    return workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Gemini' : workerRaw;
+}
+
 function formatDuration(ms: number | undefined): string {
     if (ms === undefined) return '';
     const seconds = Math.floor(ms / 1000);
@@ -31,9 +49,8 @@ function formatDuration(ms: number | undefined): string {
     return `${s}s`;
 }
 
-function deriveSummary(event: any): string {
-    const workerRaw = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
-    const worker = workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Gemini' : workerRaw;
+function deriveSummary(event: RawLogEvent): string {
+    const worker = deriveFriendlyWorker(event);
     
     let ticket = event.ticket_id;
     if (!ticket && event.trace_id) {
@@ -91,7 +108,7 @@ function deriveSummary(event: any): string {
     }
 }
 
-function deriveLevel(event: any): ActivityEvent['level'] {
+function deriveLevel(event: RawLogEvent): ActivityEvent['level'] {
     switch (event.msg as ActivityEventType | string) {
         case 'worker_exit':
             if (event.status === 'CONFIRMED_WORKING') return 'success';
@@ -147,8 +164,7 @@ export const GET: RequestHandler = async () => {
                     const data = JSON.parse(line);
                     if (INTERESTING_EVENTS.has(data.msg)) {
                         const summary = deriveSummary(data);
-                        const workerRaw = data.worker || (data.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
-                        const friendlyWorker = workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Gemini' : workerRaw;
+                        const friendlyWorker = deriveFriendlyWorker(data);
 
                         events.push({
                             id: `${data.ts}-${lineCount++}`,
