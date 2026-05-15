@@ -30,7 +30,7 @@
 
 	function formatExitStatus(status: string | null | undefined): string {
 		if (!status) return 'Unknown';
-		return EXIT_STATUS_LABELS[status] ?? status;
+		return EXIT_STATUS_LABELS[status] ?? 'Last session ended unexpectedly.';
 	}
 
 	let errorMsg = $state<string | null>(null);
