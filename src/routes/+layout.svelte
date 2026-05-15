@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
-	import { Play, Cpu, Activity, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
+	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
 	import type { LayoutData } from './$types';
 	import type { KillSwitchState } from '$lib/types/kill-switch';
 
@@ -15,6 +15,7 @@
 		{ name: 'Runs', path: '/', icon: Play },
 		{ name: 'Workers', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
+		{ name: 'Memory', path: '/memory', icon: Brain },
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
 		{ name: 'Settings', path: '/settings', icon: Settings }
 	] as const;
@@ -80,7 +81,7 @@
 			<img src="{base}/favicon.png" alt="" width="28" height="28" class="h-7 w-7 shrink-0" />
 			<h1 class="font-sans text-lg font-bold tracking-tight">LogueOS Console</h1>
 			<span
-				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-muted-foreground uppercase"
+				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
 				>v1a</span
 			>
 		</div>
