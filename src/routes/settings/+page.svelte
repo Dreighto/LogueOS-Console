@@ -2,8 +2,9 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { AlertOctagon, ShieldCheck, AlertCircle, X } from 'lucide-svelte';
+	import { AlertOctagon, ShieldCheck, AlertCircle, X, Signal } from 'lucide-svelte';
 	import { formatFullDate } from '$lib/utils/format';
+	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -14,8 +15,19 @@
 	let killSwitch = $state<KillSwitchState>(getInitialKS());
 	let fetchError = $state<string | null>(null);
 
+	// Connection-status services seeded from SSR (LOS-70). Polled on the same
+	// cadence as the kill switch so the operator gets one consistent refresh.
+	let services = $state<Array<{ id: string; name: string; status: 'online' | 'offline' }>>(
+		data.services ?? []
+	);
+	let servicesError = $state<string | null>(null);
+
 	$effect(() => {
 		killSwitch = data.killSwitch;
+	});
+
+	$effect(() => {
+		services = data.services ?? [];
 	});
 
 	// Modal + form state. We require an explicit confirm tap before any
@@ -28,6 +40,7 @@
 	let submitError = $state<string | null>(null);
 
 	async function refresh() {
+		// Kill switch
 		try {
 			const resp = await fetch(resolve('/api/kill-switch'));
 			if (!resp.ok) {
@@ -39,6 +52,21 @@
 		} catch (e: unknown) {
 			fetchError = e instanceof Error ? e.message : 'Unknown error';
 			console.error('kill-switch poll error:', e);
+		}
+
+		// Connection-status services
+		try {
+			const resp = await fetch(resolve('/api/system'));
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${resp.status}`);
+			}
+			const body = await resp.json();
+			services = Array.isArray(body.services) ? body.services : [];
+			servicesError = null;
+		} catch (e: unknown) {
+			servicesError = e instanceof Error ? e.message : 'Unknown error';
+			console.error('connection-status poll error:', e);
 		}
 	}
 
@@ -102,6 +130,44 @@
 
 <div class="flex flex-col gap-4">
 	<h1 class="font-sans text-xl font-bold tracking-tight">Settings</h1>
+
+	<!-- Connection Status section (LOS-70). Pills show whether each LogueOS
+	     service is reachable from the Console box. Same poll cadence as the
+	     kill-switch card. -->
+	<section class="flex flex-col gap-3" aria-labelledby="connectivity-heading">
+		<div class="flex items-center gap-2 px-1">
+			<Signal size={16} class="text-muted-foreground" />
+			<h2
+				id="connectivity-heading"
+				class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+			>
+				Connection Status
+			</h2>
+		</div>
+
+		{#if services.length === 0}
+			<div
+				class="rounded-md border border-dashed border-border bg-surface/30 p-3 font-mono text-[11px] text-dim"
+			>
+				No services reported. {#if servicesError}({servicesError}){/if}
+			</div>
+		{:else}
+			<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+				{#each services as service (service.id)}
+					<ConnectionPill id={service.id} name={service.name} status={service.status} />
+				{/each}
+			</div>
+		{/if}
+
+		{#if servicesError && services.length > 0}
+			<div
+				class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 font-mono text-[11px] text-amber-400"
+			>
+				<AlertCircle size={14} class="mt-0.5 shrink-0" />
+				<span>Connection-status refresh failed: {servicesError}</span>
+			</div>
+		{/if}
+	</section>
 
 	<!-- Kill switch card. Big, visually distinct from everything else on the
 	     page so the operator can find it in a panic. State color is the

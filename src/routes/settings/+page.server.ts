@@ -1,12 +1,30 @@
-// Server-side load for Settings. Reads kill-switch state via the shared
-// helper so SSR renders the correct ACTIVE/CLEAR state on first paint.
+// Server-side load for Settings.
+// Combines:
+//   - Kill-switch state (PR #21) — read via shared helper so SSR renders the
+//     correct ACTIVE/CLEAR state on first paint.
+//   - Connection-status services (LOS-70) — fetched from /api/system, returned
+//     as `services` for the Connectivity section.
 // pollIntervalMs flows through clientSafeConfig so the page can refresh.
 
 import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
 import { readKillSwitchStateSafe } from '$lib/server/kill-switch';
 
-export const load: PageServerLoad = async () => ({
-	...clientSafeConfig,
-	killSwitch: await readKillSwitchStateSafe()
-});
+export const load: PageServerLoad = async ({ fetch }) => {
+	let services: Array<{ id: string; name: string; status: 'online' | 'offline' }> = [];
+	try {
+		const sysRes = await fetch('/api/system');
+		if (sysRes.ok) {
+			const data = await sysRes.json();
+			services = Array.isArray(data.services) ? data.services : [];
+		}
+	} catch (e) {
+		console.error('Settings: /api/system load failed', e);
+	}
+
+	return {
+		...clientSafeConfig,
+		killSwitch: await readKillSwitchStateSafe(),
+		services
+	};
+};
