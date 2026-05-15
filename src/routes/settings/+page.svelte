@@ -2,8 +2,8 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { AlertOctagon, ShieldCheck, AlertCircle, X, Signal } from 'lucide-svelte';
-	import { formatFullDate } from '$lib/utils/format';
+	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
+	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -141,7 +141,7 @@
 				id="connectivity-heading"
 				class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
 			>
-				Connection Status
+				Connected Services
 			</h2>
 		</div>
 
@@ -164,61 +164,54 @@
 				class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 font-mono text-[11px] text-amber-400"
 			>
 				<AlertCircle size={14} class="mt-0.5 shrink-0" />
-				<span>Connection-status refresh failed: {servicesError}</span>
+				<span>Service check failed: {servicesError}</span>
 			</div>
 		{/if}
 	</section>
 
 	<!-- Kill switch card. Big, visually distinct from everything else on the
 	     page so the operator can find it in a panic. State color is the
-	     primary signal: red = active, green = clear. -->
+	     primary signal: amber = paused, green = running. -->
 	<section
 		class="rounded-lg border p-4 {killSwitch.active
-			? 'border-red-500/40 bg-red-500/5'
+			? 'border-amber-500/40 bg-amber-500/5'
 			: 'border-emerald-500/30 bg-emerald-500/5'}"
 		aria-labelledby="kill-switch-heading"
 	>
 		<div class="flex items-start gap-3">
 			{#if killSwitch.active}
-				<AlertOctagon size={28} class="shrink-0 text-red-400" aria-hidden="true" />
+				<PauseCircle size={28} class="shrink-0 text-amber-400" aria-hidden="true" />
 			{:else}
 				<ShieldCheck size={28} class="shrink-0 text-emerald-400" aria-hidden="true" />
 			{/if}
 			<div class="flex flex-1 flex-col gap-1">
 				<h2 id="kill-switch-heading" class="font-sans text-lg font-bold tracking-tight">
-					Kill Switch
+					Pause Everything
 				</h2>
 				<p
 					class="font-mono text-[10px] tracking-widest uppercase {killSwitch.active
-						? 'text-red-400'
+						? 'text-amber-400'
 						: 'text-emerald-400'}"
 				>
-					{killSwitch.active ? 'ACTIVE — workers must halt' : 'CLEAR — workers may dispatch'}
+					{killSwitch.active ? 'Work is paused' : 'Running normally'}
 				</p>
 			</div>
 		</div>
 
 		{#if killSwitch.active}
-			<dl class="mt-4 flex flex-col gap-2 border-t border-red-500/20 pt-3 text-xs">
-				<div class="flex items-center justify-between">
-					<dt class="font-mono tracking-wider text-muted-foreground uppercase">Activated</dt>
-					<dd class="font-mono text-foreground">
-						{killSwitch.activated_at
-							? formatFullDate(killSwitch.activated_at)
-							: '— (legacy halt file)'}
-					</dd>
-				</div>
-				<div class="flex items-center justify-between">
-					<dt class="font-mono tracking-wider text-muted-foreground uppercase">Source</dt>
-					<dd class="font-mono text-foreground">{killSwitch.activated_by ?? '—'}</dd>
-				</div>
+			<div class="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs">
+				<p class="font-sans text-amber-300">
+					Work is paused. All workers will stop before starting new tasks.
+				</p>
 				{#if killSwitch.note}
-					<div class="flex flex-col gap-1">
-						<dt class="font-mono tracking-wider text-muted-foreground uppercase">Note</dt>
-						<dd class="font-sans text-foreground">{killSwitch.note}</dd>
-					</div>
+					<p class="mt-1 font-sans text-amber-400/80">{killSwitch.note}</p>
 				{/if}
-			</dl>
+				{#if killSwitch.activated_by || killSwitch.activated_at}
+					<p class="mt-2 font-mono text-[10px] text-amber-500/70">
+						{#if killSwitch.activated_by}Paused by {killSwitch.activated_by}{/if}{#if killSwitch.activated_by && killSwitch.activated_at} · {/if}{#if killSwitch.activated_at}{formatRelativeTime(killSwitch.activated_at)}{/if}
+					</p>
+				{/if}
+			</div>
 		{/if}
 
 		<div class="mt-4 flex flex-col gap-2">
@@ -229,17 +222,20 @@
 					class="flex w-full items-center justify-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-emerald-300 uppercase transition-colors hover:bg-emerald-500/20 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none"
 				>
 					<ShieldCheck size={16} />
-					Clear Kill Switch
+					Resume work
 				</button>
 			{:else}
 				<button
 					type="button"
 					onclick={() => openConfirm('activate')}
-					class="flex w-full items-center justify-center gap-2 rounded-md border border-red-500/50 bg-red-500/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-red-300 uppercase transition-colors hover:bg-red-500/20 focus:ring-2 focus:ring-red-500/50 focus:outline-none"
+					class="flex w-full items-center justify-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-amber-300 uppercase transition-colors hover:bg-amber-500/20 focus:ring-2 focus:ring-amber-500/50 focus:outline-none"
 				>
-					<AlertOctagon size={16} />
-					Activate Kill Switch
+					<PauseCircle size={16} />
+					Pause all work
 				</button>
+				<p class="text-center font-mono text-[10px] text-muted-foreground">
+					Stops workers from picking up new tasks. In-progress work finishes its current step, then halts.
+				</p>
 			{/if}
 		</div>
 
@@ -253,10 +249,6 @@
 		{/if}
 	</section>
 
-	<p class="font-mono text-[10px] text-muted-foreground">
-		Worker controls + token usage tracker land next.
-	</p>
-
 	<!-- Build identity (LOS-73). Lets the operator know which build is
 	     running when triaging Console issues. Values are inlined at build
 	     time via vite.config.ts `define`; zero runtime cost. -->
@@ -264,7 +256,7 @@
 		class="text-dim mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
 		aria-label="Build identity"
 	>
-		v{__BUILD_VERSION__} · {__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
+		{__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
 	</footer>
 </div>
 
@@ -294,7 +286,7 @@
 		>
 			<div class="flex items-start justify-between gap-3">
 				<h3 id="confirm-heading" class="font-sans text-base font-bold tracking-tight">
-					{pendingAction === 'activate' ? 'Activate kill switch?' : 'Clear kill switch?'}
+					{pendingAction === 'activate' ? 'Pause all work?' : 'Resume work?'}
 				</h3>
 				<button
 					type="button"
@@ -309,23 +301,23 @@
 
 			<p class="font-sans text-sm text-muted-foreground">
 				{#if pendingAction === 'activate'}
-					Every in-flight worker will fail pre-flight on the next gate check and stop. New
-					dispatches will be refused until the switch is cleared.
+					Every in-flight worker will finish its current step, then stop. New
+					tasks won't be picked up until work is resumed.
 				{:else}
-					Workers will be allowed to dispatch again on their next pre-flight check.
+					Workers will be allowed to pick up new tasks again.
 				{/if}
 			</p>
 
 			<label class="flex flex-col gap-1">
 				<span class="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-					Note (optional, max 500 chars)
+					Reason (optional)
 				</span>
 				<input
 					type="text"
 					bind:value={noteDraft}
 					maxlength="500"
 					placeholder={pendingAction === 'activate'
-						? 'e.g. live demo at 3pm, halting non-essential dispatches'
+						? 'e.g. live demo at 3pm, pausing non-essential work'
 						: 'e.g. demo done, resuming normal ops'}
 					disabled={submitting}
 					class="placeholder:text-dim rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:border-cta focus:ring-1 focus:ring-cta focus:outline-none"
@@ -348,14 +340,14 @@
 					disabled={submitting}
 					class="flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2.5 font-sans text-sm font-bold tracking-wider uppercase transition-colors focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {pendingAction ===
 					'activate'
-						? 'border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500/20 focus:ring-red-500/50'
+						? 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 focus:ring-amber-500/50'
 						: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 focus:ring-emerald-500/50'}"
 				>
 					{submitting
 						? 'Working…'
 						: pendingAction === 'activate'
-							? 'Confirm activate'
-							: 'Confirm clear'}
+							? 'Confirm pause'
+							: 'Resume work'}
 				</button>
 				<button
 					type="button"

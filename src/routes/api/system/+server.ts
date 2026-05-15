@@ -9,9 +9,9 @@ import http from 'node:http';
 // repo. Adding a service here without adding it there (or vice versa) means
 // the operator sees inconsistent up/down signals across surfaces.
 const SERVICES = [
-	{ id: 'mcp_gateway', name: 'MCP Gateway', url: 'http://127.0.0.1:18766/health' },
-	{ id: 'dispatch_listener', name: 'Dispatch Listener', url: 'http://127.0.0.1:19100/health' },
-	{ id: 'n8n', name: 'n8n (Docker)', url: 'http://127.0.0.1:15678/healthz' }
+	{ id: 'mcp_gateway', name: 'Automation gateway', url: 'http://127.0.0.1:18766/health' },
+	{ id: 'dispatch_listener', name: 'Dispatch system', url: 'http://127.0.0.1:19100/health' },
+	{ id: 'n8n', name: 'Workflow engine', url: 'http://127.0.0.1:15678/healthz' }
 ];
 
 async function checkHealth(url: string): Promise<boolean> {
