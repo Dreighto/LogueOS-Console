@@ -6,7 +6,7 @@ export type { UsageMetrics, UsageHistory, UsageProjection, DailyUsage } from '$l
 
 export const GET: RequestHandler = async () => {
 	try {
-		const metrics = getUsageMetrics();
+		const metrics = await getUsageMetrics();
 		return json({ metrics });
 	} catch (error) {
 		console.error('Error fetching usage metrics:', error);

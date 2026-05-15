@@ -53,6 +53,10 @@ export const serverConfig = {
 		'LOGUEOS_WORKER_LOG_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
 	),
+	heartbeatsLogPath: getEnv(
+		'LOGUEOS_HEARTBEATS_LOG_PATH',
+		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_heartbeat_log.jsonl'
+	),
 	// Kill switch contract (tools/check_kill_switch.py): file presence at
 	// killSwitchPath = ACTIVE. File absence = CLEAR. Contents are free-form;
 	// we write a small JSON payload on activate so future workers can see
@@ -89,6 +93,12 @@ export const serverConfig = {
 	dispatchListenerHmacSecret:
 		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') ||
 		getEnv('W4_LISTENER_HMAC_SECRET', ''),
+	// LogueOS Gateway address (Console -> gateway for /api/v1/* read+dispatch).
+	// Same machine in production; configurable for dev. The gateway gates
+	// every /api/v1/* call behind is_trusted_origin (localhost / Tailscale
+	// CGNAT only — see LogueOS-Orchestrator/tools/logueos_mcp_gateway/api_v1.py),
+	// so this URL must reach the gateway from a trusted network position.
+	gatewayUrl: getEnv('LOGUEOS_GATEWAY_URL', 'http://127.0.0.1:18766'),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
 	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
 };

@@ -7,4 +7,8 @@ export interface WorkerStatus {
 	pid?: number;
 	since?: string;
 	last_exit_status?: string;
+	ticket_id?: string;
+	step?: string;
+	branch?: string;
+	last_file_written?: string;
 }
