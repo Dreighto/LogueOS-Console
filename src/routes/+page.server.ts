@@ -68,10 +68,14 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		// Today's boundaries
 		const now = new Date();
 		const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+		const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
 
-		const completionsToday = allRuns.filter(
-			(r) => r.status === 'CONFIRMED_WORKING' && r.timestamp >= todayStart
-		);
+		const completionsToday = allRuns
+			.filter(
+				(r) =>
+					r.status === 'CONFIRMED_WORKING' && r.timestamp >= todayStart && r.timestamp < todayEnd
+			)
+			.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
 		const status: StatusBoardData = {
 			killSwitch: { active: kill.active === true },
@@ -88,7 +92,7 @@ export const load: PageServerLoad = async ({ fetch }) => {
 			workers: {
 				active: workers.filter((w) => w.state === 'busy').length,
 				total: workers.length,
-				items: workers.filter((w) => w.state === 'busy')
+				items: workers
 			},
 			usage: {
 				todayCost: Number(usageData.metrics?.totalPredictedCost ?? 0),
@@ -96,13 +100,13 @@ export const load: PageServerLoad = async ({ fetch }) => {
 			},
 			completions: {
 				today: completionsToday.length,
-				items: completionsToday.slice(0, 5)
+				items: completionsToday.slice(0, 10)
 			}
 		};
 
 		return { status, ...clientSafeConfig };
 	} catch (error) {
 		console.error('SSR status-board fetch error:', error);
-		return { status: EMPTY, ...clientSafeConfig };
+		return { status: EMPTY, loadError: true, ...clientSafeConfig };
 	}
 };

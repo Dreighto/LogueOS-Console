@@ -45,11 +45,30 @@
 		};
 	});
 
-	let killColor = $derived(
-		s.killSwitch.active
-			? 'text-red-400 bg-red-500/10 border-red-500/40'
-			: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20'
+	let attentionItems = $derived(
+		[...s.failures.items, ...s.reviews.items].sort((a, b) =>
+			b.timestamp.localeCompare(a.timestamp)
+		)
 	);
+
+	function sanitizeTicketId(id?: string | null): string {
+		if (!id) return 'unassigned';
+		return id.replace(/[-#][a-f0-9]{6,}$/i, '').trim() || 'unassigned';
+	}
+
+	function humanizeStep(step?: string): string {
+		if (!step) return 'Initializing';
+		return step
+			.toLowerCase()
+			.replace(/_/g, ' ')
+			.replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
+	function formatBranch(branch?: string): string {
+		if (!branch) return '';
+		const parts = branch.split('/');
+		return parts[parts.length - 1];
+	}
 </script>
 
 <div class="mx-auto flex max-w-2xl flex-col gap-4 p-4 font-mono text-slate-200 md:p-6">
@@ -59,21 +78,33 @@
 			<Activity size={16} class="text-blue-400" />
 			<h1 class="text-xs font-bold tracking-widest text-slate-400 uppercase">Team Heartbeat</h1>
 		</div>
-		<div
-			data-testid="kill-switch-badge"
-			class="flex items-center gap-2 rounded border px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase {killColor}"
+		<a
+			href={resolve('/settings')}
+			data-testid="system-mode-banner"
+			class="flex items-center gap-2 rounded border px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase transition-colors {s
+				.killSwitch.active
+				? 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+				: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10'}"
 		>
 			<Power size={10} />
 			Kill: {s.killSwitch.active ? 'ACTIVE' : 'clear'}
-		</div>
+		</a>
 	</header>
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-		<!-- Active Workers Section -->
+	{#if data.loadError}
+		<div
+			class="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[10px] text-amber-400"
+		>
+			Status board data unavailable — last known state shown.
+		</div>
+	{/if}
+
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+		<!-- Workers Section (all workers, not just busy) -->
 		<section class="flex flex-col gap-2">
 			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
-				<span>Active Workers</span>
-				<span>{s.workers.active} / {s.workers.total}</span>
+				<span>Workers</span>
+				<span>{s.workers.active} / {s.workers.total} active</span>
 			</div>
 			<div class="flex flex-col gap-1">
 				{#each s.workers.items as w (w.id)}
@@ -82,25 +113,56 @@
 						class="group flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-blue-500/40"
 					>
 						<div class="flex items-center justify-between">
-							<span class="text-[11px] font-bold text-blue-400">{w.id}</span>
+							<span
+								class="text-[11px] font-bold {w.state === 'busy'
+									? 'text-blue-400'
+									: w.state === 'idle'
+										? 'text-slate-400'
+										: 'text-slate-600'}">{w.id}</span
+							>
 							<span class="text-[9px] text-slate-500"
-								>{w.since ? formatRelativeTime(w.since) : 'busy'}</span
+								>{w.since ? formatRelativeTime(w.since) : w.state}</span
 							>
 						</div>
-						<div class="truncate text-[10px] text-slate-300">
-							{w.ticket_id ? w.ticket_id : 'unassigned'} • {w.step || 'initializing'}
-						</div>
-						{#if w.branch}
-							<div class="truncate text-[9px] text-slate-500 italic">
-								{w.branch}
+						{#if w.state === 'busy'}
+							<div class="truncate text-[10px] text-slate-300">
+								{sanitizeTicketId(w.ticket_id)} • {humanizeStep(w.step)}
+							</div>
+							{#if w.branch}
+								<div class="truncate text-[9px] text-slate-500 italic">
+									{formatBranch(w.branch)}
+								</div>
+							{/if}
+						{:else}
+							<div class="text-[10px] text-slate-600 italic">
+								{w.state === 'idle' ? 'Available' : 'Offline'}
 							</div>
 						{/if}
 					</a>
 				{:else}
-					<div class="p-3 rounded border border-dashed border-slate-800 text-center">
-						<span class="text-[10px] text-slate-600 uppercase italic">All workers idle</span>
+					<div class="rounded border border-dashed border-slate-800 p-3 text-center">
+						<span class="text-[10px] text-slate-600 uppercase italic">No workers</span>
 					</div>
 				{/each}
+			</div>
+		</section>
+
+		<!-- Work Summary -->
+		<section class="flex flex-col gap-2">
+			<div class="text-[10px] font-bold text-slate-500 uppercase">Work Today</div>
+			<div class="flex flex-col gap-2">
+				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
+					<span class="text-[9px] text-slate-500 uppercase">Shipped</span>
+					<span class="text-lg font-bold text-emerald-400">{s.completions.today}</span>
+				</div>
+				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
+					<span class="text-[9px] text-slate-500 uppercase">Attention</span>
+					<span
+						class="text-lg font-bold {s.failures.count + s.reviews.count > 0
+							? 'text-amber-400'
+							: 'text-slate-500'}">{s.failures.count + s.reviews.count}</span
+					>
+				</div>
 			</div>
 		</section>
 
@@ -138,7 +200,7 @@
 			</span>
 		</div>
 		<div class="flex flex-col gap-1">
-			{#each [...s.failures.items, ...s.reviews.items] as item, i (item.timestamp + i)}
+			{#each attentionItems as item, i (item.timestamp + i)}
 				<a
 					href={resolve('/activity')}
 					class="group flex items-center gap-3 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-slate-600"
@@ -150,8 +212,7 @@
 					{/if}
 					<div class="flex min-w-0 flex-1 flex-col">
 						<div class="flex items-center gap-2">
-							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span
-							>
+							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span>
 							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
 						</div>
 						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
@@ -159,7 +220,7 @@
 					<ChevronRight size={12} class="text-slate-600 group-hover:text-slate-400" />
 				</a>
 			{:else}
-				<div class="p-3 rounded border border-dashed border-slate-800 text-center">
+				<div class="rounded border border-dashed border-slate-800 p-3 text-center">
 					<span class="text-[10px] text-slate-600 uppercase italic">No stuck work detected</span>
 				</div>
 			{/each}
@@ -187,7 +248,7 @@
 					</div>
 				</div>
 			{:else}
-				<div class="p-3 rounded border border-dashed border-slate-800 text-center">
+				<div class="rounded border border-dashed border-slate-800 p-3 text-center">
 					<span class="text-[10px] text-slate-600 uppercase italic">Nothing shipped yet today</span>
 				</div>
 			{/each}
@@ -201,6 +262,6 @@
 		class="mt-2 flex items-center justify-center gap-2 rounded border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:bg-blue-600/30"
 	>
 		<Plus size={14} />
-		Dispatch Worker
+		Give the team a job
 	</a>
 </div>
