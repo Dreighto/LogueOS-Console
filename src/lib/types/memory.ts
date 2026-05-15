@@ -15,10 +15,12 @@ export interface ProvisionalLesson {
 
 export interface AdoptedLesson {
 	text: string;
+	title?: string;
 	adopted_date: string;
 	last_applied_date?: string;
 	severity: LessonSeverity;
 	applies_to: string[]; // project_ids or ['*']
+	task_shape?: string[];
 }
 
 export interface Observation {
@@ -26,7 +28,8 @@ export interface Observation {
 	ts: string;
 	project_id: string;
 	worker_id?: string;
+	ticket_id?: string;
 	task_shape: string[];
-	observation_kind: 'what-worked' | 'what-didnt-work' | 'surprise' | 'routing-correction';
+	observation_kind: string;
 	text: string;
 }

@@ -2,9 +2,9 @@
 	import type { ProvisionalLesson, AdoptedLesson, Observation } from '$lib/types/memory';
 	import { Brain, Tag, Clock, Globe, ShieldCheck, Microscope } from 'lucide-svelte';
 
-	let { provisional = [], adopted = [], raw = [] }: { provisional: ProvisionalLesson[], adopted: AdoptedLesson[], raw: Observation[] } = $props();
+	let { provisional = [], lessons = [], raw = [] }: { provisional: ProvisionalLesson[], lessons: AdoptedLesson[], raw: Observation[] } = $props();
 
-	let activeTab = $state<'provisional' | 'adopted' | 'raw'>('adopted');
+	let activeTab = $state<'provisional' | 'lessons' | 'raw'>('lessons');
 
 	function formatDate(iso: string) {
 		return new Date(iso).toLocaleString();
@@ -15,8 +15,8 @@
 	<!-- Tab Switcher -->
 	<div class="flex p-1 bg-slate-900/80 rounded-lg border border-slate-800">
 		<button
-			onclick={() => activeTab = 'adopted'}
-			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'adopted' ? 'bg-blue-500/10 text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-300'}"
+			onclick={() => activeTab = 'lessons'}
+			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'lessons' ? 'bg-blue-500/10 text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-300'}"
 		>
 			Canon
 		</button>
@@ -36,7 +36,7 @@
 
 	<div class="space-y-4">
 		{#if activeTab === 'provisional'}
-			{#each provisional as lesson}
+			{#each provisional as lesson (lesson.id)}
 				<div class="rounded-lg border border-slate-800 bg-slate-900/50 p-4 shadow-sm transition-all hover:bg-slate-900">
 					<div class="mb-2 flex items-start justify-between">
 						<div class="flex items-center gap-2">
@@ -69,7 +69,7 @@
 					</p>
 
 					<div class="flex flex-wrap gap-1.5">
-						{#each lesson.task_shape_tags as tag}
+						{#each lesson.task_shape_tags as tag, i (`${tag}:${i}`)}
 							<span class="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-300 border border-slate-700/50">
 								<Tag size={8} />
 								{tag}
@@ -84,7 +84,7 @@
 				</div>
 			{/each}
 		{:else if activeTab === 'raw'}
-			{#each raw as obs}
+			{#each raw as obs (obs.observation_id)}
 				<div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm transition-all hover:bg-emerald-500/10">
 					<div class="mb-2 flex items-start justify-between">
 						<div class="flex items-center gap-2">
@@ -115,7 +115,7 @@
 					</p>
 
 					<div class="flex flex-wrap gap-1.5">
-						{#each obs.task_shape as tag}
+						{#each obs.task_shape as tag, i (`${tag}:${i}`)}
 							<span class="flex items-center gap-1 rounded-md bg-emerald-900/30 px-2 py-1 text-[10px] text-emerald-300 border border-emerald-500/20">
 								<Tag size={8} />
 								{tag}
@@ -130,7 +130,7 @@
 				</div>
 			{/each}
 		{:else}
-			{#each adopted as lesson}
+			{#each lessons as lesson (`${lesson.adopted_date}:${lesson.title ?? lesson.text.slice(0, 40)}`)}
 				<div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm transition-all hover:bg-blue-500/10">
 					<div class="mb-2 flex items-start justify-between">
 						<div class="flex items-center gap-2">
@@ -138,7 +138,7 @@
 								<ShieldCheck size={16} />
 							</div>
 							<div>
-								<h3 class="text-sm font-semibold text-slate-100 line-clamp-1">{lesson.text.slice(0, 60)}...</h3>
+								<h3 class="text-sm font-semibold text-slate-100 line-clamp-1">{lesson.title || lesson.text.slice(0, 60)}</h3>
 								<div class="flex items-center gap-3 text-[10px] text-slate-500 uppercase tracking-wider">
 									<span class="flex items-center gap-1">
 										<Clock size={10} />
@@ -157,12 +157,20 @@
 					</p>
 
 					<div class="flex flex-wrap gap-1.5">
-						{#each lesson.applies_to as scope}
+						{#each lesson.applies_to as scope, i (`${scope}:${i}`)}
 							<span class="flex items-center gap-1 rounded-md bg-blue-900/30 px-2 py-1 text-[10px] text-blue-300 border border-blue-500/20">
 								<Globe size={8} />
 								{scope === '*' ? 'Universal' : scope}
 							</span>
 						{/each}
+						{#if lesson.task_shape}
+							{#each lesson.task_shape as tag, i (`${tag}:${i}`)}
+								<span class="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-400 border border-slate-700/50">
+									<Tag size={8} />
+									{tag}
+								</span>
+							{/each}
+						{/if}
 					</div>
 				</div>
 			{:else}
