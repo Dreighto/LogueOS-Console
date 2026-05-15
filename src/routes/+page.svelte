@@ -1,48 +1,31 @@
 <script lang="ts">
-	// LogueOS landing — status-board model.
-	//
-	// Single-screen check-in: 5 status rows + dispatch button. Each row is a
-	// link to the existing detail page where the operator can drill in. The
-	// landing page itself does NOT render lists or lesson text — that's why
-	// we have /workers, /runs, /usage, /memory, /ask. Keeps the page small
-	// (target: <10KB HTML), fast to redraw, and glanceable on phone.
-	//
-	// Polling: invalidateAll() reruns the SSR load to refresh the counts.
-	// Pauses when the tab is hidden (visibilitychange) and refetches on
-	// tab-return so the operator sees fresh data immediately when they
-	// reopen the tab.
+	/**
+	 * LogueOS "Today" Screen (Redesign LOS-75)
+	 *
+	 * High-density dashboard answering 5 key questions in 30s:
+	 * 1. Is the team running? (Kill switch + Active Workers)
+	 * 2. Is work moving? (Worker progress + recent dispatches)
+	 * 3. Is anything stuck? (Failures + Inconclusive items)
+	 * 4. What just got done? (Today's completions list)
+	 * 5. How much did this cost? (Today's spend metrics)
+	 */
 	import { resolve } from '$app/paths';
 	import { invalidateAll } from '$app/navigation';
 	import {
 		AlertTriangle,
-		ClipboardCheck,
-		Users,
-		DollarSign,
+		CheckCircle2,
 		Plus,
 		ChevronRight,
-		Power
+		Power,
+		Activity,
+		Clock,
+		ExternalLink
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
+	import { formatRelativeTime } from '$lib/utils/format';
 
 	let { data }: { data: PageData } = $props();
 	let s = $derived(data.status);
-
-	// Tier the rows by severity so the eye finds problems first.
-	let failureColor = $derived(
-		s.failures.count > 0
-			? 'text-red-400 bg-red-500/5 border-red-500/20 hover:bg-red-500/10'
-			: 'text-slate-400 bg-slate-900/40 border-slate-800 hover:bg-slate-900'
-	);
-	let reviewColor = $derived(
-		s.reviews.count > 0
-			? 'text-amber-400 bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10'
-			: 'text-slate-400 bg-slate-900/40 border-slate-800 hover:bg-slate-900'
-	);
-	let killColor = $derived(
-		s.killSwitch.active
-			? 'text-red-400 bg-red-500/10 border-red-500/40'
-			: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20'
-	);
 
 	function refresh() {
 		void invalidateAll();
@@ -61,85 +44,163 @@
 			document.removeEventListener('visibilitychange', onVis);
 		};
 	});
+
+	let killColor = $derived(
+		s.killSwitch.active
+			? 'text-red-400 bg-red-500/10 border-red-500/40'
+			: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/20'
+	);
 </script>
 
-<div class="mx-auto max-w-md flex flex-col gap-3 p-4 md:max-w-lg md:p-6">
-	<!-- Kill switch badge — site header already provides the page title. -->
-	<div class="flex justify-end mb-1">
-		<div data-testid="kill-switch-badge" class="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-1 rounded-full border {killColor}">
-			<Power size={12} />
+<div class="mx-auto flex max-w-2xl flex-col gap-4 p-4 font-mono text-slate-200 md:p-6">
+	<!-- Q1: Is the team running? -->
+	<header class="flex items-center justify-between border-b border-slate-800 pb-2">
+		<div class="flex items-center gap-2">
+			<Activity size={16} class="text-blue-400" />
+			<h1 class="text-xs font-bold tracking-widest text-slate-400 uppercase">Team Heartbeat</h1>
+		</div>
+		<div
+			data-testid="kill-switch-badge"
+			class="flex items-center gap-2 rounded border px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase {killColor}"
+		>
+			<Power size={10} />
 			Kill: {s.killSwitch.active ? 'ACTIVE' : 'clear'}
 		</div>
+	</header>
+
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+		<!-- Active Workers Section -->
+		<section class="flex flex-col gap-2">
+			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+				<span>Active Workers</span>
+				<span>{s.workers.active} / {s.workers.total}</span>
+			</div>
+			<div class="flex flex-col gap-1">
+				{#each s.workers.items as w (w.id)}
+					<a
+						href={resolve('/workers')}
+						class="group flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-blue-500/40"
+					>
+						<div class="flex items-center justify-between">
+							<span class="text-[11px] font-bold text-blue-400">{w.id}</span>
+							<span class="text-[9px] text-slate-500"
+								>{w.since ? formatRelativeTime(w.since) : 'busy'}</span
+							>
+						</div>
+						<div class="truncate text-[10px] text-slate-300">
+							{w.ticket_id ? w.ticket_id : 'unassigned'} • {w.step || 'initializing'}
+						</div>
+						{#if w.branch}
+							<div class="truncate text-[9px] text-slate-500 italic">
+								{w.branch}
+							</div>
+						{/if}
+					</a>
+				{:else}
+					<div class="p-3 rounded border border-dashed border-slate-800 text-center">
+						<span class="text-[10px] text-slate-600 uppercase italic">All workers idle</span>
+					</div>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Q5: How much did this cost? -->
+		<section class="flex flex-col gap-2">
+			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+				<span>Today's Spend</span>
+				<a
+					href={resolve('/usage')}
+					class="flex items-center gap-1 transition-colors hover:text-blue-400"
+				>
+					Details <ExternalLink size={8} />
+				</a>
+			</div>
+			<div class="grid grid-cols-2 gap-2">
+				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
+					<span class="text-[9px] text-slate-500 uppercase">Cost (USD)</span>
+					<span class="text-lg font-bold text-emerald-400">${s.usage.todayCost.toFixed(2)}</span>
+				</div>
+				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
+					<span class="text-[9px] text-slate-500 uppercase">Dispatches</span>
+					<span class="text-lg font-bold text-blue-400">{s.usage.recentDispatches}</span>
+				</div>
+			</div>
+		</section>
 	</div>
 
-	<a
-		data-testid="row-failures"
-		href={resolve('/activity')}
-		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors {failureColor}"
-	>
-		<div class="flex items-center gap-3 min-w-0">
-			<AlertTriangle size={18} class="shrink-0" />
-			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Recent failures</span>
-		</div>
-		<div class="flex items-center gap-2 shrink-0">
-			<span class="font-mono text-base tabular-nums">{s.failures.count}</span>
-			<ChevronRight size={16} class="opacity-50" />
-		</div>
-	</a>
-
-	<a
-		data-testid="row-reviews"
-		href={resolve('/activity')}
-		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors {reviewColor}"
-	>
-		<div class="flex items-center gap-3 min-w-0">
-			<ClipboardCheck size={18} class="shrink-0" />
-			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Pending review</span>
-		</div>
-		<div class="flex items-center gap-2 shrink-0">
-			<span class="font-mono text-base tabular-nums">{s.reviews.count}</span>
-			<ChevronRight size={16} class="opacity-50" />
-		</div>
-	</a>
-
-	<a
-		data-testid="row-workers"
-		href={resolve('/workers')}
-		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-slate-900/40 border-slate-800 text-slate-300 hover:bg-slate-900 transition-colors"
-	>
-		<div class="flex items-center gap-3 min-w-0">
-			<Users size={18} class="text-blue-400 shrink-0" />
-			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Workers active</span>
-		</div>
-		<div class="flex items-center gap-2 shrink-0">
-			<span class="font-mono text-base tabular-nums">
-				{s.workers.active}<span class="text-slate-500"> / {s.workers.total}</span>
+	<!-- Q3: Is anything stuck? -->
+	<section class="flex flex-col gap-2">
+		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+			<span>Blockers & Reviews</span>
+			<span class="flex gap-2">
+				<span class={s.failures.count > 0 ? 'text-red-400' : ''}>Failures: {s.failures.count}</span>
+				<span class={s.reviews.count > 0 ? 'text-amber-400' : ''}>Review: {s.reviews.count}</span>
 			</span>
-			<ChevronRight size={16} class="opacity-50" />
 		</div>
-	</a>
+		<div class="flex flex-col gap-1">
+			{#each [...s.failures.items, ...s.reviews.items] as item, i (item.timestamp + i)}
+				<a
+					href={resolve('/activity')}
+					class="group flex items-center gap-3 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-slate-600"
+				>
+					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
+						<AlertTriangle size={14} class="shrink-0 text-red-500" />
+					{:else}
+						<Clock size={14} class="shrink-0 text-amber-500" />
+					{/if}
+					<div class="flex min-w-0 flex-1 flex-col">
+						<div class="flex items-center gap-2">
+							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span
+							>
+							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
+						</div>
+						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
+					</div>
+					<ChevronRight size={12} class="text-slate-600 group-hover:text-slate-400" />
+				</a>
+			{:else}
+				<div class="p-3 rounded border border-dashed border-slate-800 text-center">
+					<span class="text-[10px] text-slate-600 uppercase italic">No stuck work detected</span>
+				</div>
+			{/each}
+		</div>
+	</section>
 
-	<a
-		data-testid="row-usage"
-		href={resolve('/usage')}
-		class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-slate-900/40 border-slate-800 text-slate-300 hover:bg-slate-900 transition-colors"
-	>
-		<div class="flex items-center gap-3 min-w-0">
-			<DollarSign size={18} class="text-blue-400 shrink-0" />
-			<span class="font-mono text-xs font-bold uppercase tracking-wider truncate">Today's spend</span>
+	<!-- Q4: What just got done? -->
+	<section class="flex flex-col gap-2">
+		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+			<span>Today's Shipments</span>
+			<span>{s.completions.today} total</span>
 		</div>
-		<div class="flex items-center gap-2 shrink-0">
-			<span class="font-mono text-base tabular-nums">${s.usage.todayCost.toFixed(2)}</span>
-			<ChevronRight size={16} class="opacity-50" />
+		<div class="flex flex-col gap-1">
+			{#each s.completions.items as item, i (item.timestamp + i)}
+				<div class="flex items-center gap-3 rounded border border-slate-800 bg-slate-900/20 p-2">
+					<CheckCircle2 size={14} class="shrink-0 text-emerald-500" />
+					<div class="flex min-w-0 flex-col">
+						<div class="flex items-center gap-2">
+							<span class="text-[10px] font-bold text-emerald-400"
+								>{item.ticket_id || 'shipped'}</span
+							>
+							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
+						</div>
+						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
+					</div>
+				</div>
+			{:else}
+				<div class="p-3 rounded border border-dashed border-slate-800 text-center">
+					<span class="text-[10px] text-slate-600 uppercase italic">Nothing shipped yet today</span>
+				</div>
+			{/each}
 		</div>
-	</a>
+	</section>
 
+	<!-- Action: Dispatch -->
 	<a
 		data-testid="row-dispatch"
 		href={resolve('/ask')}
-		class="mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-mono text-sm font-bold uppercase tracking-widest transition-colors"
+		class="mt-2 flex items-center justify-center gap-2 rounded border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:bg-blue-600/30"
 	>
-		<Plus size={18} />
-		Dispatch worker
+		<Plus size={14} />
+		Dispatch Worker
 	</a>
 </div>
