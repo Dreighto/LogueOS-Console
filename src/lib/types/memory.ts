@@ -30,6 +30,6 @@ export interface Observation {
 	worker_id?: string;
 	ticket_id?: string;
 	task_shape: string[];
-	observation_kind: 'what-worked' | 'what-didnt-work' | 'surprise' | 'routing-correction';
+	observation_kind: string;
 	text: string;
 }

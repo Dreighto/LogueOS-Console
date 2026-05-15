@@ -47,7 +47,7 @@ export async function getMemoryData() {
 	const db = new Database(serverConfig.memoryDbPath, { readonly: true });
 	try {
 		const provisionalRows = db
-			.prepare('SELECT * FROM provisional_lessons ORDER BY created_at DESC LIMIT 20')
+			.prepare('SELECT * FROM provisional_lessons ORDER BY created_at DESC LIMIT 10')
 			.all() as ProvisionalRow[];
 
 		provisional = provisionalRows.map((row) => {
@@ -97,7 +97,7 @@ export async function getMemoryData() {
 			observation_id: row.observation_id,
 			ts: row.timestamp,
 			project_id: row.project_id,
-			observation_kind: row.observation_kind as Observation['observation_kind'],
+			observation_kind: row.observation_kind,
 			text: row.text,
 			ticket_id: row.ticket_id,
 			task_shape: row.task_shape ? (() => { try { return JSON.parse(row.task_shape!); } catch { return []; } })() : []
