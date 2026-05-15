@@ -50,7 +50,7 @@
 				: 'bg-status-red'}"
 		></div>
 		<span class="font-mono text-[10px] tracking-tighter uppercase {colorClass}">
-			{status}
-		</span>
+			{status === 'online' ? 'Running normally' : 'Not responding'}
+</span>
 	</div>
 </div>
