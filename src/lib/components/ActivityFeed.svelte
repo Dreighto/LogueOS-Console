@@ -91,13 +91,21 @@
 		}
 	}
 
-	function formatEventTime(ts: string) {
-		const date = new Date(ts);
-		return date.toLocaleTimeString('en-US', { 
-			hour: 'numeric', 
-			minute: '2-digit',
-			hour12: true 
-		});
+	function formatEventTime(ts: string): string {
+		const diffMs = Date.now() - new Date(ts).getTime();
+		const diffSec = Math.floor(diffMs / 1000);
+		const diffMin = Math.floor(diffSec / 60);
+		const diffHr = Math.floor(diffMin / 60);
+		const diffDay = Math.floor(diffHr / 24);
+
+		if (diffSec < 60) return 'just now';
+		if (diffMin < 60) return `${diffMin}m ago`;
+		if (diffHr < 24) return `${diffHr}h ago`;
+		if (diffDay === 1) {
+			const time = new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			return `yesterday at ${time}`;
+		}
+		return `${diffDay} days ago`;
 	}
 </script>
 
@@ -224,9 +232,6 @@
 												<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
 													<Fingerprint size={10} />
 													Trace ID
-												</span>
-												<span class="font-mono text-[10px] text-[#A3E635] break-all">
-													{event.trace_id}
 												</span>
 											</div>
 										{/if}
