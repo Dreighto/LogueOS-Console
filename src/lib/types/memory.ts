@@ -28,6 +28,7 @@ export interface Observation {
 	ts: string;
 	project_id: string;
 	worker_id?: string;
+	ticket_id?: string;
 	task_shape: string[];
 	observation_kind: 'what-worked' | 'what-didnt-work' | 'surprise' | 'routing-correction';
 	text: string;
