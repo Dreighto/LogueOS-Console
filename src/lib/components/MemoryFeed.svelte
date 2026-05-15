@@ -2,9 +2,9 @@
 	import type { ProvisionalLesson, AdoptedLesson, Observation } from '$lib/types/memory';
 	import { Brain, Tag, Clock, Globe, ShieldCheck, Microscope } from 'lucide-svelte';
 
-	let { provisional = [], adopted = [], raw = [] }: { provisional: ProvisionalLesson[], adopted: AdoptedLesson[], raw: Observation[] } = $props();
+	let { provisional = [], lessons = [], raw = [] }: { provisional: ProvisionalLesson[], lessons: AdoptedLesson[], raw: Observation[] } = $props();
 
-	let activeTab = $state<'provisional' | 'adopted' | 'raw'>('adopted');
+	let activeTab = $state<'provisional' | 'lessons' | 'raw'>('lessons');
 
 	function formatDate(iso: string) {
 		return new Date(iso).toLocaleString();
@@ -15,8 +15,8 @@
 	<!-- Tab Switcher -->
 	<div class="flex p-1 bg-slate-900/80 rounded-lg border border-slate-800">
 		<button
-			onclick={() => activeTab = 'adopted'}
-			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'adopted' ? 'bg-blue-500/10 text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-300'}"
+			onclick={() => activeTab = 'lessons'}
+			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'lessons' ? 'bg-blue-500/10 text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-300'}"
 		>
 			Canon
 		</button>
@@ -130,7 +130,7 @@
 				</div>
 			{/each}
 		{:else}
-			{#each adopted as lesson}
+			{#each lessons as lesson}
 				<div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm transition-all hover:bg-blue-500/10">
 					<div class="mb-2 flex items-start justify-between">
 						<div class="flex items-center gap-2">
@@ -138,7 +138,7 @@
 								<ShieldCheck size={16} />
 							</div>
 							<div>
-								<h3 class="text-sm font-semibold text-slate-100 line-clamp-1">{lesson.text.slice(0, 60)}...</h3>
+								<h3 class="text-sm font-semibold text-slate-100 line-clamp-1">{lesson.title || lesson.text.slice(0, 60)}</h3>
 								<div class="flex items-center gap-3 text-[10px] text-slate-500 uppercase tracking-wider">
 									<span class="flex items-center gap-1">
 										<Clock size={10} />
@@ -163,6 +163,14 @@
 								{scope === '*' ? 'Universal' : scope}
 							</span>
 						{/each}
+						{#if lesson.task_shape}
+							{#each lesson.task_shape as tag}
+								<span class="flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[10px] text-slate-400 border border-slate-700/50">
+									<Tag size={8} />
+									{tag}
+								</span>
+							{/each}
+						{/if}
 					</div>
 				</div>
 			{:else}

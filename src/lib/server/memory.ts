@@ -52,15 +52,15 @@ async function loadObservations(filePath: string): Promise<Observation[]> {
 
 export async function getMemoryData() {
 	let provisional: ProvisionalLesson[] = [];
-	let adopted: AdoptedLesson[] = [];
+	let lessons: AdoptedLesson[] = [];
 	let raw: Observation[] = [];
 
 	// 1. Load Provisional Lessons (Tier 1) from SQLite
 	if (fs.existsSync(serverConfig.memoryDbPath)) {
 		const db = new Database(serverConfig.memoryDbPath, { readonly: true });
-		const rows = db.prepare('SELECT * FROM provisional_lessons ORDER BY created_at DESC LIMIT 20').all();
+		const provisionalRows = db.prepare('SELECT * FROM provisional_lessons ORDER BY created_at DESC LIMIT 20').all();
 
-		provisional = rows.map((row: any) => {
+		provisional = provisionalRows.map((row: any) => {
 			if (row.task_shape_tags && typeof row.task_shape_tags === 'string') {
 				try {
 					row.task_shape_tags = JSON.parse(row.task_shape_tags);
@@ -71,17 +71,29 @@ export async function getMemoryData() {
 			row.proposed_promotion = row.proposed_promotion === 1;
 			return row as ProvisionalLesson;
 		});
-		db.close();
-	}
 
-	// 2. Load Adopted Lessons (Tier 2) from Markdown
-	if (fs.existsSync(serverConfig.adoptedLessonsPath)) {
-		const md = fs.readFileSync(serverConfig.adoptedLessonsPath, 'utf-8');
-		adopted = parseAdoptedLessons(md);
+		// 2. Load Promoted Lessons (Tier 2) from SQLite lessons table
+		const lessonRows = db.prepare('SELECT * FROM lessons ORDER BY created_at DESC LIMIT 20').all();
+		lessons = lessonRows.map((row: any) => {
+			let applies_to = ['*'];
+			if (row.project_id) {
+				applies_to = [row.project_id];
+			}
+			return {
+				text: row.advice,
+				title: row.title,
+				adopted_date: row.created_at,
+				severity: 'hard-rule',
+				applies_to: applies_to,
+				task_shape: row.task_shape ? JSON.parse(row.task_shape) : []
+			};
+		});
+
+		db.close();
 	}
 
 	// 3. Load Raw Observations (Tier 0) from JSONL
 	raw = await loadObservations(serverConfig.decisionsLogPath);
 
-	return { provisional, adopted, raw };
+	return { provisional, lessons, raw };
 }
