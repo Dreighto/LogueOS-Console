@@ -6,17 +6,17 @@
 	let ticketId = $state('');
 	let prompt = $state('');
 	let thinkingLevel = $state('none');
-	
+
 	let status = $state<'idle' | 'submitting' | 'success' | 'error'>('idle');
 	let message = $state('');
 	let lastTraceId = $state('');
 
 	async function handleSubmit() {
 		if (!prompt.trim()) return;
-		
+
 		status = 'submitting';
 		message = '';
-		
+
 		try {
 			const response = await fetch('/console/api/dispatch', {
 				method: 'POST',
@@ -29,15 +29,15 @@
 					thinking_level: thinkingLevel === 'none' ? null : thinkingLevel
 				})
 			});
-			
+
 			const data = await response.json();
-			
+
 			if (!response.ok) {
 				status = 'error';
-				message = data.error || 'Dispatch failed';
+				message = data.error || 'Something went wrong — please try again';
 			} else {
 				status = 'success';
-				message = 'Worker dispatched successfully';
+				message = 'Job sent!';
 				lastTraceId = data.trace_id;
 				// Reset prompt but keep other settings
 				prompt = '';
@@ -54,7 +54,7 @@
 	<div class="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
 		<div class="flex items-center gap-2 text-slate-300 font-mono text-sm uppercase tracking-wider">
 			<Terminal size={16} />
-			<span>Dispatch Center</span>
+			<span>Job Center</span>
 		</div>
 		<div class="flex items-center gap-4 text-[10px] font-mono">
 			<div class="flex items-center gap-1.5 text-slate-500">
@@ -69,19 +69,19 @@
 		<!-- Config Row -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="worker" class="text-[10px] font-mono text-slate-500 uppercase">Worker Type</label>
+				<label for="worker" class="text-[10px] font-mono text-slate-500 uppercase">Who should handle this?</label>
 				<select
 					id="worker"
 					bind:value={worker}
 					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
 				>
-					<option value="claude-code">Claude Code (Primary)</option>
-					<option value="gemini">Gemini CLI (Context)</option>
+					<option value="claude-code">Claude (backend & code)</option>
+					<option value="gemini">Gemini (UI & frontend)</option>
 				</select>
 			</div>
-			
+
 			<div class="flex flex-col gap-1.5">
-				<label for="repo" class="text-[10px] font-mono text-slate-500 uppercase">Target Repository</label>
+				<label for="repo" class="text-[10px] font-mono text-slate-500 uppercase">Which project?</label>
 				<select
 					id="repo"
 					bind:value={targetRepo}
@@ -122,32 +122,32 @@
 
 		<!-- Prompt Area -->
 		<div class="flex-1 flex flex-col gap-1.5 min-h-[150px]">
-			<label for="prompt" class="text-[10px] font-mono text-slate-500 uppercase">Mission Prompt</label>
+			<label for="prompt" class="text-[10px] font-mono text-slate-500 uppercase">Describe what needs to be done</label>
 			<textarea
 				id="prompt"
 				bind:value={prompt}
-				placeholder="Describe the task for the worker..."
+				placeholder="What needs to be done?"
 				class="flex-1 bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-3 rounded focus:outline-none focus:border-blue-500 placeholder:text-slate-700 resize-none leading-relaxed"
 			></textarea>
 		</div>
 
 		<!-- Status Bar -->
 		{#if status !== 'idle'}
-			<div 
+			<div
 				class="flex items-center gap-3 px-3 py-2 rounded text-xs font-mono border {
-					status === 'submitting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 
-					status === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 
+					status === 'submitting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
+					status === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
 					'bg-red-500/10 border-red-500/20 text-red-400'
 				}"
 			>
 				{#if status === 'submitting'}
 					<Loader2 size={14} class="animate-spin" />
-					<span>Initializing secure dispatch...</span>
+					<span>Sending...</span>
 				{:else if status === 'success'}
 					<CheckCircle2 size={14} />
 					<div class="flex flex-col">
 						<span>{message}</span>
-						<span class="text-[10px] opacity-70">Trace: {lastTraceId}</span>
+						<span class="text-[10px] opacity-70">Ref: {lastTraceId}</span>
 					</div>
 				{:else if status === 'error'}
 					<AlertCircle size={14} />
@@ -166,10 +166,10 @@
 		>
 			{#if status === 'submitting'}
 				<Loader2 size={14} class="animate-spin" />
-				DISPATCHING...
+				Sending...
 			{:else}
 				<Send size={14} />
-				SEND WORKER
+				Send this job
 			{/if}
 		</button>
 	</div>
