@@ -27,6 +27,39 @@ interface LinearFileResponse {
 	error?: string;
 }
 
+// Hard timeout for gateway calls. The gateway is local-tailnet only; anything
+// past ~10s means it's wedged. Without this, fetch() can hang indefinitely
+// and tie up server resources / leave the UI spinning. (CR finding on PR #44.)
+const GATEWAY_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+	url: string,
+	init: RequestInit,
+	timeoutMs: number
+): Promise<Response> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+// Read an error body that may or may not be JSON. Avoids the original failure
+// mode where `await response.json()` threw on a non-JSON gateway error (e.g.
+// HTML 502 page) and turned a clean 502 into a generic 500. (CR finding.)
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+	const text = await response.text();
+	if (!text) return fallback;
+	try {
+		const parsed = JSON.parse(text) as { error?: string };
+		return parsed.error || text.slice(0, 300) || fallback;
+	} catch {
+		return text.slice(0, 300) || fallback;
+	}
+}
+
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = (await request.json()) as DispatchBody;
@@ -45,38 +78,60 @@ export const POST: RequestHandler = async ({ request }) => {
 				);
 			}
 
-			const linearResp = await fetch(`${serverConfig.gatewayUrl}/api/v1/linear/file`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					title: body.linear_title.trim(),
-					description: body.linear_description ?? body.prompt ?? '',
-					team: body.linear_team ?? 'LogueOS',
-					project: body.linear_project || undefined,
-					priority: body.linear_priority ?? 2,
-					source: 'console.dispatch_center'
-				})
-			});
+			let linearResp: Response;
+			try {
+				linearResp = await fetchWithTimeout(
+					`${serverConfig.gatewayUrl}/api/v1/linear/file`,
+					{
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							title: body.linear_title.trim(),
+							description: body.linear_description ?? body.prompt ?? '',
+							team: body.linear_team ?? 'LogueOS',
+							project: body.linear_project || undefined,
+							priority: body.linear_priority ?? 2,
+							source: 'console.dispatch_center'
+						})
+					},
+					GATEWAY_TIMEOUT_MS
+				);
+			} catch (err) {
+				const isAbort = err instanceof Error && err.name === 'AbortError';
+				return json(
+					{
+						error: isAbort
+							? `Linear file timed out after ${GATEWAY_TIMEOUT_MS}ms`
+							: `Linear file failed: ${String(err)}`
+					},
+					{ status: 504 }
+				);
+			}
 
 			// Fail-closed: any non-2xx OR a 2xx that doesn't carry a real
 			// ticket_id back means the Linear filing didn't actually happen.
 			// CR finding on PR #43: a silent "filed but no ID" return would
 			// have us dispatch the worker without ever linking the ticket.
 			if (!linearResp.ok) {
-				let detail = `Gateway returned ${linearResp.status}`;
-				try {
-					const errBody = (await linearResp.json()) as LinearFileResponse;
-					detail = errBody.error ?? detail;
-				} catch {
-					/* body wasn't JSON — keep the status code */
-				}
+				const detail = await readErrorMessage(
+					linearResp,
+					`Gateway returned ${linearResp.status}`
+				);
 				return json(
 					{ error: `Linear file failed: ${detail}` },
 					{ status: linearResp.status >= 500 ? 502 : linearResp.status }
 				);
 			}
 
-			const linearData = (await linearResp.json()) as LinearFileResponse;
+			let linearData: LinearFileResponse;
+			try {
+				linearData = (await linearResp.json()) as LinearFileResponse;
+			} catch (err) {
+				return json(
+					{ error: `Linear file returned non-JSON: ${String(err)}` },
+					{ status: 502 }
+				);
+			}
 			if (!linearData.ticket_id) {
 				return json(
 					{ error: 'Linear file returned no ticket_id — refusing to dispatch unlinked' },
@@ -92,28 +147,50 @@ export const POST: RequestHandler = async ({ request }) => {
 		// the user typed in the Ticket ID field — they explicitly asked us to
 		// track this as a fresh ticket.
 		const dispatchTicketId = filedTicketId ?? body.ticket_id ?? null;
-		const response = await fetch(`${serverConfig.gatewayUrl}/api/v1/dispatch`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				tool_profile: 'standard_worker',
-				worker: body.worker,
-				target_repo: body.target_repo,
-				ticket_id: dispatchTicketId,
-				prompt: body.prompt,
-				thinking_level: body.thinking_level
-			})
-		});
-
-		if (!response.ok) {
-			const errorData = (await response.json()) as { error?: string };
+		let response: Response;
+		try {
+			response = await fetchWithTimeout(
+				`${serverConfig.gatewayUrl}/api/v1/dispatch`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						tool_profile: 'standard_worker',
+						worker: body.worker,
+						target_repo: body.target_repo,
+						ticket_id: dispatchTicketId,
+						prompt: body.prompt,
+						thinking_level: body.thinking_level
+					})
+				},
+				GATEWAY_TIMEOUT_MS
+			);
+		} catch (err) {
+			const isAbort = err instanceof Error && err.name === 'AbortError';
 			return json(
-				{ error: errorData.error || 'Gateway dispatch failed' },
-				{ status: response.status }
+				{
+					error: isAbort
+						? `Dispatch timed out after ${GATEWAY_TIMEOUT_MS}ms`
+						: `Dispatch failed: ${String(err)}`
+				},
+				{ status: 504 }
 			);
 		}
 
-		const data = (await response.json()) as Record<string, unknown>;
+		if (!response.ok) {
+			const detail = await readErrorMessage(response, 'Gateway dispatch failed');
+			return json({ error: detail }, { status: response.status });
+		}
+
+		let data: Record<string, unknown>;
+		try {
+			data = (await response.json()) as Record<string, unknown>;
+		} catch (err) {
+			return json(
+				{ error: `Dispatch returned non-JSON: ${String(err)}` },
+				{ status: 502 }
+			);
+		}
 
 		// Surface the filed ticket back to the client so the UI can show a
 		// clickable link in the status strip.

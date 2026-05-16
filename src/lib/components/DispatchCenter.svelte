@@ -329,6 +329,7 @@
 							bind:value={linearPriority}
 							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
 						>
+							<option value={0}>0 — No priority</option>
 							<option value={1}>1 — Urgent</option>
 							<option value={2}>2 — High</option>
 							<option value={3}>3 — Medium</option>
