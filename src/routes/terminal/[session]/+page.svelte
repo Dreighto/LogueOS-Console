@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { Terminal } from 'lucide-svelte';
 	import { base } from '$app/paths';
+	import { browser } from '$app/environment';
+	import XTerm from '$lib/components/XTerm.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -15,6 +17,23 @@
 				: `${base}/manifest.webmanifest`
 	);
 	const appTitle = $derived(data.session === 'cc-con' ? 'cc-con' : 'gmi-con');
+
+	// Convert the ttyd HTTP URL (data.ttydUrl, e.g.
+	// https://room.taila28611.ts.net:18768/cc/) into the corresponding
+	// WebSocket URL on the same origin/path. wss:// for HTTPS pages, ws://
+	// for HTTP. xterm.js speaks ttyd's protocol directly — no iframe,
+	// keyboard works on iOS.
+	const wsUrl = $derived.by(() => {
+		try {
+			const u = new URL(data.ttydUrl);
+			u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+			// Drop trailing slash to land at /<session>, ttyd accepts /ws appended.
+			u.pathname = u.pathname.replace(/\/$/, '') + '/ws';
+			return u.toString();
+		} catch {
+			return '';
+		}
+	});
 </script>
 
 <svelte:head>
@@ -35,12 +54,20 @@
 		<span class="font-semibold text-foreground">{data.session}</span>
 	</div>
 
-	<!-- ttyd iframe — fills remaining height, no border -->
-	<iframe
-		src={data.ttydUrl}
-		title="{data.session} terminal"
-		class="min-h-0 flex-1 border-none"
-		style="width: 100%;"
-		allow="clipboard-read; clipboard-write"
-	></iframe>
+	<!-- Native xterm.js mounted directly — connects to ttyd's WS via the
+	     Console's HTTPS proxy on the same origin. Browser-only (xterm.js
+	     touches `document` at module load, so SSR would crash). -->
+	<div class="min-h-0 flex-1">
+		{#if !browser}
+			<div class="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
+				loading terminal...
+			</div>
+		{:else if wsUrl}
+			<XTerm {wsUrl} />
+		{:else}
+			<div class="flex h-full items-center justify-center font-mono text-xs text-muted-foreground">
+				terminal endpoint not configured
+			</div>
+		{/if}
+	</div>
 </div>
