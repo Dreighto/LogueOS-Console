@@ -275,20 +275,32 @@ export function getTicketLeaderboard(days = 30): TicketCost[] {
 			.prepare(
 				`
 			WITH ticket_traces AS (
-				SELECT DISTINCT trace_id, ticket_id
+				SELECT trace_id, MIN(ticket_id) AS ticket_id
 				FROM observations
 				WHERE ticket_id IS NOT NULL
+				GROUP BY trace_id
+			),
+			ticket_worker_costs AS (
+				SELECT tt.ticket_id, u.worker,
+				       COUNT(u.trace_id)                    AS dispatches,
+				       ROUND(SUM(u.predicted_cost_usd), 4)  AS cost,
+				       SUM(u.predicted_tokens)               AS tokens
+				FROM ticket_traces tt
+				JOIN usage_events u ON tt.trace_id = u.trace_id
+				WHERE u.date >= date('now', ?)
+				GROUP BY tt.ticket_id, u.worker
+			),
+			top_tickets AS (
+				SELECT ticket_id
+				FROM ticket_worker_costs
+				GROUP BY ticket_id
+				ORDER BY SUM(cost) DESC
+				LIMIT 10
 			)
-			SELECT tt.ticket_id, u.worker,
-			       COUNT(u.trace_id)                    AS dispatches,
-			       ROUND(SUM(u.predicted_cost_usd), 4)  AS cost,
-			       SUM(u.predicted_tokens)               AS tokens
-			FROM ticket_traces tt
-			JOIN usage_events u ON tt.trace_id = u.trace_id
-			WHERE u.date >= date('now', ?)
-			GROUP BY tt.ticket_id, u.worker
-			ORDER BY cost DESC
-			LIMIT 20
+			SELECT twc.ticket_id, twc.worker, twc.dispatches, twc.cost, twc.tokens
+			FROM ticket_worker_costs twc
+			JOIN top_tickets tt ON twc.ticket_id = tt.ticket_id
+			ORDER BY twc.cost DESC
 		`
 			)
 			.all(`-${days} days`) as TicketCost[];
