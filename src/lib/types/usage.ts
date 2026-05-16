@@ -35,3 +35,18 @@ export interface UsageHistory {
 	projection: UsageProjection;
 	totalEvents: number;
 }
+
+export interface TicketCost {
+	ticket_id: string;
+	worker: string;
+	cost: number;
+	tokens: number;
+	dispatches: number;
+}
+
+export interface HourlyBucket {
+	date: string;
+	hour: number;
+	cost: number;
+	dispatches: number;
+}

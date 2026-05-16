@@ -1,4 +1,4 @@
-import { getUsageMetrics, getUsageHistory } from '$lib/server/usage';
+import { getUsageMetrics, getUsageHistory, getTicketLeaderboard, getHourlyActivity } from '$lib/server/usage';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -6,5 +6,7 @@ export const load: PageServerLoad = async ({ url }) => {
   const days = isNaN(raw) ? 30 : Math.min(Math.max(raw, 7), 365);
   const metrics = getUsageMetrics();
   const history = getUsageHistory(days);
-  return { metrics, history, days };
+  const ticketLeaderboard = getTicketLeaderboard(days);
+  const hourlyActivity = getHourlyActivity(Math.min(days, 14));
+  return { metrics, history, days, ticketLeaderboard, hourlyActivity };
 };
