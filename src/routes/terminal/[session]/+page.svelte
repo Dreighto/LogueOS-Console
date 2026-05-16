@@ -1,16 +1,31 @@
 <script lang="ts">
 	import { Terminal } from 'lucide-svelte';
+	import { base } from '$app/paths';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Per-session PWA manifest so iOS "Add to Home Screen" lands on the right
+	// terminal session instead of /console (the root manifest's start_url).
+	const manifestHref = $derived(
+		data.session === 'cc-con'
+			? `${base}/manifest-cc.webmanifest`
+			: data.session === 'gmi-con'
+				? `${base}/manifest-gmi.webmanifest`
+				: `${base}/manifest.webmanifest`
+	);
+	const appTitle = $derived(data.session === 'cc-con' ? 'cc-con' : 'gmi-con');
 </script>
 
-<!--
-  The outer div uses negative margins to cancel the layout's p-4 padding,
-  then adds that space back as height so the iframe fills the full main area.
-  Tailwind: -m-4 = -1rem each side; height offset = 2rem (top + bottom).
--->
-<div class="-m-4 flex flex-col" style="height: calc(100% + 2rem);">
+<svelte:head>
+	<link rel="manifest" href={manifestHref} />
+	<meta name="apple-mobile-web-app-title" content={appTitle} />
+	<title>{appTitle} — LogueOS</title>
+</svelte:head>
+
+<!-- Terminal page is full-bleed — the layout already drops padding and hides
+     header/nav on /terminal routes, so we just need to fill 100% height here. -->
+<div class="flex h-full flex-col">
 	<!-- Session label strip -->
 	<div
 		class="flex shrink-0 items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5 font-mono text-xs"

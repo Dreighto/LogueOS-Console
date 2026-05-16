@@ -20,7 +20,9 @@
 		<!-- iOS still uses apple-touch-icon alongside the manifest's icons array. -->
 		<!-- 180x180 PNG, served from /static. -->
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
-		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<!-- Manifest link moved to +layout.svelte — terminal routes need to swap
+		     it for a per-session manifest so "Add to Home Screen" lands on the
+		     right URL instead of /console. -->
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
 
 		<link rel="preconnect" href="https://fonts.googleapis.com" />

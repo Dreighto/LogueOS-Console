@@ -65,6 +65,12 @@
 	const onTerminalRoute = $derived(page.url.pathname.includes('/terminal/'));
 </script>
 
+<svelte:head>
+	{#if !onTerminalRoute}
+		<link rel="manifest" href="{base}/manifest.webmanifest" />
+	{/if}
+</svelte:head>
+
 <div
 	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl"
 	style="padding-top: env(safe-area-inset-top, 0px);"
