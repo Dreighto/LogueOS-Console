@@ -10,7 +10,6 @@
 	 * 5. How much did this cost? (Today's spend metrics)
 	 */
 	import { resolve } from '$app/paths';
-	import { invalidateAll } from '$app/navigation';
 	import {
 		AlertTriangle,
 		CheckCircle2,
@@ -25,18 +24,35 @@
 	import { formatRelativeTime } from '$lib/utils/format';
 
 	let { data }: { data: PageData } = $props();
-	let s = $derived(data.status);
 
-	function refresh() {
-		void invalidateAll();
+	// $state instead of $derived so poll updates touch only changed nodes.
+	// $derived(data.status) would re-bind the entire object on every SSR
+	// invalidation, causing the whole page to flicker. With $state we
+	// fetch /api/status and assign in-place; Svelte 5 diffs field-by-field.
+	let s = $state(data.status);
+
+	// Keep in sync if SvelteKit navigates and re-runs the server load.
+	$effect(() => {
+		s = data.status;
+	});
+
+	async function refresh() {
+		try {
+			const resp = await fetch(resolve('/api/status'));
+			if (!resp.ok) return;
+			const body = await resp.json();
+			s = body.status;
+		} catch {
+			// silent — stale data is fine for one cycle
+		}
 	}
 
 	$effect(() => {
 		const interval = setInterval(() => {
-			if (document.visibilityState === 'visible') refresh();
+			if (document.visibilityState === 'visible') void refresh();
 		}, data.pollIntervalMs);
 		const onVis = () => {
-			if (document.visibilityState === 'visible') refresh();
+			if (document.visibilityState === 'visible') void refresh();
 		};
 		document.addEventListener('visibilitychange', onVis);
 		return () => {
