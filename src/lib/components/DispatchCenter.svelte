@@ -29,13 +29,25 @@
 		if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
 	}
 
+	// The listener writes result.json at spawn time with status "spawned" (then
+	// updates it when the worker emits a terminal STATUS marker). coerceRunStatus
+	// maps anything outside RUN_STATUSES to 'unknown', so the poller has to
+	// require a real terminal value before flipping the UI — otherwise we lock
+	// in 'unknown' on the first poll, before the worker has even run.
+	const TERMINAL_STATUSES = new Set<Run['status']>([
+		'CONFIRMED_WORKING',
+		'INCONCLUSIVE',
+		'FAILED',
+		'ESCALATE'
+	]);
+
 	async function pollOnce(traceId: string) {
 		try {
 			const resp = await fetch(resolve(`/api/runs?trace_id=${encodeURIComponent(traceId)}`));
 			if (!resp.ok) return;
 			const data = await resp.json();
 			const run: Run | undefined = data.runs?.[0];
-			if (run) {
+			if (run && TERMINAL_STATUSES.has(run.status)) {
 				terminalRun = run;
 				status = 'completed';
 				clearTimers();
