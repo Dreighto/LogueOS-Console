@@ -74,6 +74,12 @@ $HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
 # and adapter-node CSRF would reject every request.
 $ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
 
+# LOS-84: ttyd session URLs the Console /terminal/[session] route iframes.
+# Tailscale Serve exposes ttyd over HTTPS at room.taila28611.ts.net:8443/{cc,gmi}
+# — tailnet-only, not on the public Funnel.
+$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:8443/cc/" }
+$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:8443/gmi/" }
+
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
 
@@ -122,9 +128,11 @@ while ($respawns -lt $MAX_RESPAWNS) {
 
     Push-Location -Path $repoRoot
     try {
-        $env:PORT   = $PORT
-        $env:HOST   = $HOST_
-        $env:ORIGIN = $ORIGIN
+        $env:PORT         = $PORT
+        $env:HOST         = $HOST_
+        $env:ORIGIN       = $ORIGIN
+        $env:TTYD_CC_URL  = $TTYD_CC_URL
+        $env:TTYD_GMI_URL = $TTYD_GMI_URL
         $cmdLine = ('"{0}" "{1}" >> "{2}" 2>> "{3}"' -f $nodeCmd.Source, $buildEntry, $stdoutLog, $stderrLog)
         & $env:ComSpec /d /c $cmdLine
         $lastExit = $LASTEXITCODE
