@@ -31,8 +31,18 @@ const AUTH_CREDS = BASIC_AUTH ? Buffer.from(BASIC_AUTH).toString('base64') : '';
 const PROTECTED_PREFIXES = ['/console/terminal/', '/cc', '/gmi'];
 
 function requiresAuth(reqUrl) {
+	// Strip query string for the comparison — `/console/terminal/cc-con?foo`
+	// must still match the `/console/terminal/` prefix.
+	const path = reqUrl.split('?')[0];
 	for (const p of PROTECTED_PREFIXES) {
-		if (reqUrl === p || reqUrl.startsWith(p + '/') || reqUrl.startsWith(p + '?')) return true;
+		// p ends with `/` (deep prefix) — startsWith works.
+		// p doesn't end with `/` (bare segment like `/cc`) — require either
+		// exact match or next char is `/` so `/ccx` doesn't match `/cc`.
+		if (p.endsWith('/')) {
+			if (path === p.slice(0, -1) || path.startsWith(p)) return true;
+		} else {
+			if (path === p || path.startsWith(p + '/')) return true;
+		}
 	}
 	return false;
 }
