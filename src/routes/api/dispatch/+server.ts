@@ -8,7 +8,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const response = await fetch(`${serverConfig.gatewayUrl}/api/v1/dispatch`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify({ tool_profile: 'standard_worker', ...body })
 		});
 
 		if (!response.ok) {
