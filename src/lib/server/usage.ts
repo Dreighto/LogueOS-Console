@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { serverConfig } from './config';
-import type { DailyUsage, UsageHistory, UsageMetrics, UsageProjection } from '$lib/types/usage';
+import type { DailyUsage, HourlyBucket, TicketCost, UsageHistory, UsageMetrics, UsageProjection } from '$lib/types/usage';
 
-export type { UsageMetrics, UsageHistory, UsageProjection, DailyUsage } from '$lib/types/usage';
+export type { UsageMetrics, UsageHistory, UsageProjection, DailyUsage, TicketCost, HourlyBucket } from '$lib/types/usage';
 
 // Module-level DB singleton — readwrite so we can maintain the usage_events
 // table alongside the readonly provisional_lessons table. WAL mode lets the
@@ -260,5 +260,81 @@ export function getUsageHistory(days = 30): UsageHistory {
 			},
 			totalEvents: 0
 		};
+	}
+}
+
+// Per-ticket cost leaderboard — joins usage_events with observations on trace_id
+// so each dispatch is attributed to the ticket that generated it.
+// Uses a CTE to deduplicate observations (one trace may have multiple observation rows).
+export function getTicketLeaderboard(days = 30): TicketCost[] {
+	try {
+		const db = getDb();
+		maybeIngest(db);
+
+		const rows = db
+			.prepare(
+				`
+			WITH ticket_traces AS (
+				SELECT trace_id, MIN(ticket_id) AS ticket_id
+				FROM observations
+				WHERE ticket_id IS NOT NULL
+				GROUP BY trace_id
+			),
+			ticket_worker_costs AS (
+				SELECT tt.ticket_id, u.worker,
+				       COUNT(u.trace_id)                    AS dispatches,
+				       ROUND(SUM(u.predicted_cost_usd), 4)  AS cost,
+				       SUM(u.predicted_tokens)               AS tokens
+				FROM ticket_traces tt
+				JOIN usage_events u ON tt.trace_id = u.trace_id
+				WHERE u.date >= date('now', ?)
+				GROUP BY tt.ticket_id, u.worker
+			),
+			top_tickets AS (
+				SELECT ticket_id
+				FROM ticket_worker_costs
+				GROUP BY ticket_id
+				ORDER BY SUM(cost) DESC
+				LIMIT 10
+			)
+			SELECT twc.ticket_id, twc.worker, twc.dispatches, twc.cost, twc.tokens
+			FROM ticket_worker_costs twc
+			JOIN top_tickets tt ON twc.ticket_id = tt.ticket_id
+			ORDER BY twc.cost DESC
+		`
+			)
+			.all(`-${days} days`) as TicketCost[];
+
+		return rows;
+	} catch {
+		return [];
+	}
+}
+
+// Hour-of-day × date activity buckets for the heatmap.
+// ts is stored as ISO 8601 UTC; strftime extracts the UTC hour.
+export function getHourlyActivity(days = 14): HourlyBucket[] {
+	try {
+		const db = getDb();
+		maybeIngest(db);
+
+		const rows = db
+			.prepare(
+				`
+			SELECT date,
+			       CAST(strftime('%H', ts) AS INTEGER) AS hour,
+			       ROUND(SUM(predicted_cost_usd), 4)   AS cost,
+			       COUNT(*)                             AS dispatches
+			FROM usage_events
+			WHERE date >= date('now', ?)
+			GROUP BY date, hour
+			ORDER BY date, hour
+		`
+			)
+			.all(`-${days} days`) as HourlyBucket[];
+
+		return rows;
+	} catch {
+		return [];
 	}
 }
