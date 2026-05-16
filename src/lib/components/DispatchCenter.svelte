@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Terminal, Send, Loader2, AlertCircle, CheckCircle2 } from 'lucide-svelte';
+	import { onDestroy } from 'svelte';
+	import { Terminal, Send, Loader2, AlertCircle, CheckCircle2, Clock, XCircle, AlertTriangle } from 'lucide-svelte';
+	import type { Run } from '$lib/types/run';
+
+	const POLL_INTERVAL_MS = 10_000;
+	const MAX_WAIT_MS = 11 * 60 * 1000;
 
 	let worker = $state('claude-code');
 	let targetRepo = $state('project-miru');
@@ -8,15 +13,80 @@
 	let prompt = $state('');
 	let thinkingLevel = $state('none');
 
-	let status = $state<'idle' | 'submitting' | 'success' | 'error'>('idle');
+	type Status = 'idle' | 'submitting' | 'waiting' | 'completed' | 'timeout' | 'error';
+	let status = $state<Status>('idle');
 	let message = $state('');
 	let lastTraceId = $state('');
+	let elapsedSec = $state(0);
+	let terminalRun = $state<Run | null>(null);
+
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let tickTimer: ReturnType<typeof setInterval> | null = null;
+	let startedAt = 0;
+
+	function clearTimers() {
+		if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+		if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+	}
+
+	async function pollOnce(traceId: string) {
+		try {
+			const resp = await fetch(resolve(`/api/runs?trace_id=${encodeURIComponent(traceId)}`));
+			if (!resp.ok) return;
+			const data = await resp.json();
+			const run: Run | undefined = data.runs?.[0];
+			if (run) {
+				terminalRun = run;
+				status = 'completed';
+				clearTimers();
+			}
+		} catch {
+			// transient — try again on next tick
+		}
+	}
+
+	function startWaiting(traceId: string) {
+		lastTraceId = traceId;
+		startedAt = Date.now();
+		elapsedSec = 0;
+		terminalRun = null;
+		status = 'waiting';
+
+		tickTimer = setInterval(() => {
+			const ms = Date.now() - startedAt;
+			elapsedSec = Math.floor(ms / 1000);
+			if (ms >= MAX_WAIT_MS) {
+				status = 'timeout';
+				clearTimers();
+			}
+		}, 1000);
+
+		pollTimer = setInterval(() => pollOnce(traceId), POLL_INTERVAL_MS);
+		// Kick the first poll immediately so quick jobs don't wait 10s.
+		pollOnce(traceId);
+	}
+
+	function dismiss() {
+		clearTimers();
+		status = 'idle';
+		message = '';
+		elapsedSec = 0;
+		terminalRun = null;
+	}
+
+	function formatElapsed(s: number): string {
+		const m = Math.floor(s / 60);
+		const r = s % 60;
+		return m > 0 ? `${m}m ${r}s` : `${r}s`;
+	}
 
 	async function handleSubmit() {
 		if (!prompt.trim()) return;
 
+		clearTimers();
 		status = 'submitting';
 		message = '';
+		terminalRun = null;
 
 		try {
 			const response = await fetch(resolve('/api/dispatch'), {
@@ -37,17 +107,21 @@
 				status = 'error';
 				message = data.error || 'Something went wrong — please try again';
 			} else {
-				status = 'success';
-				message = 'Job sent!';
-				lastTraceId = data.trace_id;
-				// Reset prompt but keep other settings
 				prompt = '';
+				if (data.trace_id) {
+					startWaiting(data.trace_id);
+				} else {
+					status = 'completed';
+					message = 'Job sent (no trace id returned).';
+				}
 			}
 		} catch (err) {
 			status = 'error';
 			message = String(err);
 		}
 	}
+
+	onDestroy(clearTimers);
 </script>
 
 <div class="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-lg overflow-hidden shadow-2xl">
@@ -134,24 +208,100 @@
 
 		<!-- Status Bar -->
 		{#if status !== 'idle'}
+			{@const completedStatus = terminalRun?.status}
+			{@const completedTone = completedStatus === 'CONFIRMED_WORKING'
+				? 'green'
+				: completedStatus === 'INCONCLUSIVE'
+					? 'amber'
+					: 'red'}
 			<div
-				class="flex items-center gap-3 px-3 py-2 rounded text-xs font-mono border {
+				class="flex items-start gap-3 px-3 py-2 rounded text-xs font-mono border {
 					status === 'submitting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
-					status === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+					status === 'waiting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' :
+					status === 'timeout' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+					status === 'completed' && completedTone === 'green' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+					status === 'completed' && completedTone === 'amber' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+					status === 'completed' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
 					'bg-red-500/10 border-red-500/20 text-red-400'
 				}"
 			>
 				{#if status === 'submitting'}
-					<Loader2 size={14} class="animate-spin" />
+					<Loader2 size={14} class="animate-spin mt-0.5" />
 					<span>Sending...</span>
-				{:else if status === 'success'}
-					<CheckCircle2 size={14} />
-					<div class="flex flex-col">
-						<span>{message}</span>
+				{:else if status === 'waiting'}
+					<span class="relative flex h-3 w-3 mt-0.5">
+						<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60"></span>
+						<span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+					</span>
+					<div class="flex-1 flex flex-col gap-0.5">
+						<div class="flex items-center gap-2">
+							<Clock size={12} />
+							<span>Worker running... {formatElapsed(elapsedSec)}</span>
+						</div>
 						<span class="text-[10px] opacity-70">Ref: {lastTraceId}</span>
 					</div>
+					<button
+						type="button"
+						onclick={dismiss}
+						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+					>
+						dismiss
+					</button>
+				{:else if status === 'completed' && terminalRun}
+					{#if completedStatus === 'CONFIRMED_WORKING'}
+						<CheckCircle2 size={14} class="mt-0.5" />
+					{:else if completedStatus === 'INCONCLUSIVE'}
+						<AlertTriangle size={14} class="mt-0.5" />
+					{:else}
+						<XCircle size={14} class="mt-0.5" />
+					{/if}
+					<div class="flex-1 flex flex-col gap-0.5">
+						<span class="font-bold">{completedStatus?.replace('_', ' ')}</span>
+						{#if terminalRun.summary}
+							<span class="opacity-90 leading-relaxed">{terminalRun.summary}</span>
+						{/if}
+						<div class="flex items-center gap-3 text-[10px] opacity-70">
+							<span>Ref: {lastTraceId}</span>
+							{#if completedStatus === 'FAILED' || completedStatus === 'ESCALATE'}
+								<a href={resolve('/activity')} class="underline">View in Activity →</a>
+							{/if}
+						</div>
+					</div>
+					<button
+						type="button"
+						onclick={dismiss}
+						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+					>
+						dismiss
+					</button>
+				{:else if status === 'completed'}
+					<CheckCircle2 size={14} class="mt-0.5" />
+					<span>{message}</span>
+					<button
+						type="button"
+						onclick={dismiss}
+						class="ml-auto text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+					>
+						dismiss
+					</button>
+				{:else if status === 'timeout'}
+					<AlertTriangle size={14} class="mt-0.5" />
+					<div class="flex-1 flex flex-col gap-0.5">
+						<span>Worker may have timed out — no terminal status after 11 min.</span>
+						<div class="flex items-center gap-3 text-[10px] opacity-70">
+							<span>Ref: {lastTraceId}</span>
+							<a href={resolve('/activity')} class="underline">Check Activity →</a>
+						</div>
+					</div>
+					<button
+						type="button"
+						onclick={dismiss}
+						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+					>
+						dismiss
+					</button>
 				{:else if status === 'error'}
-					<AlertCircle size={14} />
+					<AlertCircle size={14} class="mt-0.5" />
 					<span>{message}</span>
 				{/if}
 			</div>
@@ -162,7 +312,7 @@
 	<div class="px-4 py-3 bg-slate-900/50 border-t border-slate-800 flex justify-end">
 		<button
 			onclick={handleSubmit}
-			disabled={status === 'submitting' || !prompt.trim()}
+			disabled={status === 'submitting' || status === 'waiting' || !prompt.trim()}
 			class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-mono font-bold px-6 py-2 rounded transition-all active:scale-95 shadow-lg shadow-blue-900/20"
 		>
 			{#if status === 'submitting'}
