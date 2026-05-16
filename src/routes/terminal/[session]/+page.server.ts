@@ -26,36 +26,28 @@ function sessionUrl(session: string): string | undefined {
 	return urls[session];
 }
 
-export const load: PageServerLoad = async ({ params, request, getClientAddress }) => {
-	// Gate: reject any request that came in through Tailscale Funnel (the public
-	// internet path). Tailscale sets the Tailscale-Funnel-Request header on every
-	// Funnel-routed request — its presence is a hard signal "this came from the
-	// public side." Direct tailnet access (raw 100.x IP), Tailscale-Serve-routed
-	// access, and localhost all skip Funnel, so the header is absent and access
-	// is allowed for any of those when the connecting peer is on the tailnet.
-	const cameViaFunnel = !!request.headers.get('tailscale-funnel-request');
-	const directIp = getClientAddress();
-
-	const allowed = !cameViaFunnel && (isTailnetIp(directIp) || isLocalhost(directIp));
-
-	if (!allowed) {
-		throw error(
-			403,
-			'Terminal access requires Tailscale. Open this URL from a device with Tailscale active on the tailnet.'
-		);
-	}
+export const load: PageServerLoad = async ({ params, request, url, getClientAddress }) => {
+	// Gate moved out of SvelteKit and into the start_https.js HTTP Basic Auth
+	// middleware (gates /console/terminal/* + /cc + /gmi). The Funnel-header
+	// "no public access" check was retired 2026-05-15 because iPhone Safari
+	// can only reach the Console via the Funnel — the tunnel-direct HTTPS
+	// path hangs on the PQ ClientHello fragmentation issue.
+	void request;
+	void getClientAddress;
+	void isTailnetIp;
+	void isLocalhost;
 
 	const { session } = params;
-	const ttydUrl = sessionUrl(session);
-
-	if (ttydUrl === undefined) {
+	if (session !== 'cc-con' && session !== 'gmi-con') {
 		throw error(404, `Unknown terminal session: ${session}`);
 	}
 
-	if (!ttydUrl) {
-		const envVar = session === 'cc-con' ? 'TTYD_CC_URL' : 'TTYD_GMI_URL';
-		throw error(503, `Session '${session}' is not configured. Set ${envVar} in the environment.`);
-	}
+	// Build the ttyd URL on the SAME origin as the current request — Funnel
+	// terminates TLS, forwards plain HTTP to start_https.js, which proxies
+	// /cc and /gmi to the ttyd processes. Returning the relative origin
+	// guarantees we match Safari's same-origin model.
+	const base = `${url.origin}`;
+	const ttydUrl = session === 'cc-con' ? `${base}/cc/` : `${base}/gmi/`;
 
 	return { session, ttydUrl };
 };

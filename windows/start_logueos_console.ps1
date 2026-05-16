@@ -71,23 +71,28 @@ $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
 # operator-reachable URL. If the network topology changes (n8n moves, dedicated
 # Console hostname appears, etc.) update both this default AND any worker
 # prompts/canon that reference the URL.
-$PORT   = if ($env:PORT)   { $env:PORT }   else { "18769" }
+$PORT   = if ($env:PORT)   { $env:PORT }   else { "18767" }
 $HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
-# CodeRabbit R1: interpolate the resolved $PORT (NOT $env:PORT) so that if the
-# operator overrides PORT at launch time, the ORIGIN default tracks it. Without
-# this, an operator setting PORT=19000 would still get ORIGIN pinned to :18767
-# and adapter-node CSRF would reject every request.
-$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
+# Console is now behind Tailscale Funnel for the iPhone-reachable HTTPS path
+# (TLS terminated at Tailscale's edge, plain HTTP forwarded here). ORIGIN
+# tracks the Funnel hostname so adapter-node CSRF accepts those requests.
+$ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "https://room.taila28611.ts.net" }
 
-# LOS-84: ttyd session URLs the Console /terminal/[session] route iframes.
-# Tailscale Serve exposes ttyd over HTTPS at room.taila28611.ts.net:8443/{cc,gmi}
-# — tailnet-only, not on the public Funnel.
-$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:18767/cc/" }
-$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:18767/gmi/" }
-# HTTPS port for the Node TLS-terminating wrapper. Re-using 18767 because
-# it's the port iPhone Safari has proven reachable; HTTP debug listener
-# moved to localhost-only 18769.
-$HTTPS_PORT = if ($env:HTTPS_PORT) { $env:HTTPS_PORT } else { "18767" }
+# Terminal pages embed xterm.js directly on the same origin. The iframe is
+# gone — wsUrl is built relative to window.location at runtime, so these
+# env vars are only used for the not-yet-set fallback path and ttyd's
+# /cc, /gmi paths are proxied by start_https.js to localhost:7681/7682.
+$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net/cc/" }
+$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net/gmi/" }
+
+# HTTP Basic Auth on /console/terminal/*, /cc, /gmi. The Funnel exposes the
+# Console publicly, so auth is mandatory for terminal access. Pull from the
+# environment so the password lives outside source control. To set:
+#   [System.Environment]::SetEnvironmentVariable('LOGUEOS_TERMINAL_AUTH',
+#       'user:password', 'User')
+# (then sign out / back in OR reboot OR launch this script with the env
+#  var explicitly set in the same session).
+$BASIC_AUTH = if ($env:LOGUEOS_TERMINAL_AUTH) { $env:LOGUEOS_TERMINAL_AUTH } else { "" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
@@ -111,11 +116,8 @@ if (-not $nodeCmd) {
     exit 3
 }
 
-# Idempotency check — use the HTTPS port since that's the public-facing one.
-# If something is already bound to HTTPS_PORT, this start script exits 0 and
-# Task Scheduler doesn't respawn. HTTP listener is localhost-only and not the
-# canonical signal anymore.
-$portInt = [int]$HTTPS_PORT
+# Idempotency check — Console listens HTTP on $PORT (Funnel handles TLS).
+$portInt = [int]$PORT
 $portBound = Get-NetTCPConnection -LocalPort $portInt -State Listen -ErrorAction SilentlyContinue |
              Select-Object -First 1
 if ($portBound) {
@@ -141,9 +143,9 @@ while ($respawns -lt $MAX_RESPAWNS) {
         $env:PORT         = $PORT
         $env:HOST         = $HOST_
         $env:ORIGIN       = $ORIGIN
-        $env:HTTPS_PORT   = $HTTPS_PORT
         $env:TTYD_CC_URL  = $TTYD_CC_URL
         $env:TTYD_GMI_URL = $TTYD_GMI_URL
+        $env:BASIC_AUTH   = $BASIC_AUTH
         $cmdLine = ('"{0}" "{1}" >> "{2}" 2>> "{3}"' -f $nodeCmd.Source, $buildEntry, $stdoutLog, $stderrLog)
         & $env:ComSpec /d /c $cmdLine
         $lastExit = $LASTEXITCODE
