@@ -39,7 +39,16 @@ export const GET: RequestHandler = async () => {
 			}
 		}
 
-		// 2. Enrich busy workers with real-time progress from cc_heartbeat_log.jsonl
+		// 2. Enrich busy workers with real-time progress from cc_heartbeat_log.jsonl.
+		// Only enrich if the heartbeat matches the busy worker's CURRENT lease —
+		// either same trace_id (preferred) or same ticket_id, AND is recent
+		// (within the last 30 min). Without these filters, May-2 ghost heartbeats
+		// from PRO-258 stamp every "claude-code is busy" view forever because
+		// dispatched workers no longer emit heartbeats and the log is dominated
+		// by stale entries (cc_heartbeat_log.jsonl is append-only — can't be
+		// truncated, must be filtered at read time).
+		const HEARTBEAT_RECENCY_MS = 30 * 60 * 1000;
+		const now = Date.now();
 		const resolvedHeartbeatPath = path.resolve(serverConfig.heartbeatsLogPath);
 		if (fs.existsSync(resolvedHeartbeatPath)) {
 			const hbStream = fs.createReadStream(resolvedHeartbeatPath);
@@ -60,15 +69,25 @@ export const GET: RequestHandler = async () => {
 					if (rawId.startsWith('gemini')) normalizedId = 'gemini';
 
 					const worker = workers[normalizedId];
-					// Only enrich if the worker is known to be busy per the lease file
-					// OR if it's currently active in the heartbeat log (heartbeats are recent)
-					if (worker && worker.state === 'busy') {
-						worker.ticket_id = hb.ticket_id || worker.ticket_id;
-						worker.step = hb.step || worker.step;
-						worker.branch = hb.branch || worker.branch;
-						worker.last_file_written = hb.last_file_written || worker.last_file_written;
-						if (hb.trace_id) worker.trace_id = hb.trace_id;
-					}
+					if (!worker || worker.state !== 'busy') continue;
+
+					// Filter 1: trace_id or ticket_id must match the active lease.
+					const hbTrace = hb.trace_id ?? null;
+					const hbTicket = hb.ticket_id ?? null;
+					const matchesLease =
+						(hbTrace && worker.trace_id && hbTrace === worker.trace_id) ||
+						(hbTicket && worker.ticket_id && hbTicket === worker.ticket_id);
+					if (!matchesLease) continue;
+
+					// Filter 2: only recent heartbeats (last 30 min).
+					const hbTs = Date.parse(hb.ts ?? hb.timestamp ?? '');
+					if (!Number.isFinite(hbTs) || now - hbTs > HEARTBEAT_RECENCY_MS) continue;
+
+					worker.ticket_id = hb.ticket_id || worker.ticket_id;
+					worker.step = hb.step || worker.step;
+					worker.branch = hb.branch || worker.branch;
+					worker.last_file_written = hb.last_file_written || worker.last_file_written;
+					if (hb.trace_id) worker.trace_id = hb.trace_id;
 				} catch (e) {
 					// Ignore
 				}
