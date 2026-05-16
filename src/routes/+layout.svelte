@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
-	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
+	import { Play, Cpu, Activity, Brain, MessageSquare, Terminal, Settings, AlertOctagon } from 'lucide-svelte';
 	import type { LayoutData } from './$types';
 	import type { KillSwitchState } from '$lib/types/kill-switch';
 
@@ -17,6 +17,7 @@
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Memory', path: '/memory', icon: Brain },
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
+		{ name: 'Terminal', path: '/terminal/cc-con', icon: Terminal },
 		{ name: 'Settings', path: '/settings', icon: Settings }
 	] as const;
 

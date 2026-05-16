@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SessionSwitcher from '$lib/components/SessionSwitcher.svelte';
 	import { Terminal } from 'lucide-svelte';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
@@ -45,6 +46,7 @@
 <!-- Terminal page is full-bleed — the layout already drops padding and hides
      header/nav on /terminal routes, so we just need to fill 100% height here. -->
 <div class="flex h-full flex-col">
+	<SessionSwitcher />
 	<!-- Session label strip -->
 	<div
 		class="flex shrink-0 items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5 font-mono text-xs"
