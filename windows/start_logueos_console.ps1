@@ -77,8 +77,8 @@ $ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
 # LOS-84: ttyd session URLs the Console /terminal/[session] route iframes.
 # Tailscale Serve exposes ttyd over HTTPS at room.taila28611.ts.net:8443/{cc,gmi}
 # — tailnet-only, not on the public Funnel.
-$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:8443/cc/" }
-$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:8443/gmi/" }
+$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:8444/cc/" }
+$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:8444/gmi/" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
