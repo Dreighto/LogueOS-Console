@@ -13,12 +13,33 @@
 	let prompt = $state('');
 	let thinkingLevel = $state('none');
 
+	// LOS-92: Track in Linear toggle — when on, file a ticket BEFORE dispatching
+	// so the worker runs against a real ticket and outputs link back automatically.
+	// Replaces the deactivated W1-Planning-Intake auto-create bridge.
+	let trackInLinear = $state(false);
+	let linearTitle = $state('');
+	let linearTeam = $state('LogueOS');
+	let linearProject = $state('');
+	let linearPriority = $state(2);
+
 	type Status = 'idle' | 'submitting' | 'waiting' | 'completed' | 'timeout' | 'error';
 	let status = $state<Status>('idle');
 	let message = $state('');
 	let lastTraceId = $state('');
+	let lastTicketId = $state('');
+	let lastTicketUrl = $state('');
 	let elapsedSec = $state(0);
 	let terminalRun = $state<Run | null>(null);
+
+	// Team → project options for the dropdowns. Constrained values per CR
+	// feedback on the prior PR — free-text caused avoidable filing failures.
+	const LINEAR_TEAMS = ['LogueOS', 'Project Miru', 'NASDOOM'] as const;
+	const LINEAR_PROJECTS_BY_TEAM: Record<string, string[]> = {
+		LogueOS: ['', 'LogueOS Console', 'LogueOS Orchestrator'],
+		'Project Miru': ['', 'PM Storefront', 'Miru AI'],
+		NASDOOM: ['']
+	};
+	const linearProjectOptions = $derived(LINEAR_PROJECTS_BY_TEAM[linearTeam] ?? ['']);
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -84,6 +105,8 @@
 		message = '';
 		elapsedSec = 0;
 		terminalRun = null;
+		lastTicketId = '';
+		lastTicketUrl = '';
 	}
 
 	function formatElapsed(s: number): string {
@@ -94,11 +117,21 @@
 
 	async function handleSubmit() {
 		if (!prompt.trim()) return;
+		// LOS-92: enforce title when Track-in-Linear is on. The Linear file step
+		// will reject with no title anyway — but catching it client-side avoids
+		// the round trip + makes the missing-required-field obvious.
+		if (trackInLinear && !linearTitle.trim()) {
+			status = 'error';
+			message = 'Linear title is required when tracking is on.';
+			return;
+		}
 
 		clearTimers();
 		status = 'submitting';
 		message = '';
 		terminalRun = null;
+		lastTicketId = '';
+		lastTicketUrl = '';
 
 		try {
 			const response = await fetch(resolve('/api/dispatch'), {
@@ -109,7 +142,15 @@
 					target_repo: targetRepo,
 					ticket_id: ticketId || null,
 					prompt,
-					thinking_level: thinkingLevel === 'none' ? null : thinkingLevel
+					thinking_level: thinkingLevel === 'none' ? null : thinkingLevel,
+					// LOS-92: pass-through fields. Server-side will file the
+					// Linear ticket FIRST then dispatch with the new ticket_id.
+					track_in_linear: trackInLinear || undefined,
+					linear_title: trackInLinear ? linearTitle.trim() : undefined,
+					linear_description: trackInLinear ? prompt : undefined,
+					linear_team: trackInLinear ? linearTeam : undefined,
+					linear_project: trackInLinear ? linearProject || undefined : undefined,
+					linear_priority: trackInLinear ? linearPriority : undefined
 				})
 			});
 
@@ -120,6 +161,9 @@
 				message = data.error || 'Something went wrong — please try again';
 			} else {
 				prompt = '';
+				if (trackInLinear) linearTitle = '';
+				lastTicketId = data.ticket_id ?? '';
+				lastTicketUrl = data.ticket_url ?? '';
 				if (data.trace_id) {
 					startWaiting(data.trace_id);
 				} else {
@@ -205,7 +249,96 @@
 					<option value="extended">Extended Thinking</option>
 				</select>
 			</div>
+
+			<!-- LOS-92: Track in Linear toggle. Off by default = current behavior
+			     (direct dispatch, no Linear ticket). On = file Linear ticket first,
+			     dispatch worker against it. -->
+			<div class="flex flex-col gap-1.5 justify-end">
+				<label for="track" class="text-[10px] font-mono text-slate-500 uppercase">Track in Linear</label>
+				<button
+					id="track"
+					type="button"
+					onclick={() => (trackInLinear = !trackInLinear)}
+					class="flex items-center gap-2 font-mono text-xs p-1.5 rounded border transition-colors {trackInLinear
+						? 'bg-purple-900/30 border-purple-500/40 text-purple-300'
+						: 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700'}"
+				>
+					<span
+						class="w-3 h-3 rounded-sm border flex items-center justify-center text-[8px] {trackInLinear
+							? 'bg-purple-500 border-purple-400 text-white'
+							: 'border-slate-600'}"
+					>
+						{#if trackInLinear}✓{/if}
+					</span>
+					{trackInLinear ? 'On — files a ticket' : 'Off — direct dispatch'}
+				</button>
+			</div>
 		</div>
+
+		{#if trackInLinear}
+			<!-- Linear ticket fields — revealed only when toggle is on. -->
+			<div class="flex flex-col gap-3 px-3 py-3 bg-purple-950/20 border border-purple-800/30 rounded">
+				<div class="text-[10px] font-mono text-purple-400 uppercase tracking-wider">
+					Linear Ticket Fields
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<label for="linear-title" class="text-[10px] font-mono text-slate-500 uppercase">
+						Title <span class="text-red-400">*</span>
+					</label>
+					<input
+						id="linear-title"
+						type="text"
+						bind:value={linearTitle}
+						placeholder="One-line summary of the work"
+						class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500 placeholder:text-slate-700"
+					/>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+					<div class="flex flex-col gap-1.5">
+						<label for="linear-team" class="text-[10px] font-mono text-slate-500 uppercase">Team</label>
+						<select
+							id="linear-team"
+							bind:value={linearTeam}
+							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+						>
+							{#each LINEAR_TEAMS as t (t)}
+								<option value={t}>{t}</option>
+							{/each}
+						</select>
+					</div>
+					<div class="flex flex-col gap-1.5">
+						<label for="linear-project" class="text-[10px] font-mono text-slate-500 uppercase">
+							Project (optional)
+						</label>
+						<select
+							id="linear-project"
+							bind:value={linearProject}
+							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+						>
+							{#each linearProjectOptions as p (p)}
+								<option value={p}>{p || '— none —'}</option>
+							{/each}
+						</select>
+					</div>
+					<div class="flex flex-col gap-1.5">
+						<label for="linear-priority" class="text-[10px] font-mono text-slate-500 uppercase">
+							Priority
+						</label>
+						<select
+							id="linear-priority"
+							bind:value={linearPriority}
+							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+						>
+							<option value={0}>0 — No priority</option>
+							<option value={1}>1 — Urgent</option>
+							<option value={2}>2 — High</option>
+							<option value={3}>3 — Medium</option>
+							<option value={4}>4 — Low</option>
+						</select>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		<!-- Prompt Area -->
 		<div class="flex-1 flex flex-col gap-1.5 min-h-[150px]">
@@ -251,6 +384,16 @@
 							<span>Worker running... {formatElapsed(elapsedSec)}</span>
 						</div>
 						<span class="text-[10px] opacity-70">Ref: {lastTraceId}</span>
+						{#if lastTicketId && lastTicketUrl}
+							<a
+								href={lastTicketUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-[10px] underline text-purple-300 hover:text-purple-200 w-fit"
+							>
+								Filed: {lastTicketId} →
+							</a>
+						{/if}
 					</div>
 					<button
 						type="button"
@@ -272,8 +415,18 @@
 						{#if terminalRun.summary}
 							<span class="opacity-90 leading-relaxed">{terminalRun.summary}</span>
 						{/if}
-						<div class="flex items-center gap-3 text-[10px] opacity-70">
+						<div class="flex items-center gap-3 text-[10px] opacity-70 flex-wrap">
 							<span>Ref: {lastTraceId}</span>
+							{#if lastTicketId && lastTicketUrl}
+								<a
+									href={lastTicketUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="underline text-purple-300 hover:text-purple-200"
+								>
+									Filed: {lastTicketId} →
+								</a>
+							{/if}
 							{#if completedStatus === 'FAILED' || completedStatus === 'ESCALATE'}
 								<a href={resolve('/activity')} class="underline">View in Activity →</a>
 							{/if}
