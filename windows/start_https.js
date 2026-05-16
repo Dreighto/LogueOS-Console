@@ -137,13 +137,38 @@ http
 	});
 
 // HTTPS listener — Tailscale-issued Let's Encrypt cert.
+//
+// Allow TLS 1.2 + 1.3. Counter-intuitively this is the fix for iPhone Safari
+// hanging over the Tailscale tunnel: iOS 18.7 sends a TLS 1.3 ClientHello
+// containing the X25519MLKEM768 post-quantum hybrid key share, which inflates
+// the ClientHello past 1400 bytes — too big for the WireGuard tunnel's
+// 1280-byte MTU, fragments silently drop. With TLS 1.2 allowed, Safari
+// negotiates down to a smaller handshake that fits. Desktop Tailscale peers
+// don't hit this because Node's openssl s_client / curl don't send PQ key
+// shares. (Tailscale issue #19147 and Perplexity research notes 2025-2026.)
 try {
 	const tls = readCert();
 	const httpsServer = https
-		.createServer(tls, dispatch)
+		.createServer(
+			{
+				...tls,
+				minVersion: 'TLSv1.2',
+				maxVersion: 'TLSv1.3',
+				// Honor server cipher order; small AES-GCM ciphers preferred
+				// to keep the handshake compact.
+				honorCipherOrder: true,
+				ciphers: [
+					'ECDHE-ECDSA-AES128-GCM-SHA256',
+					'ECDHE-RSA-AES128-GCM-SHA256',
+					'ECDHE-ECDSA-AES256-GCM-SHA384',
+					'ECDHE-RSA-AES256-GCM-SHA384'
+				].join(':')
+			},
+			dispatch
+		)
 		.on('upgrade', dispatchUpgrade)
 		.listen(HTTPS_PORT, HOST, () => {
-			console.log(`[start_https] HTTPS listening on https://${HOST}:${HTTPS_PORT}`);
+			console.log(`[start_https] HTTPS listening on https://${HOST}:${HTTPS_PORT} (TLS 1.2+1.3)`);
 		});
 
 	// Hot-reload TLS context when `tailscale cert` rewrites the files (renewal
