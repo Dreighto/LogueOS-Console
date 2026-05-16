@@ -59,6 +59,10 @@
 			document.removeEventListener('visibilitychange', onVisibilityChange);
 		};
 	});
+
+	// Terminal routes want every pixel — the ttyd iframe is the experience.
+	// Hide header + nav so the embedded terminal can use the full viewport.
+	const onTerminalRoute = $derived(page.url.pathname.includes('/terminal/'));
 </script>
 
 <div
@@ -66,6 +70,7 @@
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
 	<!-- Top Bar -->
+	{#if !onTerminalRoute}
 	<header
 		class="z-10 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 	>
@@ -101,14 +106,19 @@
 			</a>
 		{/if}
 	</header>
+	{/if}
 
-	<!-- Main Content. 
+	<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav
 	     is part of the flex flow, ensuring it sits at the true bottom. -->
-	<main class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+	<main
+		class="flex-1 overflow-y-auto custom-scrollbar"
+		class:p-4={!onTerminalRoute}
+	>
 		{@render children()}
 	</main>
 
+	{#if !onTerminalRoute}
 	<!-- Bottom Navigation. Hard-reset to 44px fixed height.
 	     Removes all vertical padding and relies on flex-centering. -->
 	<nav
@@ -135,6 +145,7 @@
 			{/each}
 		</div>
 	</nav>
+	{/if}
 </div>
 
 <style>
