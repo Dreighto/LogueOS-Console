@@ -47,7 +47,12 @@ try { [W32.LogueHide]::ShowWindow([W32.LogueHide]::GetConsoleWindow(), 0) | Out-
 $scriptDir  = $PSScriptRoot
 $repoRoot   = Split-Path -Parent $scriptDir
 $logDir     = Join-Path $repoRoot "logs"
-$buildEntry = Join-Path $repoRoot "build\index.js"
+# Launch via the HTTPS wrapper (windows\start_https.js) — wraps adapter-node's
+# build/handler.js in https.createServer using Tailscale-minted Let's Encrypt
+# certs. Listens HTTP on PORT (default 18767) AND HTTPS on HTTPS_PORT
+# (default 18768). The HTTPS port is what iPhone Safari and other tailnet
+# clients hit; HTTP stays for localhost.
+$buildEntry = Join-Path $scriptDir "start_https.js"
 $stdoutLog  = Join-Path $logDir "logueos_console_stdout.log"
 $stderrLog  = Join-Path $logDir "logueos_console_stderr.log"
 $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
@@ -77,8 +82,11 @@ $ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
 # LOS-84: ttyd session URLs the Console /terminal/[session] route iframes.
 # Tailscale Serve exposes ttyd over HTTPS at room.taila28611.ts.net:8443/{cc,gmi}
 # — tailnet-only, not on the public Funnel.
-$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "http://100.81.19.49:7681/cc/" }
-$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "http://100.81.19.49:7682/gmi/" }
+$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:18768/cc/" }
+$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:18768/gmi/" }
+# HTTPS port for the Node TLS-terminating wrapper. Tailnet-only by network
+# position (no Funnel exposure on this port). 18768 chosen as PORT+1.
+$HTTPS_PORT = if ($env:HTTPS_PORT) { $env:HTTPS_PORT } else { "18768" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
@@ -131,6 +139,7 @@ while ($respawns -lt $MAX_RESPAWNS) {
         $env:PORT         = $PORT
         $env:HOST         = $HOST_
         $env:ORIGIN       = $ORIGIN
+        $env:HTTPS_PORT   = $HTTPS_PORT
         $env:TTYD_CC_URL  = $TTYD_CC_URL
         $env:TTYD_GMI_URL = $TTYD_GMI_URL
         $cmdLine = ('"{0}" "{1}" >> "{2}" 2>> "{3}"' -f $nodeCmd.Source, $buildEntry, $stdoutLog, $stderrLog)
