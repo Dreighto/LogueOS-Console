@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { Terminal, Send, Loader2, AlertCircle, CheckCircle2 } from 'lucide-svelte';
 
 	let worker = $state('claude-code');
@@ -18,7 +19,7 @@
 		message = '';
 
 		try {
-			const response = await fetch('/console/api/dispatch', {
+			const response = await fetch(resolve('/api/dispatch'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
