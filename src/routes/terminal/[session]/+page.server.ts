@@ -27,19 +27,22 @@ function sessionUrl(session: string): string | undefined {
 }
 
 export const load: PageServerLoad = async ({ params, request, getClientAddress }) => {
-	// Gate: allow only tailnet peers (Tailscale Serve sets X-Forwarded-For to
-	// the peer's 100.x.x.x address) or direct localhost connections (dev / SSH).
-	// Funnel requests from the public internet carry a public IP in
-	// X-Forwarded-For and are rejected with 403.
-	const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '';
+	// Gate: reject any request that came in through Tailscale Funnel (the public
+	// internet path). Tailscale sets the Tailscale-Funnel-Request header on every
+	// Funnel-routed request — its presence is a hard signal "this came from the
+	// public side." Direct tailnet access (raw 100.x IP), Tailscale-Serve-routed
+	// access, and localhost all skip Funnel, so the header is absent and access
+	// is allowed for any of those when the connecting peer is on the tailnet.
+	const cameViaFunnel = !!request.headers.get('tailscale-funnel-request');
 	const directIp = getClientAddress();
 
-	const allowed =
-		isTailnetIp(forwardedFor) || // via Tailscale Serve, tailnet peer
-		(forwardedFor === '' && isLocalhost(directIp)); // direct / dev access
+	const allowed = !cameViaFunnel && (isTailnetIp(directIp) || isLocalhost(directIp));
 
 	if (!allowed) {
-		throw error(403, 'Terminal access is restricted to the tailnet.');
+		throw error(
+			403,
+			'Terminal access requires Tailscale. Open this URL from a device with Tailscale active on the tailnet.'
+		);
 	}
 
 	const { session } = params;
