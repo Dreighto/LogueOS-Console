@@ -19,9 +19,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { handler } from '../build/handler.js';
 
-const PORT = Number.parseInt(process.env.PORT ?? '18767', 10);
-const HTTPS_PORT = Number.parseInt(process.env.HTTPS_PORT ?? '18768', 10);
+// HTTPS lives on the same port (18767) that proved iPhone-reachable in
+// testing — picking a different port (e.g. 18768) timed out from iPhone
+// Safari for reasons we couldn't pin down (MTU? port ACL? Safari quirk?).
+// HTTP listener moved to a localhost-only debug port so nothing on the
+// LAN/tailnet sees plain text.
+const HTTPS_PORT = Number.parseInt(process.env.HTTPS_PORT ?? '18767', 10);
+const HTTP_PORT = Number.parseInt(process.env.PORT ?? '18769', 10);
 const HOST = process.env.HOST ?? '0.0.0.0';
+const HTTP_HOST = '127.0.0.1';
 const CERT_DIR = process.env.TLS_CERT_DIR ?? 'D:\\ts-certs';
 const CERT_FILE = path.join(CERT_DIR, 'room-cert.pem');
 const KEY_FILE = path.join(CERT_DIR, 'room-key.pem');
@@ -121,12 +127,13 @@ function readCert() {
 	};
 }
 
-// HTTP listener (localhost + legacy callers).
+// HTTP listener — localhost-only for dev / smoke tests. Tailnet clients
+// use the HTTPS port below.
 http
 	.createServer(dispatch)
 	.on('upgrade', dispatchUpgrade)
-	.listen(PORT, HOST, () => {
-		console.log(`[start_https] HTTP  listening on http://${HOST}:${PORT}`);
+	.listen(HTTP_PORT, HTTP_HOST, () => {
+		console.log(`[start_https] HTTP  listening on http://${HTTP_HOST}:${HTTP_PORT}`);
 	});
 
 // HTTPS listener — Tailscale-issued Let's Encrypt cert.

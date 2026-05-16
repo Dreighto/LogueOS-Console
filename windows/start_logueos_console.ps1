@@ -71,7 +71,7 @@ $wrapperLog = Join-Path $logDir "logueos_console_wrapper.log"
 # operator-reachable URL. If the network topology changes (n8n moves, dedicated
 # Console hostname appears, etc.) update both this default AND any worker
 # prompts/canon that reference the URL.
-$PORT   = if ($env:PORT)   { $env:PORT }   else { "18767" }
+$PORT   = if ($env:PORT)   { $env:PORT }   else { "18769" }
 $HOST_  = if ($env:HOST)   { $env:HOST }   else { "0.0.0.0" }
 # CodeRabbit R1: interpolate the resolved $PORT (NOT $env:PORT) so that if the
 # operator overrides PORT at launch time, the ORIGIN default tracks it. Without
@@ -82,11 +82,12 @@ $ORIGIN = if ($env:ORIGIN) { $env:ORIGIN } else { "http://100.81.19.49:$PORT" }
 # LOS-84: ttyd session URLs the Console /terminal/[session] route iframes.
 # Tailscale Serve exposes ttyd over HTTPS at room.taila28611.ts.net:8443/{cc,gmi}
 # — tailnet-only, not on the public Funnel.
-$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:18768/cc/" }
-$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:18768/gmi/" }
-# HTTPS port for the Node TLS-terminating wrapper. Tailnet-only by network
-# position (no Funnel exposure on this port). 18768 chosen as PORT+1.
-$HTTPS_PORT = if ($env:HTTPS_PORT) { $env:HTTPS_PORT } else { "18768" }
+$TTYD_CC_URL  = if ($env:TTYD_CC_URL)  { $env:TTYD_CC_URL }  else { "https://room.taila28611.ts.net:18767/cc/" }
+$TTYD_GMI_URL = if ($env:TTYD_GMI_URL) { $env:TTYD_GMI_URL } else { "https://room.taila28611.ts.net:18767/gmi/" }
+# HTTPS port for the Node TLS-terminating wrapper. Re-using 18767 because
+# it's the port iPhone Safari has proven reachable; HTTP debug listener
+# moved to localhost-only 18769.
+$HTTPS_PORT = if ($env:HTTPS_PORT) { $env:HTTPS_PORT } else { "18767" }
 
 $MAX_RESPAWNS    = 50
 $RESPAWN_BACKOFF = 30
@@ -110,10 +111,11 @@ if (-not $nodeCmd) {
     exit 3
 }
 
-# CodeRabbit R2 fix: use resolved $PORT for idempotency check, not hardcoded
-# 18767. If operator overrides $env:PORT at launch time, both the bind and the
-# already-listening guard must agree on the same port.
-$portInt = [int]$PORT
+# Idempotency check — use the HTTPS port since that's the public-facing one.
+# If something is already bound to HTTPS_PORT, this start script exits 0 and
+# Task Scheduler doesn't respawn. HTTP listener is localhost-only and not the
+# canonical signal anymore.
+$portInt = [int]$HTTPS_PORT
 $portBound = Get-NetTCPConnection -LocalPort $portInt -State Listen -ErrorAction SilentlyContinue |
              Select-Object -First 1
 if ($portBound) {
