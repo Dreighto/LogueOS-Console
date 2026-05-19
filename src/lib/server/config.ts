@@ -100,12 +100,7 @@ export const serverConfig = {
 	// so this URL must reach the gateway from a trusted network position.
 	gatewayUrl: getEnv('LOGUEOS_GATEWAY_URL', 'http://127.0.0.1:18766'),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
-	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT'),
-	// ttyd session URLs (LOS-84). Each session maps to a separate ttyd instance
-	// exposed over Tailscale Serve (tailnet-only). Set these env vars to the
-	// HTTPS URL Tailscale Serve assigns to each ttyd port.
-	ttydCcUrl: getEnv('TTYD_CC_URL', ''),
-	ttydGmiUrl: getEnv('TTYD_GMI_URL', '')
+	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
 };
 
 // Subset of serverConfig that's safe to expose to the client via load().
