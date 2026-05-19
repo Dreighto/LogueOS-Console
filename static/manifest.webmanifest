@@ -1,39 +1,13 @@
 {
 	"name": "LogueOS Console",
 	"short_name": "LogueOS",
-	"description": "Operator-facing dashboard for the LogueOS dispatch loop. Mobile-first, 5 tabs, real-time worker status.",
+	"description": "Operator-facing dashboard for the LogueOS dispatch loop. Mobile-first, real-time worker status.",
 	"start_url": "/console/",
 	"scope": "/console/",
 	"display": "standalone",
 	"orientation": "portrait",
 	"background_color": "#0d1117",
 	"theme_color": "#0d1117",
-	"shortcuts": [
-		{
-			"name": "CC Terminal",
-			"short_name": "CC-Term",
-			"description": "Launch Claude Chat Terminal",
-			"url": "/console/terminal/cc-con",
-			"icons": [
-				{
-					"src": "/console/icon-512.png",
-					"sizes": "512x512"
-				}
-			]
-		},
-		{
-			"name": "GMI Terminal",
-			"short_name": "GMI-Term",
-			"description": "Launch Gemini Terminal",
-			"url": "/console/terminal/gmi-con",
-			"icons": [
-				{
-					"src": "/console/icon-512.png",
-					"sizes": "512x512"
-				}
-			]
-		}
-	],
 	"icons": [
 		{
 			"src": "/console/apple-touch-icon.png",
