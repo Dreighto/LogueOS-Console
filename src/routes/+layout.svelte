@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
-	import { Play, Cpu, Activity, Brain, MessageSquare, Terminal, Settings, AlertOctagon } from 'lucide-svelte';
+	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
 	import type { LayoutData } from './$types';
 	import type { KillSwitchState } from '$lib/types/kill-switch';
 
@@ -17,7 +17,6 @@
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Memory', path: '/memory', icon: Brain },
 		{ name: 'Ask', path: '/ask', icon: MessageSquare },
-		{ name: 'Terminal', path: '/terminal/cc-con', icon: Terminal },
 		{ name: 'Settings', path: '/settings', icon: Settings }
 	] as const;
 
@@ -61,15 +60,13 @@
 		};
 	});
 
-	// Terminal routes want every pixel — the ttyd iframe is the experience.
-	// Hide header + nav so the embedded terminal can use the full viewport.
-	const onTerminalRoute = $derived(page.url.pathname.includes('/terminal/'));
+	// Terminal route was gutted 2026-05-19 — until it can be replaced with
+	// something better. Header/nav now render unconditionally; no full-viewport
+	// iframe special-case to maintain.
 </script>
 
 <svelte:head>
-	{#if !onTerminalRoute}
-		<link rel="manifest" href="{base}/manifest.webmanifest" />
-	{/if}
+	<link rel="manifest" href="{base}/manifest.webmanifest" />
 </svelte:head>
 
 <div
@@ -77,7 +74,6 @@
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
 	<!-- Top Bar -->
-	{#if !onTerminalRoute}
 	<header
 		class="z-10 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 	>
@@ -113,19 +109,14 @@
 			</a>
 		{/if}
 	</header>
-	{/if}
 
 	<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav
 	     is part of the flex flow, ensuring it sits at the true bottom. -->
-	<main
-		class="flex-1 overflow-y-auto custom-scrollbar"
-		class:p-4={!onTerminalRoute}
-	>
+	<main class="flex-1 overflow-y-auto custom-scrollbar p-4">
 		{@render children()}
 	</main>
 
-	{#if !onTerminalRoute}
 	<!-- Bottom Navigation. Hard-reset to 44px fixed height.
 	     Removes all vertical padding and relies on flex-centering. -->
 	<nav
@@ -152,7 +143,6 @@
 			{/each}
 		</div>
 	</nav>
-	{/if}
 </div>
 
 <style>

@@ -12,8 +12,9 @@
 // Auth gate (HTTP Basic Auth, BASIC_AUTH=user:pass env var) protects routes
 // that must not be publicly reachable even though Funnel exposes them on the
 // public internet:
-//   - /console/terminal/*  — the terminal pages themselves
-//   - /cc, /gmi            — the ttyd WebSocket proxies
+//   - /cc, /gmi            — the ttyd WebSocket proxies (terminals still
+//                            reachable via direct Tailscale URL even though
+//                            the in-Console terminal page was gutted 2026-05-19)
 // Everything else (Console dashboard, /console/api/*) is open over Funnel —
 // no behavioral change for those.
 
@@ -28,11 +29,10 @@ const HOST = process.env.HOST ?? '0.0.0.0';
 // leak terminal access. Non-gated paths continue to work.
 const BASIC_AUTH = process.env.BASIC_AUTH ?? '';
 const AUTH_CREDS = BASIC_AUTH ? Buffer.from(BASIC_AUTH).toString('base64') : '';
-const PROTECTED_PREFIXES = ['/console/terminal/', '/cc', '/gmi'];
+const PROTECTED_PREFIXES = ['/cc', '/gmi'];
 
 function requiresAuth(reqUrl) {
-	// Strip query string for the comparison — `/console/terminal/cc-con?foo`
-	// must still match the `/console/terminal/` prefix.
+	// Strip query string for the comparison — `/cc?foo` must still match `/cc`.
 	const path = reqUrl.split('?')[0];
 	for (const p of PROTECTED_PREFIXES) {
 		// p ends with `/` (deep prefix) — startsWith works.
