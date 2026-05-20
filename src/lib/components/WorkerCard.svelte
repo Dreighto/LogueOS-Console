@@ -89,7 +89,7 @@
 </script>
 
 <div
-	class="flex flex-col gap-3 rounded-lg border border-[#30363D] bg-[#161B22] p-4 font-mono shadow-sm transition-all hover:scale-[1.01] hover:border-[#444C56] active:scale-[0.98]"
+	class="flex flex-col gap-2 rounded-sm border border-border bg-surface p-2.5 font-mono transition-all hover:border-[#444C56] active:scale-[0.99]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-3">
@@ -163,18 +163,18 @@
 	{:else if worker.state === 'idle'}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-[88px] items-center justify-center rounded border border-dashed border-[#30363D] bg-[#0D1117]"
+			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#30363D] bg-background"
 		>
-			<span class="text-[10px] tracking-widest text-[#484F58] uppercase"
-				>Available for dispatch</span
-			>
+			<span class="text-[10px] font-bold tracking-widest text-[#484F58] uppercase">[ IDLE ]</span>
 		</div>
 	{:else}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-[88px] items-center justify-center rounded border border-dashed border-[#484F58]/30 bg-[#0D1117]"
+			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#484F58]/30 bg-background"
 		>
-			<span class="text-[10px] tracking-widest text-[#484F58]/50 uppercase">Offline</span>
+			<span class="text-[10px] font-bold tracking-widest text-[#484F58]/50 uppercase"
+				>[ OFFLINE ]</span
+			>
 		</div>
 	{/if}
 

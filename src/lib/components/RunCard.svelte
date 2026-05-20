@@ -26,7 +26,7 @@
 <a
 	href={detailHref ?? '#'}
 	data-sveltekit-preload-data="hover"
-	class="flex h-[100px] cursor-pointer flex-col justify-between rounded-lg border border-[#21262D] bg-[#161B22] p-3 transition-all hover:bg-[#1C2128] hover:shadow-[0_0_8px_rgba(163,230,53,0.1)]"
+	class="flex cursor-pointer flex-col justify-between rounded-sm border border-border bg-surface p-2 transition-all hover:bg-[#1C2128] active:scale-[0.99]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
@@ -54,10 +54,10 @@
 	</div>
 
 	<div class="mt-1 flex items-baseline gap-2 overflow-hidden">
-		<span class="shrink-0 font-mono text-sm font-semibold text-[#F0F0F0]">
+		<span class="shrink-0 font-mono text-[10px] font-bold text-[#F0F0F0] uppercase">
 			{run.ticket_id || '---'}
 		</span>
-		<p class="truncate font-sans text-sm text-[#8A8A9A]">
+		<p class="truncate font-sans text-xs text-[#8A8A9A]">
 			{summaryPreview}
 		</p>
 	</div>
