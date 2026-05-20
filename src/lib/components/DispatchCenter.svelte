@@ -205,10 +205,10 @@
 </script>
 
 <div
-	class="flex h-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-2xl"
+	class="flex h-full flex-col overflow-hidden rounded-sm border border-border bg-surface"
 >
 	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2">
+	<div class="flex items-center justify-between border-b border-border bg-background px-4 py-2">
 		<div class="flex items-center gap-2 font-mono text-sm tracking-wider text-slate-300 uppercase">
 			<Terminal size={16} />
 			<span>Job Center</span>
@@ -307,13 +307,13 @@
 					id="track"
 					type="button"
 					onclick={() => (trackInLinear = !trackInLinear)}
-					class="flex items-center gap-2 rounded border p-1.5 font-mono text-xs transition-colors {trackInLinear
-						? 'border-purple-500/40 bg-purple-900/30 text-purple-300'
-						: 'border-slate-800 bg-slate-900 text-slate-500 hover:border-slate-700'}"
+					class="flex items-center gap-2 rounded-sm border p-1.5 font-mono text-xs transition-colors {trackInLinear
+						? 'border-status-blue/40 bg-status-blue/10 text-status-blue'
+						: 'border-border bg-background text-slate-500 hover:border-slate-700'}"
 				>
 					<span
 						class="flex h-3 w-3 items-center justify-center rounded-sm border text-[8px] {trackInLinear
-							? 'border-purple-400 bg-purple-500 text-white'
+							? 'border-status-blue bg-status-blue text-white'
 							: 'border-slate-600'}"
 					>
 						{#if trackInLinear}✓{/if}
@@ -326,9 +326,9 @@
 		{#if trackInLinear}
 			<!-- Linear ticket fields — revealed only when toggle is on. -->
 			<div
-				class="flex flex-col gap-3 rounded border border-purple-800/30 bg-purple-950/20 px-3 py-3"
+				class="flex flex-col gap-3 rounded-sm border border-border bg-background px-3 py-3"
 			>
-				<div class="font-mono text-[10px] tracking-wider text-purple-400 uppercase">
+				<div class="font-mono text-[10px] tracking-wider text-status-blue uppercase">
 					Linear Ticket Fields
 				</div>
 				<div class="flex flex-col gap-1.5">

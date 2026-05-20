@@ -88,20 +88,20 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-2xl flex-col gap-4 p-4 font-mono text-slate-200 md:p-6">
+<div class="mx-auto flex max-w-2xl flex-col gap-4 p-2 font-mono text-slate-200 md:p-4">
 	<!-- Q1: Is the team running? -->
-	<header class="flex items-center justify-between border-b border-slate-800 pb-2">
+	<header class="flex items-center justify-between border-b border-border pb-2">
 		<div class="flex items-center gap-2">
 			<Activity size={16} class="text-blue-400" />
-			<h1 class="text-xs font-bold tracking-widest text-slate-400 uppercase">Team Heartbeat</h1>
+			<h1 class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Team Heartbeat</h1>
 		</div>
 		<a
 			href={resolve('/settings')}
 			data-testid="system-mode-banner"
-			class="flex items-center gap-2 rounded border px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase transition-colors {s
+			class="flex items-center gap-2 rounded-sm border px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase transition-colors {s
 				.killSwitch.active
-				? 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20'
-				: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10'}"
+				? 'border-status-red/40 bg-status-red/10 text-status-red hover:bg-status-red/20'
+				: 'border-status-green/20 bg-status-green/5 text-status-green hover:bg-status-green/10'}"
 		>
 			<Power size={10} />
 			Kill: {s.killSwitch.active ? 'ACTIVE' : 'clear'}
@@ -110,14 +110,51 @@
 
 	{#if data.loadError}
 		<div
-			class="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[10px] text-amber-400"
+			class="rounded-sm border border-status-amber/30 bg-status-amber/5 px-3 py-2 text-[10px] text-status-amber"
 		>
 			Status board data unavailable — last known state shown.
 		</div>
 	{/if}
 
+	<!-- Q3: Is anything stuck? (MOVED TO TOP FOR TRIAGE VISIBILITY) -->
+	<section class="flex flex-col gap-2">
+		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+			<span>Blockers & Reviews</span>
+			<span class="flex gap-2">
+				<span class={s.failures.count > 0 ? 'text-status-red' : ''}>Failures: {s.failures.count}</span>
+				<span class={s.reviews.count > 0 ? 'text-status-amber' : ''}>Review: {s.reviews.count}</span>
+			</span>
+		</div>
+		<div class="flex flex-col gap-1">
+			{#each attentionItems as item, i (item.timestamp + i)}
+				<a
+					href={resolve('/activity')}
+					class="group flex items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-slate-600"
+				>
+					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
+						<AlertTriangle size={14} class="shrink-0 text-status-red" />
+					{:else}
+						<Clock size={14} class="shrink-0 text-status-amber" />
+					{/if}
+					<div class="flex min-w-0 flex-1 flex-col">
+						<div class="flex items-center gap-2">
+							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span>
+							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
+						</div>
+						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
+					</div>
+					<ChevronRight size={12} class="text-slate-600 group-hover:text-slate-400" />
+				</a>
+			{:else}
+				<div class="rounded-sm border border-dashed border-border p-2 text-center">
+					<span class="text-[10px] text-slate-600 uppercase italic">No stuck work detected</span>
+				</div>
+			{/each}
+		</div>
+	</section>
+
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-		<!-- Workers Section (all workers, not just busy) -->
+		<!-- Workers Section -->
 		<section class="flex flex-col gap-2">
 			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
 				<span>Workers</span>
@@ -127,23 +164,23 @@
 				{#each s.workers.items as w (w.id)}
 					<a
 						href={resolve('/workers')}
-						class="group flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-blue-500/40"
+						class="group flex flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-blue-500/40"
 					>
 						<div class="flex items-center justify-between">
 							<span
-								class="text-[11px] font-bold {w.state === 'busy'
+								class="text-[11px] font-bold uppercase tracking-tight {w.state === 'busy'
 									? 'text-blue-400'
 									: w.state === 'idle'
 										? 'text-slate-400'
 										: 'text-slate-600'}">{w.id === 'gemini' ? 'Antigravity' : w.id}</span
 							>
-							<span class="text-[9px] text-slate-500"
+							<span class="text-[9px] uppercase text-slate-500"
 								>{w.since ? formatRelativeTime(w.since) : w.state}</span
 							>
 						</div>
 						{#if w.state === 'busy'}
-							<div class="truncate text-[10px] text-slate-300">
-								{sanitizeTicketId(w.ticket_id)} • {humanizeStep(w.step)}
+							<div class="truncate text-[10px] uppercase tracking-tight text-slate-300">
+								<span class="text-blue-400">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(w.step)}
 							</div>
 							{#if w.branch}
 								<div class="truncate text-[9px] text-slate-500 italic">
@@ -151,13 +188,13 @@
 								</div>
 							{/if}
 						{:else}
-							<div class="text-[10px] text-slate-600 italic">
-								{w.state === 'idle' ? 'Available' : 'Offline'}
+							<div class="text-[10px] font-bold tracking-widest text-slate-600 uppercase">
+								{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
 							</div>
 						{/if}
 					</a>
 				{:else}
-					<div class="rounded border border-dashed border-slate-800 p-3 text-center">
+					<div class="rounded-sm border border-dashed border-border p-2 text-center">
 						<span class="text-[10px] text-slate-600 uppercase italic">No workers</span>
 					</div>
 				{/each}
@@ -168,15 +205,15 @@
 		<section class="flex flex-col gap-2">
 			<div class="text-[10px] font-bold text-slate-500 uppercase">Work Today</div>
 			<div class="flex flex-col gap-2">
-				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
-					<span class="text-[9px] text-slate-500 uppercase">Shipped</span>
-					<span class="text-lg font-bold text-emerald-400">{s.completions.today}</span>
+				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
+					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Shipped</span>
+					<span class="text-lg font-bold text-status-green">{s.completions.today}</span>
 				</div>
-				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
-					<span class="text-[9px] text-slate-500 uppercase">Attention</span>
+				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
+					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Attention</span>
 					<span
 						class="text-lg font-bold {s.failures.count + s.reviews.count > 0
-							? 'text-amber-400'
+							? 'text-status-amber'
 							: 'text-slate-500'}">{s.failures.count + s.reviews.count}</span
 					>
 				</div>
@@ -195,54 +232,17 @@
 				</a>
 			</div>
 			<div class="grid grid-cols-2 gap-2">
-				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
-					<span class="text-[9px] text-slate-500 uppercase">Cost (USD)</span>
-					<span class="text-lg font-bold text-emerald-400">${s.usage.todayCost.toFixed(2)}</span>
+				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
+					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Cost (USD)</span>
+					<span class="text-lg font-bold text-status-green">${s.usage.todayCost.toFixed(2)}</span>
 				</div>
-				<div class="flex flex-col gap-1 rounded border border-slate-800 bg-slate-900/40 p-3">
-					<span class="text-[9px] text-slate-500 uppercase">Dispatches</span>
+				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
+					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Dispatches</span>
 					<span class="text-lg font-bold text-blue-400">{s.usage.recentDispatches}</span>
 				</div>
 			</div>
 		</section>
 	</div>
-
-	<!-- Q3: Is anything stuck? -->
-	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
-			<span>Blockers & Reviews</span>
-			<span class="flex gap-2">
-				<span class={s.failures.count > 0 ? 'text-red-400' : ''}>Failures: {s.failures.count}</span>
-				<span class={s.reviews.count > 0 ? 'text-amber-400' : ''}>Review: {s.reviews.count}</span>
-			</span>
-		</div>
-		<div class="flex flex-col gap-1">
-			{#each attentionItems as item, i (item.timestamp + i)}
-				<a
-					href={resolve('/activity')}
-					class="group flex items-center gap-3 rounded border border-slate-800 bg-slate-900/40 p-2 transition-colors hover:border-slate-600"
-				>
-					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
-						<AlertTriangle size={14} class="shrink-0 text-red-500" />
-					{:else}
-						<Clock size={14} class="shrink-0 text-amber-500" />
-					{/if}
-					<div class="flex min-w-0 flex-1 flex-col">
-						<div class="flex items-center gap-2">
-							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span>
-							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
-						</div>
-						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
-					</div>
-					<ChevronRight size={12} class="text-slate-600 group-hover:text-slate-400" />
-				</a>
-			{:else}
-				<div class="rounded border border-dashed border-slate-800 p-3 text-center">
-					<span class="text-[10px] text-slate-600 uppercase italic">No stuck work detected</span>
-				</div>
-			{/each}
-		</div>
-	</section>
 
 	<!-- Q4: What just got done? -->
 	<section class="flex flex-col gap-2">
@@ -252,11 +252,11 @@
 		</div>
 		<div class="flex flex-col gap-1">
 			{#each s.completions.items as item, i (item.timestamp + i)}
-				<div class="flex items-center gap-3 rounded border border-slate-800 bg-slate-900/20 p-2">
-					<CheckCircle2 size={14} class="shrink-0 text-emerald-500" />
+				<div class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2">
+					<CheckCircle2 size={14} class="shrink-0 text-status-green" />
 					<div class="flex min-w-0 flex-col">
 						<div class="flex items-center gap-2">
-							<span class="text-[10px] font-bold text-emerald-400"
+							<span class="text-[10px] font-bold text-status-green"
 								>{item.ticket_id || 'shipped'}</span
 							>
 							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
@@ -265,7 +265,7 @@
 					</div>
 				</div>
 			{:else}
-				<div class="rounded border border-dashed border-slate-800 p-3 text-center">
+				<div class="rounded-sm border border-dashed border-border p-2 text-center">
 					<span class="text-[10px] text-slate-600 uppercase italic">Nothing shipped yet today</span>
 				</div>
 			{/each}
@@ -276,7 +276,7 @@
 	<a
 		data-testid="row-dispatch"
 		href={resolve('/ask')}
-		class="mt-2 flex items-center justify-center gap-2 rounded border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:bg-blue-600/30"
+		class="mt-2 flex items-center justify-center gap-2 rounded-sm border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:bg-blue-600/30 active:scale-[0.99]"
 	>
 		<Plus size={14} />
 		Give the team a job
