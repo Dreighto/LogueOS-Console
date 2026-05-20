@@ -82,9 +82,30 @@
 @layer base {
   * {
     @apply border-border;
+    /* Eliminate the 300ms double-tap-to-zoom delay on mobile touch targets */
+    touch-action: manipulation;
+    /* Remove grey tap overlay on iOS Safari */
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Prevent boundary scroll rubber-banding on mobile */
+    overscroll-behavior-y: none;
+  }
+
+  /* Prevent annoying accidental text selection when double tapping tabs/buttons */
+  header, nav, button, a, [role="button"], [role="tab"], img {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Reusable class for zero-latency mobile touch feedback */
+  .active-trigger {
+    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .active-trigger:active {
+    transform: scale(0.96);
+    opacity: 0.85;
   }
 }

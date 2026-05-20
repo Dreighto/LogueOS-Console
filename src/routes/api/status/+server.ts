@@ -37,7 +37,16 @@ const EMPTY: StatusBoardData = {
 	completions: { today: 0, items: [] }
 };
 
+let cachedStatus: StatusBoardData | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 1500; // 1.5 second cache window to prevent CPU/Network thrashing
+
 export const GET: RequestHandler = async ({ fetch }) => {
+	const currentTime = Date.now();
+	if (cachedStatus && currentTime - lastCacheTime < CACHE_TTL_MS) {
+		return json({ status: cachedStatus });
+	}
+
 	try {
 		const [runsResp, workersResp, usageResp, killResp] = await Promise.all([
 			fetch(resolve('/api/runs')),
@@ -102,8 +111,16 @@ export const GET: RequestHandler = async ({ fetch }) => {
 			}
 		};
 
+		// Save successful response to cache
+		cachedStatus = status;
+		lastCacheTime = Date.now();
+
 		return json({ status });
 	} catch {
+		// Fallback to cached state if backend goes offline to maintain operational visibility
+		if (cachedStatus) {
+			return json({ status: cachedStatus });
+		}
 		return json({ status: EMPTY });
 	}
 };

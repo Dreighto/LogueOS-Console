@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
+	import { onNavigate } from '$app/navigation';
 	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
@@ -62,6 +63,18 @@
 		};
 	});
 
+	// Butter-smooth, hardware-accelerated view transitions for route swaps (native GPU view-transitions)
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
+
 	// Terminal route was gutted 2026-05-19 — until it can be replaced with
 	// something better. Header/nav now render unconditionally; no full-viewport
 	// iframe special-case to maintain.
@@ -72,6 +85,7 @@
 </svelte:head>
 
 <div
+	data-sveltekit-preload-data="hover"
 	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl"
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
@@ -105,7 +119,7 @@
 				href={resolve('/settings')}
 				aria-live="assertive"
 				in:fade={{ duration: 300 }}
-				class="flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-red-300 uppercase transition-colors hover:bg-red-500/20"
+				class="active-trigger flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-red-300 uppercase transition-colors hover:bg-red-500/20"
 			>
 				<AlertOctagon size={12} aria-hidden="true" />
 				<span>Halt</span>
@@ -140,7 +154,7 @@
 				<a
 					href={resolve(tab.path)}
 					aria-current={page.url.pathname === tab.path ? 'page' : undefined}
-					class="group relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
+					class="group active-trigger relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
 					class:text-cta={page.url.pathname === tab.path}
 					class:text-muted-foreground={page.url.pathname !== tab.path}
 				>
