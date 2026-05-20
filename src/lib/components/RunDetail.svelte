@@ -12,7 +12,8 @@
 		Clock,
 		Hash
 	} from 'lucide-svelte';
-	import { statusColors, workerColors } from '$lib/styles/colors';
+	import { statusColors } from '$lib/styles/colors';
+	import { workerColor, workerLabel } from '$lib/config/workers';
 
 	interface Props {
 		run: Run;
@@ -21,7 +22,7 @@
 	let { run }: Props = $props();
 
 	let statusColor = $derived(statusColors[run.status]);
-	let workerColor = $derived(workerColors[run.worker || ''] || '#6B7280');
+	let runWorkerColor = $derived(workerColor(run.worker));
 
 	// Project Registry: maps project_id (from completion log) to its canonical
 	// GitHub repo and Linear workspace slug. This is the UI-side mirror of the
@@ -89,9 +90,9 @@
 			<div class="flex flex-wrap gap-2">
 				<span
 					class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
-					style="background-color: {workerColor}22; color: {workerColor}; border: 1px solid {workerColor}44"
+					style="background-color: {runWorkerColor}22; color: {runWorkerColor}; border: 1px solid {runWorkerColor}44"
 				>
-					{run.worker || 'unknown'}
+					{workerLabel(run.worker)}
 				</span>
 				<span
 					class="rounded border border-[#30363D] bg-[#21262D] px-2 py-0.5 text-[10px] font-bold tracking-wider text-[#8A8A9A] uppercase"

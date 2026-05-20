@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { WorkerStatus } from '$lib/types/worker';
 	import { formatRelativeTime } from '$lib/utils/format';
+	import { workerLabel } from '$lib/config/workers';
 	import { resolve } from '$app/paths';
 	import { Square, AlertCircle, Play, Clock } from 'lucide-svelte';
 	import { scale, fade } from 'svelte/transition';
@@ -22,9 +23,9 @@
 	let confirming = $state(false);
 	let submitting = $state(false);
 	const EXIT_STATUS_LABELS: Record<string, string> = {
-		'CONFIRMED_WORKING': 'Completed successfully',
-		'INCONCLUSIVE': 'Stopped — needs follow-up',
-		'FAILED': 'Failed',
+		CONFIRMED_WORKING: 'Completed successfully',
+		INCONCLUSIVE: 'Stopped — needs follow-up',
+		FAILED: 'Failed',
 		'ESCALATE: HUMAN-REQUIRED': 'Escalated — needs your attention',
 		'ESCALATE: REPEATED_FAILURE': 'Repeated failure — escalated'
 	};
@@ -82,12 +83,13 @@
 
 	// Operational notes only shown when there is an actual issue (e.g. failure)
 	let hasIssue = $derived(
-		worker.last_exit_status && !['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(worker.last_exit_status)
+		worker.last_exit_status &&
+			!['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(worker.last_exit_status)
 	);
 </script>
 
 <div
-	class="flex flex-col gap-3 rounded-lg border border-[#30363D] bg-[#161B22] p-4 font-mono shadow-sm transition-all hover:border-[#444C56] active:scale-[0.98] hover:scale-[1.01]"
+	class="flex flex-col gap-3 rounded-lg border border-[#30363D] bg-[#161B22] p-4 font-mono shadow-sm transition-all hover:scale-[1.01] hover:border-[#444C56] active:scale-[0.98]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-3">
@@ -95,11 +97,11 @@
 				class="h-2 w-2 rounded-full transition-colors duration-500"
 				style="background-color: {stateInfo.color}"
 			></div>
-			<h3 class="text-xs font-bold uppercase tracking-wider text-[#F0F6FC]">
-				{worker.id === 'gemini' ? 'Antigravity' : worker.id}
+			<h3 class="text-xs font-bold tracking-wider text-[#F0F6FC] uppercase">
+				{workerLabel(worker.id)}
 			</h3>
 		</div>
-		<span class="text-[10px] font-medium uppercase tracking-widest text-[#8B949E]">
+		<span class="text-[10px] font-medium tracking-widest text-[#8B949E] uppercase">
 			{stateInfo.label}
 		</span>
 	</div>
@@ -112,12 +114,12 @@
 		>
 			<div class="flex flex-col gap-1">
 				<span
-					class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]"
+					class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
 				>
 					<Play size={10} />
 					WORKING ON
 				</span>
-				<div class="text-sm font-medium leading-snug text-[#F0F6FC]">
+				<div class="text-sm leading-snug font-medium text-[#F0F6FC]">
 					{#if worker.ticket_id}
 						<span class="text-[#3B82F6]">{worker.ticket_id}:</span>
 					{/if}
@@ -128,7 +130,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
 					<span
-						class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]"
+						class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
 					>
 						<Clock size={10} />
 						ELAPSED
@@ -143,9 +145,9 @@
 					disabled={!killable || submitting}
 					onclick={handleKillClick}
 					onblur={disarmConfirm}
-					class="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase border rounded transition-colors {confirming
-						? 'bg-red-500/20 border-red-500 text-red-400'
-						: 'bg-[#21262D] border-[#30363D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
+					class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold uppercase transition-colors {confirming
+						? 'border-red-500 bg-red-500/20 text-red-400'
+						: 'border-[#30363D] bg-[#21262D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
 				>
 					{#if submitting}
 						<div
@@ -161,16 +163,18 @@
 	{:else if worker.state === 'idle'}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-[88px] items-center justify-center border border-dashed border-[#30363D] rounded bg-[#0D1117]"
+			class="flex h-[88px] items-center justify-center rounded border border-dashed border-[#30363D] bg-[#0D1117]"
 		>
-			<span class="text-[10px] uppercase tracking-widest text-[#484F58]">Available for dispatch</span>
+			<span class="text-[10px] tracking-widest text-[#484F58] uppercase"
+				>Available for dispatch</span
+			>
 		</div>
 	{:else}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-[88px] items-center justify-center border border-dashed border-[#484F58]/30 rounded bg-[#0D1117]"
+			class="flex h-[88px] items-center justify-center rounded border border-dashed border-[#484F58]/30 bg-[#0D1117]"
 		>
-			<span class="text-[10px] uppercase tracking-widest text-[#484F58]/50">Offline</span>
+			<span class="text-[10px] tracking-widest text-[#484F58]/50 uppercase">Offline</span>
 		</div>
 	{/if}
 
@@ -181,7 +185,7 @@
 		>
 			<AlertCircle size={14} class="mt-0.5 shrink-0" />
 			<div class="flex flex-col gap-0.5">
-				<span class="font-bold uppercase tracking-wider">Operational Note</span>
+				<span class="font-bold tracking-wider uppercase">Operational Note</span>
 				<span>{errorMsg || formatExitStatus(worker.last_exit_status)}</span>
 			</div>
 		</div>

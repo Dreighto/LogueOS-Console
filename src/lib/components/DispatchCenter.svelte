@@ -1,8 +1,21 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { onDestroy } from 'svelte';
-	import { Terminal, Send, Loader2, AlertCircle, CheckCircle2, Clock, XCircle, AlertTriangle } from 'lucide-svelte';
+	import {
+		Terminal,
+		Send,
+		Loader2,
+		AlertCircle,
+		CheckCircle2,
+		Clock,
+		XCircle,
+		AlertTriangle
+	} from 'lucide-svelte';
 	import type { Run } from '$lib/types/run';
+	import { getDispatchWorkers } from '$lib/config/workers';
+
+	// Registry-driven worker roster — drives the Worker dropdown below.
+	const dispatchWorkers = getDispatchWorkers();
 
 	const POLL_INTERVAL_MS = 10_000;
 	const MAX_WAIT_MS = 11 * 60 * 1000;
@@ -50,8 +63,14 @@
 	let startedAt = 0;
 
 	function clearTimers() {
-		if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-		if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+		if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+		if (tickTimer) {
+			clearInterval(tickTimer);
+			tickTimer = null;
+		}
 	}
 
 	// The listener writes result.json at spawn time with status "spawned" (then
@@ -185,31 +204,33 @@
 	onDestroy(clearTimers);
 </script>
 
-<div class="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-lg overflow-hidden shadow-2xl">
+<div
+	class="flex h-full flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-2xl"
+>
 	<!-- Header -->
-	<div class="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
-		<div class="flex items-center gap-2 text-slate-300 font-mono text-sm uppercase tracking-wider">
+	<div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2">
+		<div class="flex items-center gap-2 font-mono text-sm tracking-wider text-slate-300 uppercase">
 			<Terminal size={16} />
 			<span>Job Center</span>
 		</div>
-		<div class="flex items-center gap-4 text-[10px] font-mono">
+		<div class="flex items-center gap-4 font-mono text-[10px]">
 			<div class="flex items-center gap-1.5 text-slate-500">
-				<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+				<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
 				GATEWAY ONLINE
 			</div>
 		</div>
 	</div>
 
 	<!-- Main Body -->
-	<div class="flex-1 p-4 flex flex-col gap-4 overflow-y-auto text-slate-100">
+	<div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-slate-100">
 		<!-- Config Row -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="role" class="text-[10px] font-mono text-slate-500 uppercase">Role</label>
+				<label for="role" class="font-mono text-[10px] text-slate-500 uppercase">Role</label>
 				<select
 					id="role"
 					bind:value={role}
-					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
+					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					<option value="frontend">Frontend (UI)</option>
 					<option value="backend">Backend (code & logic)</option>
@@ -217,24 +238,27 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="worker" class="text-[10px] font-mono text-slate-500 uppercase">Worker</label>
+				<label for="worker" class="font-mono text-[10px] text-slate-500 uppercase">Worker</label>
 				<select
 					id="worker"
 					bind:value={worker}
-					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
+					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					<option value="auto">Auto (route by role)</option>
-					<option value="claude-code">Claude Code</option>
-					<option value="gemini">Antigravity / Gemini</option>
+					{#each dispatchWorkers as w (w.id)}
+						<option value={w.dispatchName}>{w.label}</option>
+					{/each}
 				</select>
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="repo" class="text-[10px] font-mono text-slate-500 uppercase">Which project?</label>
+				<label for="repo" class="font-mono text-[10px] text-slate-500 uppercase"
+					>Which project?</label
+				>
 				<select
 					id="repo"
 					bind:value={targetRepo}
-					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
+					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					<option value="project-miru">project-miru</option>
 					<option value="LogueOS-Console">LogueOS-Console</option>
@@ -243,25 +267,29 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="ticket" class="text-[10px] font-mono text-slate-500 uppercase">Ticket ID (Optional)</label>
+				<label for="ticket" class="font-mono text-[10px] text-slate-500 uppercase"
+					>Ticket ID (Optional)</label
+				>
 				<input
 					id="ticket"
 					type="text"
 					bind:value={ticketId}
 					placeholder="e.g. LOS-65"
-					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 placeholder:text-slate-700"
+					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:border-blue-500 focus:outline-none"
 				/>
 			</div>
 		</div>
 
 		<!-- Advanced Row -->
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 			<div class="flex flex-col gap-1.5">
-				<label for="thinking" class="text-[10px] font-mono text-slate-500 uppercase">Thinking Level</label>
+				<label for="thinking" class="font-mono text-[10px] text-slate-500 uppercase"
+					>Thinking Level</label
+				>
 				<select
 					id="thinking"
 					bind:value={thinkingLevel}
-					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
+					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
 				>
 					<option value="none">Standard</option>
 					<option value="extended">Extended Thinking</option>
@@ -271,19 +299,21 @@
 			<!-- LOS-92: Track in Linear toggle. Off by default = current behavior
 			     (direct dispatch, no Linear ticket). On = file Linear ticket first,
 			     dispatch worker against it. -->
-			<div class="flex flex-col gap-1.5 justify-end">
-				<label for="track" class="text-[10px] font-mono text-slate-500 uppercase">Track in Linear</label>
+			<div class="flex flex-col justify-end gap-1.5">
+				<label for="track" class="font-mono text-[10px] text-slate-500 uppercase"
+					>Track in Linear</label
+				>
 				<button
 					id="track"
 					type="button"
 					onclick={() => (trackInLinear = !trackInLinear)}
-					class="flex items-center gap-2 font-mono text-xs p-1.5 rounded border transition-colors {trackInLinear
-						? 'bg-purple-900/30 border-purple-500/40 text-purple-300'
-						: 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700'}"
+					class="flex items-center gap-2 rounded border p-1.5 font-mono text-xs transition-colors {trackInLinear
+						? 'border-purple-500/40 bg-purple-900/30 text-purple-300'
+						: 'border-slate-800 bg-slate-900 text-slate-500 hover:border-slate-700'}"
 				>
 					<span
-						class="w-3 h-3 rounded-sm border flex items-center justify-center text-[8px] {trackInLinear
-							? 'bg-purple-500 border-purple-400 text-white'
+						class="flex h-3 w-3 items-center justify-center rounded-sm border text-[8px] {trackInLinear
+							? 'border-purple-400 bg-purple-500 text-white'
 							: 'border-slate-600'}"
 					>
 						{#if trackInLinear}✓{/if}
@@ -295,12 +325,14 @@
 
 		{#if trackInLinear}
 			<!-- Linear ticket fields — revealed only when toggle is on. -->
-			<div class="flex flex-col gap-3 px-3 py-3 bg-purple-950/20 border border-purple-800/30 rounded">
-				<div class="text-[10px] font-mono text-purple-400 uppercase tracking-wider">
+			<div
+				class="flex flex-col gap-3 rounded border border-purple-800/30 bg-purple-950/20 px-3 py-3"
+			>
+				<div class="font-mono text-[10px] tracking-wider text-purple-400 uppercase">
 					Linear Ticket Fields
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="linear-title" class="text-[10px] font-mono text-slate-500 uppercase">
+					<label for="linear-title" class="font-mono text-[10px] text-slate-500 uppercase">
 						Title <span class="text-red-400">*</span>
 					</label>
 					<input
@@ -308,16 +340,18 @@
 						type="text"
 						bind:value={linearTitle}
 						placeholder="One-line summary of the work"
-						class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500 placeholder:text-slate-700"
+						class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:border-purple-500 focus:outline-none"
 					/>
 				</div>
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-team" class="text-[10px] font-mono text-slate-500 uppercase">Team</label>
+						<label for="linear-team" class="font-mono text-[10px] text-slate-500 uppercase"
+							>Team</label
+						>
 						<select
 							id="linear-team"
 							bind:value={linearTeam}
-							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
 						>
 							{#each LINEAR_TEAMS as t (t)}
 								<option value={t}>{t}</option>
@@ -325,13 +359,13 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-project" class="text-[10px] font-mono text-slate-500 uppercase">
+						<label for="linear-project" class="font-mono text-[10px] text-slate-500 uppercase">
 							Project (optional)
 						</label>
 						<select
 							id="linear-project"
 							bind:value={linearProject}
-							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
 						>
 							{#each linearProjectOptions as p (p)}
 								<option value={p}>{p || '— none —'}</option>
@@ -339,13 +373,13 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-priority" class="text-[10px] font-mono text-slate-500 uppercase">
+						<label for="linear-priority" class="font-mono text-[10px] text-slate-500 uppercase">
 							Priority
 						</label>
 						<select
 							id="linear-priority"
 							bind:value={linearPriority}
-							class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-purple-500"
+							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
 						>
 							<option value={0}>0 — No priority</option>
 							<option value={1}>1 — Urgent</option>
@@ -359,44 +393,54 @@
 		{/if}
 
 		<!-- Prompt Area -->
-		<div class="flex-1 flex flex-col gap-1.5 min-h-[150px]">
-			<label for="prompt" class="text-[10px] font-mono text-slate-500 uppercase">Describe what needs to be done</label>
+		<div class="flex min-h-[150px] flex-1 flex-col gap-1.5">
+			<label for="prompt" class="font-mono text-[10px] text-slate-500 uppercase"
+				>Describe what needs to be done</label
+			>
 			<textarea
 				id="prompt"
 				bind:value={prompt}
 				placeholder="What needs to be done?"
-				class="flex-1 bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-3 rounded focus:outline-none focus:border-blue-500 placeholder:text-slate-700 resize-none leading-relaxed"
+				class="flex-1 resize-none rounded border border-slate-800 bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 placeholder:text-slate-700 focus:border-blue-500 focus:outline-none"
 			></textarea>
 		</div>
 
 		<!-- Status Bar -->
 		{#if status !== 'idle'}
 			{@const completedStatus = terminalRun?.status}
-			{@const completedTone = completedStatus === 'CONFIRMED_WORKING'
-				? 'green'
-				: completedStatus === 'INCONCLUSIVE'
-					? 'amber'
-					: 'red'}
+			{@const completedTone =
+				completedStatus === 'CONFIRMED_WORKING'
+					? 'green'
+					: completedStatus === 'INCONCLUSIVE'
+						? 'amber'
+						: 'red'}
 			<div
-				class="flex items-start gap-3 px-3 py-2 rounded text-xs font-mono border {
-					status === 'submitting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
-					status === 'waiting' ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' :
-					status === 'timeout' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-					status === 'completed' && completedTone === 'green' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
-					status === 'completed' && completedTone === 'amber' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-					status === 'completed' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-					'bg-red-500/10 border-red-500/20 text-red-400'
-				}"
+				class="flex items-start gap-3 rounded border px-3 py-2 font-mono text-xs {status ===
+				'submitting'
+					? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+					: status === 'waiting'
+						? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+						: status === 'timeout'
+							? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+							: status === 'completed' && completedTone === 'green'
+								? 'border-green-500/20 bg-green-500/10 text-green-400'
+								: status === 'completed' && completedTone === 'amber'
+									? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+									: status === 'completed'
+										? 'border-red-500/20 bg-red-500/10 text-red-400'
+										: 'border-red-500/20 bg-red-500/10 text-red-400'}"
 			>
 				{#if status === 'submitting'}
-					<Loader2 size={14} class="animate-spin mt-0.5" />
+					<Loader2 size={14} class="mt-0.5 animate-spin" />
 					<span>Sending...</span>
 				{:else if status === 'waiting'}
-					<span class="relative flex h-3 w-3 mt-0.5">
-						<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60"></span>
-						<span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+					<span class="relative mt-0.5 flex h-3 w-3">
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-60"
+						></span>
+						<span class="relative inline-flex h-3 w-3 rounded-full bg-blue-500"></span>
 					</span>
-					<div class="flex-1 flex flex-col gap-0.5">
+					<div class="flex flex-1 flex-col gap-0.5">
 						<div class="flex items-center gap-2">
 							<Clock size={12} />
 							<span>Worker running... {formatElapsed(elapsedSec)}</span>
@@ -407,7 +451,7 @@
 								href={lastTicketUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="text-[10px] underline text-purple-300 hover:text-purple-200 w-fit"
+								class="w-fit text-[10px] text-purple-300 underline hover:text-purple-200"
 							>
 								Filed: {lastTicketId} →
 							</a>
@@ -416,7 +460,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -428,19 +472,19 @@
 					{:else}
 						<XCircle size={14} class="mt-0.5" />
 					{/if}
-					<div class="flex-1 flex flex-col gap-0.5">
+					<div class="flex flex-1 flex-col gap-0.5">
 						<span class="font-bold">{completedStatus?.replace('_', ' ')}</span>
 						{#if terminalRun.summary}
-							<span class="opacity-90 leading-relaxed">{terminalRun.summary}</span>
+							<span class="leading-relaxed opacity-90">{terminalRun.summary}</span>
 						{/if}
-						<div class="flex items-center gap-3 text-[10px] opacity-70 flex-wrap">
+						<div class="flex flex-wrap items-center gap-3 text-[10px] opacity-70">
 							<span>Ref: {lastTraceId}</span>
 							{#if lastTicketId && lastTicketUrl}
 								<a
 									href={lastTicketUrl}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="underline text-purple-300 hover:text-purple-200"
+									class="text-purple-300 underline hover:text-purple-200"
 								>
 									Filed: {lastTicketId} →
 								</a>
@@ -453,7 +497,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -463,13 +507,13 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="ml-auto text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+						class="mt-0.5 ml-auto text-[10px] underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
 				{:else if status === 'timeout'}
 					<AlertTriangle size={14} class="mt-0.5" />
-					<div class="flex-1 flex flex-col gap-0.5">
+					<div class="flex flex-1 flex-col gap-0.5">
 						<span>Worker may have timed out — no terminal status after 11 min.</span>
 						<div class="flex items-center gap-3 text-[10px] opacity-70">
 							<span>Ref: {lastTraceId}</span>
@@ -479,7 +523,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="text-[10px] underline opacity-70 hover:opacity-100 mt-0.5"
+						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -492,11 +536,11 @@
 	</div>
 
 	<!-- Footer / Action -->
-	<div class="px-4 py-3 bg-slate-900/50 border-t border-slate-800 flex justify-end">
+	<div class="flex justify-end border-t border-slate-800 bg-slate-900/50 px-4 py-3">
 		<button
 			onclick={handleSubmit}
 			disabled={status === 'submitting' || status === 'waiting' || !prompt.trim()}
-			class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-mono font-bold px-6 py-2 rounded transition-all active:scale-95 shadow-lg shadow-blue-900/20"
+			class="flex items-center gap-2 rounded bg-blue-600 px-6 py-2 font-mono text-xs font-bold text-white shadow-lg shadow-blue-900/20 transition-all hover:bg-blue-500 active:scale-95 disabled:bg-slate-800 disabled:text-slate-600"
 		>
 			{#if status === 'submitting'}
 				<Loader2 size={14} class="animate-spin" />

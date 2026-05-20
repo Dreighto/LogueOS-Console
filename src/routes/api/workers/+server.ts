@@ -2,16 +2,17 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { serverConfig } from '$lib/server/config';
 import type { WorkerStatus } from '$lib/types/worker';
+import { getDispatchWorkers, resolveWorker } from '$lib/config/workers';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
 export const GET: RequestHandler = async () => {
-	// Base roster
-	const workers: Record<string, WorkerStatus> = {
-		'claude-code': { id: 'claude-code', state: 'idle' },
-		gemini: { id: 'gemini', state: 'idle' }
-	};
+	// Base roster — registry-driven (see $lib/config/workers).
+	const workers: Record<string, WorkerStatus> = {};
+	for (const def of getDispatchWorkers()) {
+		workers[def.id] = { id: def.id, state: 'idle' };
+	}
 
 	try {
 		// 1. Read DEFINITIVE active leases from worktree_leases.json
@@ -22,13 +23,13 @@ export const GET: RequestHandler = async () => {
 			for (const slotPath in leases) {
 				const lease = leases[slotPath];
 				if (lease && lease.worker) {
-					// Normalize worker name (e.g., 'claude-code-1' -> 'claude-code')
-					let workerId = lease.worker;
-					if (workerId.startsWith('claude-code')) workerId = 'claude-code';
-					if (workerId.startsWith('gemini')) workerId = 'gemini';
+					// Resolve the lease worker name (e.g. 'claude-code-1') to a
+					// registry id. Unknown workers are skipped.
+					const def = resolveWorker(lease.worker);
+					if (!def) continue;
 
-					workers[workerId] = {
-						id: workerId,
+					workers[def.id] = {
+						id: def.id,
 						state: 'busy',
 						trace_id: lease.trace_id,
 						ticket_id: lease.ticket_id,
@@ -64,11 +65,10 @@ export const GET: RequestHandler = async () => {
 					const rawId = hb.worker_id || hb.worker;
 					if (!rawId) continue;
 
-					let normalizedId = rawId;
-					if (rawId.startsWith('claude-code')) normalizedId = 'claude-code';
-					if (rawId.startsWith('gemini')) normalizedId = 'gemini';
+					const def = resolveWorker(rawId);
+					if (!def) continue;
 
-					const worker = workers[normalizedId];
+					const worker = workers[def.id];
 					if (!worker || worker.state !== 'busy') continue;
 
 					// Filter 1: trace_id or ticket_id must match the active lease.
@@ -107,16 +107,15 @@ export const GET: RequestHandler = async () => {
 				if (!line.trim()) continue;
 				try {
 					const comp = JSON.parse(line);
-					const workerId = comp.worker;
-					if (workerId && workers[workerId] && workers[workerId].state === 'idle') {
-						workers[workerId].last_exit_status = comp.status;
+					const def = resolveWorker(comp.worker);
+					if (def && workers[def.id]?.state === 'idle') {
+						workers[def.id].last_exit_status = comp.status;
 					}
 				} catch (e) {
 					// Ignore
 				}
 			}
 		}
-
 	} catch (error) {
 		console.error('Error reading worker states:', error);
 	}

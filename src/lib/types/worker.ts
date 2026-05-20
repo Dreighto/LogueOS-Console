@@ -1,7 +1,7 @@
 export type WorkerState = 'idle' | 'busy' | 'offline';
 
 export interface WorkerStatus {
-	id: string; // worker name, e.g., 'claude-code', 'gemini' (Antigravity)
+	id: string; // registry worker id, e.g. 'backend-1' (see $lib/config/workers)
 	state: WorkerState;
 	trace_id?: string;
 	pid?: number;
