@@ -1,111 +1,120 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--font-sans: 'Mona Sans', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-background: #0d1117;
-  --color-surface: #161b22;
-  --color-cta: #a3e635;
+	--color-background: #0d1117;
+	--color-surface: #161b22;
+	--color-cta: #a3e635;
 
-  --color-status-green: #22c55e;
-  --color-status-amber: #f59e0b;
-  --color-status-red: #ef4444;
-  --color-status-blue: #3b82f6;
-  --color-status-grey: #6b7280;
+	--color-status-green: #22c55e;
+	--color-status-amber: #f59e0b;
+	--color-status-red: #ef4444;
+	--color-status-blue: #3b82f6;
+	--color-status-purple: #a855f7;
+	--color-status-grey: #6b7280;
 
-  --color-worker-claude: #8b5cf6;
-  --color-worker-gemini: #3b82f6;
-  --color-worker-codex: #10b981;
-  --color-worker-cursor: #f59e0b;
-  --color-worker-operator: #ef4444;
+	--color-worker-claude: #8b5cf6;
+	--color-worker-gemini: #3b82f6;
+	--color-worker-codex: #10b981;
+	--color-worker-cursor: #f59e0b;
+	--color-worker-operator: #ef4444;
 
-  /* shadcn-svelte compatibility */
-  --radius: 0.5rem;
+	/* shadcn-svelte compatibility */
+	--radius: 0.5rem;
 
-  --color-primary: #a3e635;
-  --color-primary-foreground: #0d1117;
+	--color-primary: #a3e635;
+	--color-primary-foreground: #0d1117;
 
-  --color-secondary: #21262d;
-  --color-secondary-foreground: #ffffff;
+	--color-secondary: #21262d;
+	--color-secondary-foreground: #ffffff;
 
-  --color-muted: #21262d;
-  --color-muted-foreground: #8b949e;
+	--color-muted: #21262d;
+	--color-muted-foreground: #8b949e;
 
-  --color-accent: #21262d;
-  --color-accent-foreground: #ffffff;
+	--color-accent: #21262d;
+	--color-accent-foreground: #ffffff;
 
-  --color-destructive: #f85149;
-  --color-destructive-foreground: #ffffff;
+	--color-destructive: #f85149;
+	--color-destructive-foreground: #ffffff;
 
-  --color-border: #30363d;
-  --color-input: #30363d;
-  --color-ring: #a3e635;
+	--color-border: #30363d;
+	--color-input: #30363d;
+	--color-ring: #a3e635;
 
-  /* Tailwind 4 utility-class tokens — these must live in @theme (not just
+	/* Tailwind 4 utility-class tokens — these must live in @theme (not just
      :root) for text-foreground / bg-card / bg-popover etc. to compile.
      The :root block below is the legacy Tailwind 3 / shadcn convention
      kept for any components that read CSS vars directly; these @theme
      entries are what generates the actual utility classes. */
-  --color-foreground: #ffffff;
-  --color-card: #161b22;
-  --color-card-foreground: #ffffff;
-  --color-popover: #161b22;
-  --color-popover-foreground: #ffffff;
+	--color-foreground: #ffffff;
+	--color-card: #161b22;
+	--color-card-foreground: #ffffff;
+	--color-popover: #161b22;
+	--color-popover-foreground: #ffffff;
 }
 
 @layer base {
-  :root {
-    --background: #0d1117;
-    --foreground: #ffffff;
-    --card: #161b22;
-    --card-foreground: #ffffff;
-    --popover: #161b22;
-    --popover-foreground: #ffffff;
-    --primary: #a3e635;
-    --primary-foreground: #0d1117;
-    --secondary: #21262d;
-    --secondary-foreground: #ffffff;
-    --muted: #21262d;
-    --muted-foreground: #8b949e;
-    --accent: #21262d;
-    --accent-foreground: #ffffff;
-    --destructive: #f85149;
-    --destructive-foreground: #ffffff;
-    --border: #30363d;
-    --input: #30363d;
-    --ring: #a3e635;
-    --radius: 0.5rem;
-  }
+	:root {
+		--background: #0d1117;
+		--foreground: #ffffff;
+		--card: #161b22;
+		--card-foreground: #ffffff;
+		--popover: #161b22;
+		--popover-foreground: #ffffff;
+		--primary: #a3e635;
+		--primary-foreground: #0d1117;
+		--secondary: #21262d;
+		--secondary-foreground: #ffffff;
+		--muted: #21262d;
+		--muted-foreground: #8b949e;
+		--accent: #21262d;
+		--accent-foreground: #ffffff;
+		--destructive: #f85149;
+		--destructive-foreground: #ffffff;
+		--border: #30363d;
+		--input: #30363d;
+		--ring: #a3e635;
+		--radius: 0.5rem;
+	}
 }
 
 @layer base {
-  * {
-    @apply border-border;
-    /* Eliminate the 300ms double-tap-to-zoom delay on mobile touch targets */
-    touch-action: manipulation;
-    /* Remove grey tap overlay on iOS Safari */
-    -webkit-tap-highlight-color: transparent;
-  }
-  body {
-    @apply bg-background text-foreground font-sans;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    /* Prevent boundary scroll rubber-banding on mobile */
-    overscroll-behavior-y: none;
-  }
+	* {
+		@apply border-border;
+		/* Eliminate the 300ms double-tap-to-zoom delay on mobile touch targets */
+		touch-action: manipulation;
+		/* Remove grey tap overlay on iOS Safari */
+		-webkit-tap-highlight-color: transparent;
+	}
+	body {
+		@apply bg-background font-sans text-foreground;
+		font-feature-settings:
+			'rlig' 1,
+			'calt' 1;
+		/* Prevent boundary scroll rubber-banding on mobile */
+		overscroll-behavior-y: none;
+	}
 
-  /* Prevent annoying accidental text selection when double tapping tabs/buttons */
-  header, nav, button, a, [role="button"], [role="tab"], img {
-    user-select: none;
-    -webkit-user-select: none;
-  }
+	/* Prevent annoying accidental text selection when double tapping tabs/buttons */
+	header,
+	nav,
+	button,
+	a,
+	[role='button'],
+	[role='tab'],
+	img {
+		user-select: none;
+		-webkit-user-select: none;
+	}
 
-  /* Reusable class for zero-latency mobile touch feedback */
-  .active-trigger {
-    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .active-trigger:active {
-    transform: scale(0.96);
-    opacity: 0.85;
-  }
+	/* Reusable class for zero-latency mobile touch feedback */
+	.active-trigger {
+		transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+	.active-trigger:active {
+		transform: scale(0.96);
+		opacity: 0.85;
+	}
 }
