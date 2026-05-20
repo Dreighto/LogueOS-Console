@@ -7,7 +7,11 @@
 	const POLL_INTERVAL_MS = 10_000;
 	const MAX_WAIT_MS = 11 * 60 * 1000;
 
-	let worker = $state('claude-code');
+	// Role-based routing: pick a `role` (frontend/backend) and let the dispatch
+	// listener's routing table choose the worker, OR pin a specific worker.
+	// `worker = 'auto'` means "route by role" (send role, no worker).
+	let role = $state('backend');
+	let worker = $state('auto');
 	let targetRepo = $state('project-miru');
 	let ticketId = $state('');
 	let prompt = $state('');
@@ -138,7 +142,8 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					worker,
+					role,
+					worker: worker === 'auto' ? undefined : worker,
 					target_repo: targetRepo,
 					ticket_id: ticketId || null,
 					prompt,
@@ -198,16 +203,29 @@
 	<!-- Main Body -->
 	<div class="flex-1 p-4 flex flex-col gap-4 overflow-y-auto text-slate-100">
 		<!-- Config Row -->
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="worker" class="text-[10px] font-mono text-slate-500 uppercase">Who should handle this?</label>
+				<label for="role" class="text-[10px] font-mono text-slate-500 uppercase">Role</label>
+				<select
+					id="role"
+					bind:value={role}
+					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
+				>
+					<option value="frontend">Frontend (UI)</option>
+					<option value="backend">Backend (code & logic)</option>
+				</select>
+			</div>
+
+			<div class="flex flex-col gap-1.5">
+				<label for="worker" class="text-[10px] font-mono text-slate-500 uppercase">Worker</label>
 				<select
 					id="worker"
 					bind:value={worker}
 					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
 				>
-					<option value="claude-code">Claude (backend & code)</option>
-					<option value="gemini">Antigravity (UI & frontend)</option>
+					<option value="auto">Auto (route by role)</option>
+					<option value="claude-code">Claude Code</option>
+					<option value="gemini">Antigravity / Gemini</option>
 				</select>
 			</div>
 
