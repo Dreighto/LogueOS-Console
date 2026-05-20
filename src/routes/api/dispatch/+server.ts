@@ -9,6 +9,7 @@ import { serverConfig } from '$lib/server/config';
 // proxy through to the gateway.
 interface DispatchBody {
 	worker?: string;
+	role?: string;
 	target_repo?: string;
 	ticket_id?: string | null;
 	prompt?: string;
@@ -157,6 +158,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					body: JSON.stringify({
 						tool_profile: 'standard_worker',
 						worker: body.worker,
+						role: body.role,
 						target_repo: body.target_repo,
 						ticket_id: dispatchTicketId,
 						prompt: body.prompt,
