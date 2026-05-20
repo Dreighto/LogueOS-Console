@@ -8,9 +8,10 @@
 
 	interface Props {
 		events: ActivityEvent[];
+		onEventClick?: (event: ActivityEvent) => void;
 	}
 
-	let { events }: Props = $props();
+	let { events, onEventClick }: Props = $props();
 
 	// Filter state
 	let currentFilter = $state<'all' | 'needs-attention' | 'finished'>('all');
@@ -153,53 +154,60 @@
 						{@const isExpanded = expandedEvents.has(event.id)}
 						
 						<div class="group relative hover:bg-[#1C2128] transition-colors">
-							<button
-								type="button"
-								class="w-full flex items-start gap-3 p-3 text-left focus:outline-none focus:bg-[#1C2128]"
-								onclick={() => toggleExpand(event.id)}
-							>
-								<!-- Avatar-like Icon -->
-								<div class="flex-shrink-0 mt-0.5">
-									<div class="flex h-8 w-8 items-center justify-center rounded-md border {levelColor}">
-										<Icon size={16} />
+							<div class="flex items-stretch">
+								<button
+									type="button"
+									class="flex-1 flex items-start gap-3 p-3 text-left focus:outline-none focus:bg-[#1C2128]"
+									onclick={() => onEventClick?.(event)}
+								>
+									<!-- Avatar-like Icon -->
+									<div class="flex-shrink-0 mt-0.5">
+										<div class="flex h-8 w-8 items-center justify-center rounded-md border {levelColor}">
+											<Icon size={16} />
+										</div>
 									</div>
-								</div>
 
-								<!-- Content Area -->
-								<div class="flex-grow min-w-0">
-									<div class="flex items-baseline gap-2 mb-0.5">
-										<span class="text-sm font-bold text-[#F0F6FC]">
-											{event.worker || 'System'}
-										</span>
-										<span class="text-[11px] text-[#8B949E]">
-											{formatEventTime(event.ts)}
-										</span>
+									<!-- Content Area -->
+									<div class="flex-grow min-w-0">
+										<div class="flex items-baseline gap-2 mb-0.5">
+											<span class="text-sm font-bold text-[#F0F6FC]">
+												{event.worker || 'System'}
+											</span>
+											<span class="text-[11px] text-[#8B949E]">
+												{formatEventTime(event.ts)}
+											</span>
+											
+											{#if event.level === 'error'}
+												<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#F85149]/20 text-[#F85149] rounded border border-[#F85149]/30 uppercase tracking-tighter ml-auto">
+													Attention
+												</span>
+											{:else if event.level === 'warning'}
+												<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#D29922]/20 text-[#D29922] rounded border border-[#D29922]/30 uppercase tracking-tighter ml-auto">
+													Review
+												</span>
+											{/if}
+										</div>
 										
-										{#if event.level === 'error'}
-											<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#F85149]/20 text-[#F85149] rounded border border-[#F85149]/30 uppercase tracking-tighter ml-auto">
-												Attention
-											</span>
-										{:else if event.level === 'warning'}
-											<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#D29922]/20 text-[#D29922] rounded border border-[#D29922]/30 uppercase tracking-tighter ml-auto">
-												Review
-											</span>
-										{/if}
+										<p class="text-sm text-[#C9D1D9] leading-relaxed break-words">
+											{event.summary}
+										</p>
 									</div>
-									
-									<p class="text-sm text-[#C9D1D9] leading-relaxed break-words">
-										{event.summary}
-									</p>
-								</div>
+								</button>
 
-								<!-- Expand/Collapse Hint -->
-								<div class="flex-shrink-0 self-center text-[#484F58] group-hover:text-[#8B949E] transition-colors">
+								<!-- Inline Expand Toggle (Secondary) -->
+								<button 
+									type="button"
+									class="px-3 flex items-center justify-center text-[#484F58] hover:text-[#8B949E] transition-colors border-l border-[#30363D]/30"
+									onclick={() => toggleExpand(event.id)}
+									aria-label={isExpanded ? 'Collapse' : 'Expand'}
+								>
 									{#if isExpanded}
 										<ChevronDown size={14} />
 									{:else}
 										<ChevronRight size={14} />
 									{/if}
-								</div>
-							</button>
+								</button>
+							</div>
 
 							<!-- Expanded Details Section -->
 							{#if isExpanded}
