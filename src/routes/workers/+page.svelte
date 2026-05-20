@@ -22,7 +22,10 @@
 	});
 
 	async function refreshWorkers() {
-		loading = true;
+		const isInitial = workers.length === 0;
+		if (isInitial) {
+			loading = true;
+		}
 		refreshError = null;
 		try {
 			// resolve() honors kit.paths.base ('/console'). Bare fetch('/api/workers')
@@ -40,7 +43,9 @@
 		} catch (error) {
 			refreshError = error instanceof Error ? error.message : 'Refresh failed';
 		} finally {
-			loading = false;
+			if (isInitial) {
+				loading = false;
+			}
 		}
 	}
 
