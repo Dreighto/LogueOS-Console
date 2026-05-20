@@ -1,3 +1,5 @@
+import { resolveWorkerFromTrace } from '$lib/config/workers';
+
 export function formatDuration(ms: number | null | undefined): string {
 	if (ms === null || ms === undefined) return '';
 	if (ms < 1000) return `${ms}ms`;
@@ -38,14 +40,8 @@ export function truncateTraceId(traceId: string | null | undefined): string {
 }
 
 export function deriveWorkerFromTraceId(traceId: string | null | undefined): string {
-	if (!traceId) return 'unknown';
-	if (traceId.startsWith('cc-LOS-')) return 'gemini';
-	if (traceId.startsWith('cc-')) return 'claude-code';
-	if (traceId.startsWith('gemini-') || traceId.startsWith('gmi-')) return 'gemini';
-	if (traceId.startsWith('cursor-')) return 'cursor';
-	if (traceId.startsWith('codex-')) return 'codex';
-	if (traceId.startsWith('operator-')) return 'operator';
-	return 'unknown';
+	// Worker identity + trace prefixes are registry-driven — see workers.json.
+	return resolveWorkerFromTrace(traceId)?.id ?? 'unknown';
 }
 
 export function formatFullDate(timestamp: string): string {

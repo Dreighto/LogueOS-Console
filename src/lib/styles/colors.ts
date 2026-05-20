@@ -8,10 +8,5 @@ export const statusColors: Record<RunStatus, string> = {
 	unknown: '#6B7280'
 };
 
-export const workerColors: Record<string, string> = {
-	'claude-code': '#D97757',
-	gemini: '#AD89EB',
-	cursor: '#3B82F6',
-	codex: '#64748B',
-	operator: '#F5A623'
-};
+// Per-worker colors are no longer hard-coded here — they live in the worker
+// registry (workers.json). Use workerColor() from $lib/config/workers.

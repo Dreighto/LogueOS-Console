@@ -1,9 +1,24 @@
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { serverConfig } from './config';
-import type { DailyUsage, HourlyBucket, TicketCost, UsageHistory, UsageMetrics, UsageProjection } from '$lib/types/usage';
+import { resolveWorker } from '$lib/config/workers';
+import type {
+	DailyUsage,
+	HourlyBucket,
+	TicketCost,
+	UsageHistory,
+	UsageMetrics,
+	UsageProjection
+} from '$lib/types/usage';
 
-export type { UsageMetrics, UsageHistory, UsageProjection, DailyUsage, TicketCost, HourlyBucket } from '$lib/types/usage';
+export type {
+	UsageMetrics,
+	UsageHistory,
+	UsageProjection,
+	DailyUsage,
+	TicketCost,
+	HourlyBucket
+} from '$lib/types/usage';
 
 // Module-level DB singleton — readwrite so we can maintain the usage_events
 // table alongside the readonly provisional_lessons table. WAL mode lets the
@@ -127,17 +142,32 @@ export function getUsageMetrics(): UsageMetrics {
 			metrics.totalPredictedCost += row.cost;
 			metrics.totalPredictedTokens += row.tokens;
 			metrics.recentDispatches += row.count;
-			metrics.workerBreakdown[row.worker] = {
-				cost: row.cost,
-				tokens: row.tokens,
-				count: row.count
-			};
+			// Normalize the raw worker name to a registry id and merge variants
+			// (e.g. 'claude-code' and 'claude-code-1' both fold into 'backend-1').
+			const workerId = resolveWorker(row.worker)?.id ?? row.worker;
+			const existing = metrics.workerBreakdown[workerId];
+			if (existing) {
+				existing.cost = Math.round((existing.cost + row.cost) * 10000) / 10000;
+				existing.tokens += row.tokens;
+				existing.count += row.count;
+			} else {
+				metrics.workerBreakdown[workerId] = {
+					cost: row.cost,
+					tokens: row.tokens,
+					count: row.count
+				};
+			}
 		}
 
 		metrics.totalPredictedCost = Math.round(metrics.totalPredictedCost * 10000) / 10000;
 		return metrics;
 	} catch {
-		return { totalPredictedCost: 0, totalPredictedTokens: 0, workerBreakdown: {}, recentDispatches: 0 };
+		return {
+			totalPredictedCost: 0,
+			totalPredictedTokens: 0,
+			workerBreakdown: {},
+			recentDispatches: 0
+		};
 	}
 }
 
@@ -183,12 +213,16 @@ export function getUsageHistory(days = 30): UsageHistory {
 				});
 			}
 			const day = byDate.get(row.date)!;
-			day.workers.push({
-				worker: row.worker,
-				cost: row.cost,
-				tokens: row.tokens,
-				dispatches: row.dispatches
-			});
+			// Fold the raw worker name into its registry id, merging variants.
+			const workerId = resolveWorker(row.worker)?.id ?? row.worker;
+			let wu = day.workers.find((w) => w.worker === workerId);
+			if (!wu) {
+				wu = { worker: workerId, cost: 0, tokens: 0, dispatches: 0 };
+				day.workers.push(wu);
+			}
+			wu.cost = Math.round((wu.cost + row.cost) * 10000) / 10000;
+			wu.tokens += row.tokens;
+			wu.dispatches += row.dispatches;
 			day.totalCost = Math.round((day.totalCost + row.cost) * 10000) / 10000;
 			day.totalTokens += row.tokens;
 			day.totalDispatches += row.dispatches;
@@ -196,9 +230,7 @@ export function getUsageHistory(days = 30): UsageHistory {
 
 		// Month-to-date totals for projection
 		const now = new Date();
-		const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-			.toISOString()
-			.split('T')[0];
+		const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 
 		const mtdRows = db
 			.prepare(
@@ -212,12 +244,11 @@ export function getUsageHistory(days = 30): UsageHistory {
 			.all(firstOfMonth) as { worker: string; cost: number }[];
 
 		let monthToDate = 0;
-		let ccMtd = 0;
-		let gmiMtd = 0;
+		const byWorker: Record<string, number> = {};
 		for (const r of mtdRows) {
 			monthToDate += r.cost;
-			if (r.worker === 'claude-code') ccMtd = r.cost;
-			else if (r.worker === 'gemini') gmiMtd = r.cost;
+			const workerId = resolveWorker(r.worker)?.id ?? r.worker;
+			byWorker[workerId] = Math.round(((byWorker[workerId] ?? 0) + r.cost) * 10000) / 10000;
 		}
 		monthToDate = Math.round(monthToDate * 10000) / 10000;
 
@@ -228,17 +259,14 @@ export function getUsageHistory(days = 30): UsageHistory {
 
 		const projection: UsageProjection = {
 			monthToDate,
-			ccMtd: Math.round(ccMtd * 10000) / 10000,
-			gmiMtd: Math.round(gmiMtd * 10000) / 10000,
+			byWorker,
 			daysElapsed,
 			daysInMonth,
 			dailyAvg: Math.round(dailyAvg * 10000) / 10000,
 			projectedEOM
 		};
 
-		const { n } = db
-			.prepare('SELECT COUNT(*) as n FROM usage_events')
-			.get() as { n: number };
+		const { n } = db.prepare('SELECT COUNT(*) as n FROM usage_events').get() as { n: number };
 
 		return {
 			days: Array.from(byDate.values()),
@@ -251,8 +279,7 @@ export function getUsageHistory(days = 30): UsageHistory {
 			days: [],
 			projection: {
 				monthToDate: 0,
-				ccMtd: 0,
-				gmiMtd: 0,
+				byWorker: {},
 				daysElapsed: now.getDate(),
 				daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
 				dailyAvg: 0,

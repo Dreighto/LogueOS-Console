@@ -22,8 +22,8 @@ export interface DailyUsage {
 
 export interface UsageProjection {
 	monthToDate: number;
-	ccMtd: number;
-	gmiMtd: number;
+	/** Month-to-date cost per worker, keyed by registry worker id. */
+	byWorker: Record<string, number>;
 	daysElapsed: number;
 	daysInMonth: number;
 	dailyAvg: number;

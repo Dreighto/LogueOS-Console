@@ -1,9 +1,19 @@
 <script lang="ts">
 	import type { ActivityEvent } from '$lib/types/activity';
 	import { formatFullDate } from '$lib/utils/format';
+	import { resolveWorker } from '$lib/config/workers';
 	import {
-		Clock, ChevronDown, ChevronRight, Terminal, Hash, Fingerprint,
-		Bot, User, Zap, ShieldAlert, AlertTriangle
+		Clock,
+		ChevronDown,
+		ChevronRight,
+		Terminal,
+		Hash,
+		Fingerprint,
+		Bot,
+		User,
+		Zap,
+		ShieldAlert,
+		AlertTriangle
 	} from 'lucide-svelte';
 
 	interface Props {
@@ -33,10 +43,10 @@
 	const filteredEvents = $derived(() => {
 		if (currentFilter === 'all') return events;
 		if (currentFilter === 'needs-attention') {
-			return events.filter(e => e.level === 'error' || e.level === 'warning');
+			return events.filter((e) => e.level === 'error' || e.level === 'warning');
 		}
 		if (currentFilter === 'finished') {
-			return events.filter(e => e.msg === 'worker_exit' && e.level === 'success');
+			return events.filter((e) => e.msg === 'worker_exit' && e.level === 'success');
 		}
 		return events;
 	});
@@ -57,17 +67,17 @@
 	const groupedEvents = $derived(() => {
 		const groups: { label: string; events: ActivityEvent[] }[] = [];
 		const activeEvents = filteredEvents();
-		
-		activeEvents.forEach(event => {
+
+		activeEvents.forEach((event) => {
 			const label = getGroupLabel(event.ts);
-			let group = groups.find(g => g.label === label);
+			let group = groups.find((g) => g.label === label);
 			if (!group) {
 				group = { label, events: [] };
 				groups.push(group);
 			}
 			group.events.push(event);
 		});
-		
+
 		return groups;
 	});
 
@@ -75,20 +85,24 @@
 		if (event.msg === 'hmac_reject') return ShieldAlert;
 		if (event.msg === 'dispatch_rejected') return AlertTriangle;
 		if (event.msg === 'listener_listening' || event.msg === 'listener_restarted') return Zap;
-		
-		const worker = event.worker?.toLowerCase() || '';
-		if (worker.includes('claude') || worker.includes('gemini')) return Bot;
-		if (worker.includes('operator')) return User;
-		
+
+		const def = resolveWorker(event.worker);
+		if (def?.role === 'operator') return User;
+		if (def) return Bot;
+
 		return Terminal;
 	}
 
 	function getLevelColor(level: ActivityEvent['level']) {
 		switch (level) {
-			case 'success': return 'text-[#3FB950] bg-[#3FB950]/10 border-[#3FB950]/20';
-			case 'warning': return 'text-[#D29922] bg-[#D29922]/10 border-[#D29922]/20';
-			case 'error': return 'text-[#F85149] bg-[#F85149]/10 border-[#F85149]/20';
-			default: return 'text-[#8B949E] bg-[#8B949E]/10 border-[#30363D]';
+			case 'success':
+				return 'text-[#3FB950] bg-[#3FB950]/10 border-[#3FB950]/20';
+			case 'warning':
+				return 'text-[#D29922] bg-[#D29922]/10 border-[#D29922]/20';
+			case 'error':
+				return 'text-[#F85149] bg-[#F85149]/10 border-[#F85149]/20';
+			default:
+				return 'text-[#8B949E] bg-[#8B949E]/10 border-[#30363D]';
 		}
 	}
 
@@ -103,7 +117,11 @@
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffHr < 24) return `${diffHr}h ago`;
 		if (diffDay === 1) {
-			const time = new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			const time = new Date(ts).toLocaleTimeString('en-US', {
+				hour: 'numeric',
+				minute: '2-digit',
+				hour12: true
+			});
 			return `yesterday at ${time}`;
 		}
 		return `${diffDay} days ago`;
@@ -112,38 +130,48 @@
 
 <div class="flex flex-col gap-4">
 	<!-- Filter Chips -->
-	<div class="flex gap-2 p-1 bg-[#0D1117] border border-[#30363D] rounded-lg w-fit">
-		<button 
-			class="px-3 py-1 text-xs font-medium rounded-md transition-colors {currentFilter === 'all' ? 'bg-[#21262D] text-[#F0F6FC] border border-[#30363D]' : 'text-[#8B949E] hover:text-[#C9D1D9]'}"
-			onclick={() => currentFilter = 'all'}
+	<div class="flex w-fit gap-2 rounded-lg border border-[#30363D] bg-[#0D1117] p-1">
+		<button
+			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter === 'all'
+				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
+				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+			onclick={() => (currentFilter = 'all')}
 		>
 			All
 		</button>
-		<button 
-			class="px-3 py-1 text-xs font-medium rounded-md transition-colors {currentFilter === 'needs-attention' ? 'bg-[#21262D] text-[#F0F6FC] border border-[#30363D]' : 'text-[#8B949E] hover:text-[#C9D1D9]'}"
-			onclick={() => currentFilter = 'needs-attention'}
+		<button
+			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
+			'needs-attention'
+				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
+				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+			onclick={() => (currentFilter = 'needs-attention')}
 		>
 			Needs Attention
 		</button>
-		<button 
-			class="px-3 py-1 text-xs font-medium rounded-md transition-colors {currentFilter === 'finished' ? 'bg-[#21262D] text-[#F0F6FC] border border-[#30363D]' : 'text-[#8B949E] hover:text-[#C9D1D9]'}"
-			onclick={() => currentFilter = 'finished'}
+		<button
+			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
+			'finished'
+				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
+				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+			onclick={() => (currentFilter = 'finished')}
 		>
 			Finished
 		</button>
 	</div>
 
-	<div class="flex flex-col border border-[#30363D] bg-[#161B22] rounded-lg overflow-hidden">
+	<div class="flex flex-col overflow-hidden rounded-lg border border-[#30363D] bg-[#161B22]">
 		{#if filteredEvents().length === 0}
 			<div class="p-12 text-center text-[#8B949E]">
 				<p>Nothing here — the team is running clean</p>
 			</div>
 		{:else}
-			<div class="overflow-y-auto max-h-[calc(100vh-320px)] divide-y divide-[#30363D]">
+			<div class="max-h-[calc(100vh-320px)] divide-y divide-[#30363D] overflow-y-auto">
 				{#each groupedEvents() as group (group.label)}
 					<!-- Date Group Header -->
-					<div class="bg-[#0D1117] px-4 py-1.5 sticky top-0 z-10 border-y border-[#30363D] first:border-t-0">
-						<span class="text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+					<div
+						class="sticky top-0 z-10 border-y border-[#30363D] bg-[#0D1117] px-4 py-1.5 first:border-t-0"
+					>
+						<span class="text-[10px] font-bold tracking-widest text-[#8B949E] uppercase">
 							{group.label}
 						</span>
 					</div>
@@ -152,52 +180,58 @@
 						{@const Icon = getEventIcon(event)}
 						{@const levelColor = getLevelColor(event.level)}
 						{@const isExpanded = expandedEvents.has(event.id)}
-						
-						<div class="group relative hover:bg-[#1C2128] transition-colors">
+
+						<div class="group relative transition-colors hover:bg-[#1C2128]">
 							<div class="flex items-stretch">
 								<button
 									type="button"
-									class="flex-1 flex items-start gap-3 p-3 text-left focus:outline-none focus:bg-[#1C2128]"
+									class="flex flex-1 items-start gap-3 p-3 text-left focus:bg-[#1C2128] focus:outline-none"
 									onclick={() => onEventClick?.(event)}
 								>
 									<!-- Avatar-like Icon -->
-									<div class="flex-shrink-0 mt-0.5">
-										<div class="flex h-8 w-8 items-center justify-center rounded-md border {levelColor}">
+									<div class="mt-0.5 flex-shrink-0">
+										<div
+											class="flex h-8 w-8 items-center justify-center rounded-md border {levelColor}"
+										>
 											<Icon size={16} />
 										</div>
 									</div>
 
 									<!-- Content Area -->
-									<div class="flex-grow min-w-0">
-										<div class="flex items-baseline gap-2 mb-0.5">
+									<div class="min-w-0 flex-grow">
+										<div class="mb-0.5 flex items-baseline gap-2">
 											<span class="text-sm font-bold text-[#F0F6FC]">
 												{event.worker || 'System'}
 											</span>
 											<span class="text-[11px] text-[#8B949E]">
 												{formatEventTime(event.ts)}
 											</span>
-											
+
 											{#if event.level === 'error'}
-												<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#F85149]/20 text-[#F85149] rounded border border-[#F85149]/30 uppercase tracking-tighter ml-auto">
+												<span
+													class="ml-auto rounded border border-[#F85149]/30 bg-[#F85149]/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-[#F85149] uppercase"
+												>
 													Attention
 												</span>
 											{:else if event.level === 'warning'}
-												<span class="px-1.5 py-0.5 text-[9px] font-bold bg-[#D29922]/20 text-[#D29922] rounded border border-[#D29922]/30 uppercase tracking-tighter ml-auto">
+												<span
+													class="ml-auto rounded border border-[#D29922]/30 bg-[#D29922]/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-[#D29922] uppercase"
+												>
 													Review
 												</span>
 											{/if}
 										</div>
-										
-										<p class="text-sm text-[#C9D1D9] leading-relaxed break-words">
+
+										<p class="text-sm leading-relaxed break-words text-[#C9D1D9]">
 											{event.summary}
 										</p>
 									</div>
 								</button>
 
 								<!-- Inline Expand Toggle (Secondary) -->
-								<button 
+								<button
 									type="button"
-									class="px-3 flex items-center justify-center text-[#484F58] hover:text-[#8B949E] transition-colors border-l border-[#30363D]/30"
+									class="flex items-center justify-center border-l border-[#30363D]/30 px-3 text-[#484F58] transition-colors hover:text-[#8B949E]"
 									onclick={() => toggleExpand(event.id)}
 									aria-label={isExpanded ? 'Collapse' : 'Expand'}
 								>
@@ -211,10 +245,14 @@
 
 							<!-- Expanded Details Section -->
 							{#if isExpanded}
-								<div class="px-4 pb-4 pt-0 ml-11">
-									<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-md bg-[#0D1117] border border-[#30363D]">
+								<div class="ml-11 px-4 pt-0 pb-4">
+									<div
+										class="grid grid-cols-1 gap-3 rounded-md border border-[#30363D] bg-[#0D1117] p-3 sm:grid-cols-2"
+									>
 										<div class="flex flex-col gap-1">
-											<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+											<span
+												class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+											>
 												<Clock size={10} />
 												Full Timestamp
 											</span>
@@ -225,7 +263,9 @@
 
 										{#if event.ticket_id && event.ticket_id !== 'unknown'}
 											<div class="flex flex-col gap-1">
-												<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+												<span
+													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+												>
 													<Hash size={10} />
 													Ticket
 												</span>
@@ -237,7 +277,9 @@
 
 										{#if event.trace_id}
 											<div class="flex flex-col gap-1 sm:col-span-2">
-												<span class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#8B949E]">
+												<span
+													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+												>
 													<Fingerprint size={10} />
 													Trace ID
 												</span>
