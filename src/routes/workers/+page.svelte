@@ -96,7 +96,7 @@
 					<li>SYSTEM: {data.errorMsg}</li>
 				{/if}
 				{#each workers.filter(w => w.last_exit_status && !['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(w.last_exit_status)) as w (w.id)}
-					<li>WORKER {w.id}: Last session ended with {w.last_exit_status}</li>
+					<li>WORKER {w.id === 'gemini' ? 'Antigravity' : w.id}: Last session ended with {w.last_exit_status}</li>
 				{/each}
 			</ul>
 		</section>

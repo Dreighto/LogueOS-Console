@@ -1,7 +1,7 @@
 export type WorkerState = 'idle' | 'busy' | 'offline';
 
 export interface WorkerStatus {
-	id: string; // worker name, e.g., 'claude-code', 'gemini'
+	id: string; // worker name, e.g., 'claude-code', 'gemini' (Antigravity)
 	state: WorkerState;
 	trace_id?: string;
 	pid?: number;

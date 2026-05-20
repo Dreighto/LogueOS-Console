@@ -207,7 +207,7 @@
 					class="bg-slate-900 border border-slate-800 text-slate-200 text-xs font-mono p-1.5 rounded focus:outline-none focus:border-blue-500 transition-colors"
 				>
 					<option value="claude-code">Claude (backend & code)</option>
-					<option value="gemini">Gemini (UI & frontend)</option>
+					<option value="gemini">Antigravity (UI & frontend)</option>
 				</select>
 			</div>
 

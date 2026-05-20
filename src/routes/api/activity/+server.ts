@@ -37,7 +37,7 @@ interface RawLogEvent {
 
 function deriveFriendlyWorker(event: RawLogEvent): string {
     const workerRaw = event.worker || (event.trace_id?.startsWith('cc-') ? 'claude-code' : 'gemini');
-    return workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Gemini' : workerRaw;
+    return workerRaw === 'claude-code' ? 'Claude' : workerRaw === 'gemini' ? 'Antigravity' : workerRaw;
 }
 
 function formatDuration(ms: number | undefined): string {

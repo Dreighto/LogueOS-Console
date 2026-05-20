@@ -92,7 +92,7 @@
 		<div class="flex items-center gap-3">
 			<div class="h-2 w-2 rounded-full" style="background-color: {stateInfo.color}"></div>
 			<h3 class="text-xs font-bold uppercase tracking-wider text-[#F0F6FC]">
-				{worker.id}
+				{worker.id === 'gemini' ? 'Antigravity' : worker.id}
 			</h3>
 		</div>
 		<span class="text-[10px] font-medium uppercase tracking-widest text-[#8B949E]">

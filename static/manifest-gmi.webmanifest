@@ -1,7 +1,7 @@
 {
-	"name": "LogueOS Gemini",
+	"name": "LogueOS Antigravity",
 	"short_name": "gmi-con",
-	"description": "Persistent gemini-cli terminal session for LogueOS-Console.",
+	"description": "Persistent antigravity-cli terminal session for LogueOS-Console.",
 	"start_url": "/console/terminal/gmi-con",
 	"scope": "/console/",
 	"display": "standalone",

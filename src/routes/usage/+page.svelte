@@ -141,7 +141,7 @@
     return worker === 'claude-code' ? 'text-orange-400' : 'text-blue-400';
   }
   function workerLabel(worker: string): string {
-    return worker === 'claude-code' ? 'CC' : 'GMI';
+    return worker === 'claude-code' ? 'CC' : 'AGY';
   }
 </script>
 
@@ -180,7 +180,7 @@
     </div>
   </div>
 
-  <!-- Worker sparklines: CC + GMI side by side -->
+  <!-- Worker sparklines: CC + AGY side by side -->
   <div class="grid grid-cols-2 gap-2">
     <!-- CC card -->
     <div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
@@ -206,10 +206,10 @@
         {/if}
       </div>
     </div>
-    <!-- GMI card -->
+    <!-- AGY card -->
     <div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
       <div class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-dim uppercase">
-        <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span> GMI
+        <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span> AGY
       </div>
       <div class="flex items-end justify-between gap-2">
         <div>
@@ -240,7 +240,7 @@
         {#each [...data.history.days].reverse() as day}
           {@const cc = workerCost(day, 'claude-code')}
           {@const gmi = workerCost(day, 'gemini')}
-          <div class="flex shrink-0 flex-col items-center gap-0.5" title="{fmtDate(day.date)}: CC ${cc.toFixed(3)} GMI ${gmi.toFixed(3)}">
+          <div class="flex shrink-0 flex-col items-center gap-0.5" title="{fmtDate(day.date)}: CC ${cc.toFixed(3)} AGY ${gmi.toFixed(3)}">
             <div class="flex items-end gap-px">
               <div class="w-2 rounded-t bg-orange-400/80" style="height: {barHeight(cc, maxDailyCost)}px;"></div>
               <div class="w-2 rounded-t bg-blue-500/80" style="height: {barHeight(gmi, maxDailyCost)}px;"></div>
@@ -250,7 +250,7 @@
       </div>
       <div class="mt-1 flex gap-3">
         <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-orange-400/80"></span><span class="text-[9px] text-dim font-mono">CC</span></div>
-        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-blue-500/80"></span><span class="text-[9px] text-dim font-mono">GMI</span></div>
+        <div class="flex items-center gap-1"><span class="h-2 w-2 rounded bg-blue-500/80"></span><span class="text-[9px] text-dim font-mono">AGY</span></div>
       </div>
     </div>
   {:else}
@@ -352,7 +352,7 @@
         <tr class="border-b border-border/50 text-[9px] uppercase tracking-wider text-dim">
           <th class="pb-1 text-left font-bold">Date</th>
           <th class="pb-1 text-right font-bold">CC</th>
-          <th class="pb-1 text-right font-bold">GMI</th>
+          <th class="pb-1 text-right font-bold">AGY</th>
           <th class="pb-1 text-right font-bold">Total</th>
         </tr>
       </thead>
