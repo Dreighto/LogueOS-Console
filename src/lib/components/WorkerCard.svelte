@@ -106,77 +106,84 @@
 		</span>
 	</div>
 
-	{#if worker.state === 'busy'}
-		<div
-			in:scale={{ duration: 300, start: 0.95 }}
-			out:fade={{ duration: 150 }}
-			class="flex flex-col gap-3 py-1"
-		>
-			<div class="flex flex-col gap-1">
-				<span
-					class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
-				>
-					<Play size={10} />
-					WORKING ON
-				</span>
-				<div class="text-sm leading-snug font-medium text-[#F0F6FC]">
-					{#if worker.ticket_id}
-						<span class="text-[#3B82F6]">{worker.ticket_id}:</span>
-					{/if}
-					{worker.step || 'Initializing...'}
-				</div>
-			</div>
-
-			<div class="flex items-center justify-between">
+	<div class="grid items-start w-full">
+		{#if worker.state === 'busy'}
+			<div
+				style="grid-area: 1 / 1;"
+				in:scale={{ duration: 150, start: 0.95 }}
+				out:fade={{ duration: 150 }}
+				class="flex flex-col gap-3 py-1 w-full"
+			>
 				<div class="flex flex-col gap-1">
 					<span
 						class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
 					>
-						<Clock size={10} />
-						ELAPSED
+						<Play size={10} />
+						WORKING ON
 					</span>
-					<span class="text-xs text-[#F0F6FC]">
-						{formatRelativeTime(worker.since || '')}
-					</span>
+					<div class="text-sm leading-snug font-medium text-[#F0F6FC]">
+						{#if worker.ticket_id}
+							<span class="text-[#3B82F6]">{worker.ticket_id}:</span>
+						{/if}
+						{worker.step || 'Initializing...'}
+					</div>
 				</div>
 
-				<button
-					type="button"
-					disabled={!killable || submitting}
-					onclick={handleKillClick}
-					onblur={disarmConfirm}
-					class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold uppercase transition-colors {confirming
-						? 'border-red-500 bg-red-500/20 text-red-400'
-						: 'border-[#30363D] bg-[#21262D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
-				>
-					{#if submitting}
-						<div
-							class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
-						></div>
-					{:else}
-						<Square size={10} />
-					{/if}
-					{confirming ? 'CONFIRM' : 'KILL'}
-				</button>
+				<div class="flex items-center justify-between">
+					<div class="flex flex-col gap-1">
+						<span
+							class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
+						>
+							<Clock size={10} />
+							ELAPSED
+						</span>
+						<span class="text-xs text-[#F0F6FC]">
+							{formatRelativeTime(worker.since || '')}
+						</span>
+					</div>
+
+					<button
+						type="button"
+						disabled={!killable || submitting}
+						onclick={handleKillClick}
+						onblur={disarmConfirm}
+						class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold uppercase transition-colors {confirming
+							? 'border-red-500 bg-red-500/20 text-red-400'
+							: 'border-[#30363D] bg-[#21262D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
+					>
+						{#if submitting}
+							<div
+								class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+							></div>
+						{:else}
+							<Square size={10} />
+						{/if}
+						{confirming ? 'CONFIRM' : 'KILL'}
+					</button>
+				</div>
 			</div>
-		</div>
-	{:else if worker.state === 'idle'}
-		<div
-			in:fade={{ duration: 300 }}
-			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#30363D] bg-background"
-		>
-			<span class="text-[10px] font-bold tracking-widest text-[#484F58] uppercase">[ IDLE ]</span>
-		</div>
-	{:else}
-		<div
-			in:fade={{ duration: 300 }}
-			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#484F58]/30 bg-background"
-		>
-			<span class="text-[10px] font-bold tracking-widest text-[#484F58]/50 uppercase"
-				>[ OFFLINE ]</span
+		{:else if worker.state === 'idle'}
+			<div
+				style="grid-area: 1 / 1;"
+				in:fade={{ duration: 150 }}
+				out:fade={{ duration: 150 }}
+				class="flex h-12 w-full items-center justify-center rounded-sm border border-dashed border-[#30363D] bg-background"
 			>
-		</div>
-	{/if}
+				<span class="text-[10px] font-bold tracking-widest text-[#484F58] uppercase">[ IDLE ]</span>
+			</div>
+		{:else}
+			<div
+				style="grid-area: 1 / 1;"
+				in:fade={{ duration: 150 }}
+				out:fade={{ duration: 150 }}
+				class="flex h-12 w-full items-center justify-center rounded-sm border border-dashed border-[#484F58]/30 bg-background"
+			>
+				<span class="text-[10px] font-bold tracking-widest text-[#484F58]/50 uppercase"
+					>[ OFFLINE ]</span
+				>
+			</div>
+		{/if}
+	</div>
 
 	{#if hasIssue || errorMsg}
 		<div

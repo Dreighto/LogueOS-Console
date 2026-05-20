@@ -31,6 +31,7 @@
 	// fetch /api/status and assign in-place; Svelte 5 diffs field-by-field.
 	let s = $state(data.status);
 	import { fade, scale } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	// Keep in sync if SvelteKit navigates and re-runs the server load.
 	$effect(() => {
@@ -127,9 +128,11 @@
 			</span>
 		</div>
 		<div class="flex flex-col gap-1">
-			{#each attentionItems as item, i (item.timestamp + i)}
+			{#each attentionItems as item (item.ticket_id || item.summary)}
 				<a
 					href={resolve('/activity')}
+					animate:flip={{ duration: 150 }}
+					in:fade={{ duration: 150 }}
 					class="group flex items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-slate-600"
 				>
 					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
@@ -166,6 +169,8 @@
 				{#each s.workers.items as w (w.id)}
 					<a
 						href={resolve('/workers')}
+						animate:flip={{ duration: 150 }}
+						in:fade={{ duration: 150 }}
 						class="group flex flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-blue-500/40"
 					>
 						<div class="flex items-center justify-between">
@@ -180,22 +185,26 @@
 								>{w.since ? formatRelativeTime(w.since) : w.state}</span
 							>
 						</div>
-						{#if w.state === 'busy'}
-							<div class="truncate text-[10px] tracking-tight text-slate-300 uppercase">
-								<span class="text-blue-400">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
-									w.step
-								)}
-							</div>
-							{#if w.branch}
-								<div class="truncate text-[9px] text-slate-500 italic">
-									{formatBranch(w.branch)}
+						<div class="grid">
+							{#if w.state === 'busy'}
+								<div class="col-start-1 row-start-1 flex flex-col" in:fade={{ duration: 150 }} out:fade={{ duration: 150 }}>
+									<div class="truncate text-[10px] tracking-tight text-slate-300 uppercase">
+										<span class="text-blue-400">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
+											w.step
+										)}
+									</div>
+									{#if w.branch}
+										<div class="truncate text-[9px] text-slate-500 italic">
+											{formatBranch(w.branch)}
+										</div>
+									{/if}
+								</div>
+							{:else}
+								<div class="col-start-1 row-start-1 text-[10px] font-bold tracking-widest text-slate-600 uppercase" in:fade={{ duration: 150 }} out:fade={{ duration: 150 }}>
+									{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
 								</div>
 							{/if}
-						{:else}
-							<div class="text-[10px] font-bold tracking-widest text-slate-600 uppercase">
-								{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
-							</div>
-						{/if}
+						</div>
 					</a>
 				{:else}
 					<div class="rounded-sm border border-dashed border-border p-2 text-center">
@@ -255,8 +264,8 @@
 			<span>{s.completions.today} total</span>
 		</div>
 		<div class="flex flex-col gap-1">
-			{#each s.completions.items as item, i (item.timestamp + i)}
-				<div class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2">
+			{#each s.completions.items as item (item.ticket_id || item.summary)}
+				<div animate:flip={{ duration: 150 }} in:fade={{ duration: 150 }} class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2">
 					<CheckCircle2 size={14} class="shrink-0 text-status-green" />
 					<div class="flex min-w-0 flex-col">
 						<div class="flex items-center gap-2">
