@@ -17,7 +17,6 @@
 		return data.workers;
 	}
 	let workers = $state<WorkerStatus[]>(getInitial());
-	let loading = $state(false);
 	let refreshError = $state<string | null>(null);
 
 	$effect(() => {
@@ -25,7 +24,9 @@
 	});
 
 	async function refreshWorkers() {
-		loading = true;
+		// Background poll — refresh silently. The worker cards update in place
+		// and the header "Live" dot is the ambient freshness signal; a per-poll
+		// banner just flickers and shifts the layout every few seconds.
 		refreshError = null;
 		try {
 			// resolve() honors kit.paths.base ('/console'). Bare fetch('/api/workers')
@@ -42,8 +43,6 @@
 			}
 		} catch (error) {
 			refreshError = error instanceof Error ? error.message : 'Refresh failed';
-		} finally {
-			loading = false;
 		}
 	}
 
@@ -78,13 +77,7 @@
 		</div>
 	</header>
 
-	{#if loading}
-		<div
-			class="animate-pulse py-2 text-center font-mono text-[10px] tracking-widest text-[#8B949E] uppercase"
-		>
-			Refreshing…
-		</div>
-	{:else if refreshError}
+	{#if refreshError}
 		<div
 			class="rounded border border-red-900/30 bg-red-900/10 px-3 py-2 font-mono text-[10px] text-red-400"
 		>
