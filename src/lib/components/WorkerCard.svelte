@@ -3,6 +3,7 @@
 	import { formatRelativeTime } from '$lib/utils/format';
 	import { resolve } from '$app/paths';
 	import { Square, AlertCircle, Play, Clock } from 'lucide-svelte';
+	import { scale, fade } from 'svelte/transition';
 
 	interface Props {
 		worker: WorkerStatus;
@@ -86,11 +87,14 @@
 </script>
 
 <div
-	class="flex flex-col gap-3 rounded-lg border border-[#30363D] bg-[#161B22] p-4 font-mono shadow-sm transition-all hover:border-[#444C56]"
+	class="flex flex-col gap-3 rounded-lg border border-[#30363D] bg-[#161B22] p-4 font-mono shadow-sm transition-all hover:border-[#444C56] active:scale-[0.98] hover:scale-[1.01]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-3">
-			<div class="h-2 w-2 rounded-full" style="background-color: {stateInfo.color}"></div>
+			<div
+				class="h-2 w-2 rounded-full transition-colors duration-500"
+				style="background-color: {stateInfo.color}"
+			></div>
 			<h3 class="text-xs font-bold uppercase tracking-wider text-[#F0F6FC]">
 				{worker.id === 'gemini' ? 'Antigravity' : worker.id}
 			</h3>
@@ -101,9 +105,15 @@
 	</div>
 
 	{#if worker.state === 'busy'}
-		<div class="flex flex-col gap-3 py-1">
+		<div
+			in:scale={{ duration: 300, start: 0.95 }}
+			out:fade={{ duration: 150 }}
+			class="flex flex-col gap-3 py-1"
+		>
 			<div class="flex flex-col gap-1">
-				<span class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]">
+				<span
+					class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]"
+				>
 					<Play size={10} />
 					WORKING ON
 				</span>
@@ -117,7 +127,9 @@
 
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
-					<span class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]">
+					<span
+						class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#8B949E]"
+					>
 						<Clock size={10} />
 						ELAPSED
 					</span>
@@ -136,7 +148,9 @@
 						: 'bg-[#21262D] border-[#30363D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
 				>
 					{#if submitting}
-						<div class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+						<div
+							class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+						></div>
 					{:else}
 						<Square size={10} />
 					{/if}
@@ -145,17 +159,26 @@
 			</div>
 		</div>
 	{:else if worker.state === 'idle'}
-		<div class="flex h-[88px] items-center justify-center border border-dashed border-[#30363D] rounded bg-[#0D1117]">
+		<div
+			in:fade={{ duration: 300 }}
+			class="flex h-[88px] items-center justify-center border border-dashed border-[#30363D] rounded bg-[#0D1117]"
+		>
 			<span class="text-[10px] uppercase tracking-widest text-[#484F58]">Available for dispatch</span>
 		</div>
 	{:else}
-		<div class="flex h-[88px] items-center justify-center border border-dashed border-[#484F58]/30 rounded bg-[#0D1117]">
+		<div
+			in:fade={{ duration: 300 }}
+			class="flex h-[88px] items-center justify-center border border-dashed border-[#484F58]/30 rounded bg-[#0D1117]"
+		>
 			<span class="text-[10px] uppercase tracking-widest text-[#484F58]/50">Offline</span>
 		</div>
 	{/if}
 
 	{#if hasIssue || errorMsg}
-		<div class="mt-1 flex items-start gap-2 rounded border border-red-900/30 bg-red-900/10 p-2 text-[10px] text-red-400">
+		<div
+			in:scale={{ duration: 200, start: 0.9 }}
+			class="mt-1 flex items-start gap-2 rounded border border-red-900/30 bg-red-900/10 p-2 text-[10px] text-red-400"
+		>
 			<AlertCircle size={14} class="mt-0.5 shrink-0" />
 			<div class="flex flex-col gap-0.5">
 				<span class="font-bold uppercase tracking-wider">Operational Note</span>

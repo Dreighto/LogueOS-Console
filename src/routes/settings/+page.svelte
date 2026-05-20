@@ -5,14 +5,14 @@
 	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
+	import { fade, scale } from 'svelte/transition';
 
 	let { data }: { data: PageData } = $props();
 
 	// Seed from SSR so the first paint is already correct. Polling keeps it
 	// fresh — important because the halt file can be touched/removed by any
 	// process on the box (operator's PowerShell, another worker, etc.).
-	function getInitialKS() { return data.killSwitch; }
-	let killSwitch = $state<KillSwitchState>(getInitialKS());
+	let killSwitch = $state<KillSwitchState>(data.killSwitch);
 	let fetchError = $state<string | null>(null);
 
 	// Connection-status services seeded from SSR (LOS-70). Polled on the same
@@ -97,10 +97,13 @@
 		pendingAction = null;
 	}
 
+	import { toasts } from '$lib/utils/toasts';
+
 	async function submitToggle() {
 		if (!pendingAction || submitting) return;
 		submitting = true;
 		submitError = null;
+		const actionLabel = pendingAction === 'activate' ? 'Pause' : 'Resume';
 		try {
 			const resp = await fetch(resolve('/api/kill-switch'), {
 				method: 'POST',
@@ -119,8 +122,10 @@
 			confirmOpen = false;
 			pendingAction = null;
 			noteDraft = '';
+			toasts.add(`${actionLabel} successful`, 'success');
 		} catch (e: unknown) {
 			submitError = e instanceof Error ? e.message : 'Unknown error';
+			toasts.add(`${actionLabel} failed`, 'error');
 			console.error('kill-switch toggle error:', e);
 		} finally {
 			submitting = false;
@@ -128,7 +133,8 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4" in:fade={{ duration: 300 }}>
+
 	<h1 class="font-sans text-xl font-bold tracking-tight">Settings</h1>
 
 	<!-- Connection Status section (LOS-70). Pills show whether each LogueOS

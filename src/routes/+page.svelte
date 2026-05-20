@@ -30,6 +30,7 @@
 	// invalidation, causing the whole page to flicker. With $state we
 	// fetch /api/status and assign in-place; Svelte 5 diffs field-by-field.
 	let s = $state(data.status);
+	import { fade, scale } from 'svelte/transition';
 
 	// Keep in sync if SvelteKit navigates and re-runs the server load.
 	$effect(() => {

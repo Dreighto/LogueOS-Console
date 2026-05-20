@@ -1,0 +1,44 @@
+<script lang="ts">
+	import { toasts } from '$lib/utils/toasts';
+	import { flip } from 'svelte/animate';
+	import { fly } from 'svelte/transition';
+	import { Info, CheckCircle2, AlertTriangle, AlertCircle, X } from 'lucide-svelte';
+
+	const icons = {
+		info: Info,
+		success: CheckCircle2,
+		warning: AlertTriangle,
+		error: AlertCircle
+	};
+
+	const colors = {
+		info: 'bg-slate-900 border-slate-800 text-slate-200',
+		success: 'bg-emerald-950 border-emerald-900/50 text-emerald-400',
+		warning: 'bg-amber-950 border-amber-900/50 text-amber-400',
+		error: 'bg-red-950 border-red-900/50 text-red-400'
+	};
+</script>
+
+<div class="fixed top-4 left-1/2 z-[100] flex w-full max-w-[400px] -translate-x-1/2 flex-col gap-2 px-4 pointer-events-none">
+	{#each $toasts as toast (toast.id)}
+		{@const Icon = icons[toast.type]}
+		<div
+			animate:flip={{ duration: 300 }}
+			in:fly={{ y: -20, duration: 300 }}
+			out:fly={{ y: -20, duration: 200 }}
+			class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 shadow-xl backdrop-blur-md {colors[toast.type]}"
+		>
+			<Icon size={18} class="mt-0.5 shrink-0" />
+			<div class="flex-1 text-sm font-medium leading-tight">
+				{toast.message}
+			</div>
+			<button 
+				type="button" 
+				onclick={() => toasts.remove(toast.id)}
+				class="rounded-md p-1 opacity-60 hover:opacity-100 transition-opacity"
+			>
+				<X size={14} />
+			</button>
+		</div>
+	{/each}
+</div>

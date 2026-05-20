@@ -3,6 +3,8 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
+	import { fly, fade } from 'svelte/transition';
+	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
 	import type { KillSwitchState } from '$lib/types/kill-switch';
 
@@ -75,7 +77,7 @@
 >
 	<!-- Top Bar -->
 	<header
-		class="z-10 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
+		class="z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 	>
 		<div class="flex items-center gap-2">
 			<!-- Operator-supplied LogueOS logo. resolve() honors kit.paths.base
@@ -87,7 +89,7 @@
 			     next to it is the accessible label — avoids screen-reader
 			     duplication. -->
 			<img src="{base}/favicon.png" alt="" width="28" height="28" class="h-7 w-7 shrink-0" />
-			<h1 class="font-sans text-lg font-bold tracking-tight">LogueOS Console</h1>
+			<h1 class="font-sans text-lg font-bold tracking-tight text-white">LogueOS Console</h1>
 			<span
 				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
 				>v1a</span
@@ -102,6 +104,7 @@
 			<a
 				href={resolve('/settings')}
 				aria-live="assertive"
+				in:fade={{ duration: 300 }}
 				class="flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-red-300 uppercase transition-colors hover:bg-red-500/20"
 			>
 				<AlertOctagon size={12} aria-hidden="true" />
@@ -112,9 +115,18 @@
 
 	<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav
-	     is part of the flex flow, ensuring it sits at the true bottom. -->
-	<main class="flex-1 overflow-y-auto custom-scrollbar p-4">
-		{@render children()}
+	     is part of the flex flow, ensuring it sits at the true bottom.
+	     Page transitions: fly in from the right/left or simple fade. -->
+	<main class="relative flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar">
+		{#key page.url.pathname}
+			<div
+				in:fly={{ x: 10, duration: 300, delay: 150 }}
+				out:fade={{ duration: 150 }}
+				class="h-full p-4"
+			>
+				{@render children()}
+			</div>
+		{/key}
 	</main>
 
 	<!-- Bottom Navigation. Hard-reset to 44px fixed height.
@@ -128,14 +140,20 @@
 				<a
 					href={resolve(tab.path)}
 					aria-current={page.url.pathname === tab.path ? 'page' : undefined}
-					class="relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
+					class="group relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
 					class:text-cta={page.url.pathname === tab.path}
 					class:text-muted-foreground={page.url.pathname !== tab.path}
 				>
-					<tab.icon size={20} class="transition-transform duration-200 group-hover:scale-110" />
+					<tab.icon
+						size={20}
+						class="transition-all duration-300 {page.url.pathname === tab.path
+							? 'scale-110'
+							: 'scale-100 group-hover:scale-110 group-active:scale-95'}"
+					/>
 
 					{#if page.url.pathname === tab.path}
 						<div
+							in:fly={{ y: 4, duration: 400 }}
 							class="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_10px_rgba(163,230,53,1)]"
 						></div>
 					{/if}
@@ -143,6 +161,8 @@
 			{/each}
 		</div>
 	</nav>
+
+	<ToastContainer />
 </div>
 
 <style>
