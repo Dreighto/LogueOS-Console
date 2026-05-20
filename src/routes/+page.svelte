@@ -134,7 +134,7 @@
 									? 'text-blue-400'
 									: w.state === 'idle'
 										? 'text-slate-400'
-										: 'text-slate-600'}">{w.id}</span
+										: 'text-slate-600'}">{w.id === 'gemini' ? 'Antigravity' : w.id}</span
 							>
 							<span class="text-[9px] text-slate-500"
 								>{w.since ? formatRelativeTime(w.since) : w.state}</span

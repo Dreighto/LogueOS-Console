@@ -8,6 +8,9 @@ node_modules
 /.svelte-kit
 /build
 
+# Playwright test artifacts (build output, never committed)
+test-results/
+
 # OS
 .DS_Store
 Thumbs.db
