@@ -38,6 +38,13 @@ When touching Console UI:
   not airy marketing spacing. The `operator-console-ui` skill covers this; the
   `frontend-systems-engineer` skill covers component discipline (audit for redundancy,
   micro-interactions, keyboard shortcuts, 4px/8px grid).
+- **Animation & Interactivity (LOS-111):**
+  - Use coordinated `fly` and `fade` transitions for page transitions in `+layout.svelte`.
+  - Prefer tactile micro-interactions (e.g., `active:scale-95`, `hover:scale-[1.01]`) for
+    navigational and interactive elements.
+  - Use the unified `Drawer.svelte` for detail views and `ToastContainer.svelte` for 
+    ephemeral system notifications.
+  - Animate state transitions (e.g., Idle ↔ Busy) to maintain spatial awareness.
 - Prefer SSR (`+page.server.ts` load functions) over client-side fetch-on-mount where it
   fits — the Console untangle moved data fetching server-side; keep it that way.
 - New routes go under `src/routes/`; shared server logic under `src/lib/server/`; types
