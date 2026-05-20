@@ -6,7 +6,7 @@
 // tracking bug CodeRabbit flagged on PR #3 — there's no client-side reactive
 // fetch to mis-track.
 //
-// The spec for LOS-3 explicitly required this pattern; the original Antigravity
+// The spec for LOS-3 explicitly required this pattern; the original gemini
 // implementation used client-side fetch in +page.svelte. Switching to server-
 // side load aligns with the spec and eliminates the symptom.
 import type { PageServerLoad } from './$types';
