@@ -94,25 +94,31 @@ export const GET: RequestHandler = async () => {
 			}
 		}
 
-		// 3. Get last exit status for idle workers from cc_completion_log.jsonl
-		const resolvedCompletionPath = path.resolve(serverConfig.completionLogPath);
-		if (fs.existsSync(resolvedCompletionPath)) {
-			const compStream = fs.createReadStream(resolvedCompletionPath);
-			const rlComp = readline.createInterface({
-				input: compStream,
+		// 3. Last exit status for idle workers — sourced from the dispatch
+		// listener's worker_exit events. The completion log keys rows by
+		// worktree-slot id (e.g. 'project-miru-w1') and carries inconsistent
+		// status strings, so it can't be matched to a registry worker; the
+		// listener's worker_exit event carries a clean worker name + status.
+		const resolvedWorkerLogPath = path.resolve(serverConfig.workerLogPath);
+		if (fs.existsSync(resolvedWorkerLogPath)) {
+			const wlStream = fs.createReadStream(resolvedWorkerLogPath);
+			const rlWl = readline.createInterface({
+				input: wlStream,
 				crlfDelay: Infinity
 			});
 
-			for await (const line of rlComp) {
+			// Last worker_exit wins — the log is chronological.
+			for await (const line of rlWl) {
 				if (!line.trim()) continue;
 				try {
-					const comp = JSON.parse(line);
-					const def = resolveWorker(comp.worker);
+					const evt = JSON.parse(line);
+					if (evt.msg !== 'worker_exit') continue;
+					const def = resolveWorker(evt.worker);
 					if (def && workers[def.id]?.state === 'idle') {
-						workers[def.id].last_exit_status = comp.status;
+						workers[def.id].last_exit_status = evt.status;
 					}
-				} catch (e) {
-					// Ignore
+				} catch {
+					// Ignore malformed lines
 				}
 			}
 		}
