@@ -17,6 +17,7 @@ interface Run {
 	status: string;
 	summary: string;
 	worker: string;
+	trace_id: string | null;
 }
 
 interface StatusBoardData {
@@ -48,35 +49,47 @@ export const GET: RequestHandler = async ({ fetch }) => {
 	}
 
 	try {
-		const [runsResp, workersResp, usageResp, killResp] = await Promise.all([
+		const [runsResp, workersResp, usageResp, killResp, activityResp] = await Promise.all([
 			fetch(resolve('/api/runs')),
 			fetch(resolve('/api/workers')),
 			fetch(resolve('/api/usage')),
-			fetch(resolve('/api/kill-switch'))
+			fetch(resolve('/api/kill-switch')),
+			fetch(resolve('/api/activity'))
 		]);
 
 		const runsData = runsResp.ok ? await runsResp.json() : { runs: [] };
 		const workersData = workersResp.ok ? await workersResp.json() : { workers: [] };
 		const usageData = usageResp.ok ? await usageResp.json() : {};
 		const kill = killResp.ok ? await killResp.json() : {};
+		const activityData = activityResp.ok ? await activityResp.json() : { events: [] };
 
 		const allRuns: Run[] = runsData.runs || [];
 		const workers: WorkerState[] = workersData.workers || [];
 
+		// Completion-log rows written by real workers carry no timestamp, but the
+		// dispatch activity log does. Backfill an empty run timestamp from its
+		// matching worker_exit event so date-based filtering ("today") works —
+		// otherwise genuine completions silently drop out of the count.
+		const exitTsByTrace = new Map<string, string>();
+		for (const ev of activityData.events ?? []) {
+			if (ev.msg === 'worker_exit' && ev.trace_id && ev.ts && !exitTsByTrace.has(ev.trace_id)) {
+				exitTsByTrace.set(ev.trace_id, ev.ts);
+			}
+		}
+		for (const r of allRuns) {
+			if (!r.timestamp && r.trace_id && exitTsByTrace.has(r.trace_id)) {
+				r.timestamp = exitTsByTrace.get(r.trace_id) as string;
+			}
+		}
+
 		const now = new Date();
 		const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-		const todayEnd = new Date(
-			now.getFullYear(),
-			now.getMonth(),
-			now.getDate() + 1
-		).toISOString();
+		const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
 
 		const completionsToday = allRuns
 			.filter(
 				(r) =>
-					r.status === 'CONFIRMED_WORKING' &&
-					r.timestamp >= todayStart &&
-					r.timestamp < todayEnd
+					r.status === 'CONFIRMED_WORKING' && r.timestamp >= todayStart && r.timestamp < todayEnd
 			)
 			.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -84,14 +97,10 @@ export const GET: RequestHandler = async ({ fetch }) => {
 			killSwitch: { active: kill.active === true },
 			failures: {
 				count: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').length,
-				items: allRuns
-					.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE')
-					.slice(0, 3)
+				items: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').slice(0, 3)
 			},
 			reviews: {
-				count: allRuns.filter(
-					(r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown'
-				).length,
+				count: allRuns.filter((r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown').length,
 				items: allRuns
 					.filter((r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown')
 					.slice(0, 3)

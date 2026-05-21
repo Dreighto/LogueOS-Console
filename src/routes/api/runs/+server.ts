@@ -11,7 +11,9 @@ function parseRun(comp: any): Run {
 		ticket_id: comp.ticket_id || null,
 		status: coerceRunStatus(comp.status),
 		summary: comp.summary || '',
-		worker: comp.worker || 'unknown',
+		// Real workers log the worktree-slot id as `worker_id`; older rows used
+		// `worker`. Fall back so the run carries an identity instead of 'unknown'.
+		worker: comp.worker || comp.worker_id || 'unknown',
 		trace_id: comp.trace_id || null,
 		duration_ms: comp.duration_ms ?? null,
 		pr_number: comp.pr_number ?? null,
@@ -19,6 +21,15 @@ function parseRun(comp: any): Run {
 		files_touched: comp.files_touched || [],
 		project_id: comp.project_id || null
 	};
+}
+
+// Test heartbeats and synthetic stale-cleanup backfill rows are not real runs.
+// Left in, they inflate the status board's failure / review counts. Drop them
+// at the source so every downstream consumer sees a clean feed.
+function isTestArtifact(run: Run): boolean {
+	const ticket = run.ticket_id ?? '';
+	const trace = run.trace_id ?? '';
+	return ticket.startsWith('TEST-') || trace.startsWith('backfill-');
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -58,7 +69,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const data = await response.json();
 		const rawCompletions = data.completions || [];
 
-		const parsedRuns: Run[] = rawCompletions.map(parseRun);
+		const parsedRuns: Run[] = rawCompletions.map(parseRun).filter((r: Run) => !isTestArtifact(r));
 		const dedupedRuns = dedupeRuns(parsedRuns);
 
 		const runs = dedupedRuns.slice(-limit).reverse();
