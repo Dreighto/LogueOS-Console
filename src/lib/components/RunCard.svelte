@@ -5,6 +5,7 @@
 	import { CheckCircle2, XCircle, AlertCircle, CircleHelp } from 'lucide-svelte';
 	import { statusColors } from '$lib/styles/colors';
 	import { workerColor, workerLabel } from '$lib/config/workers';
+	import Card from '$lib/components/Card.svelte';
 
 	interface Props {
 		run: Run;
@@ -23,11 +24,7 @@
 	let detailHref = $derived(run.trace_id ? resolve(`/runs/${run.trace_id}`) : null);
 </script>
 
-<a
-	href={detailHref ?? '#'}
-	data-sveltekit-preload-data="hover"
-	class="flex cursor-pointer flex-col justify-between rounded-sm border border-border bg-surface p-2 transition-all hover:bg-surface active:scale-[0.99]"
->
+<Card href={detailHref ?? undefined} class="flex flex-col justify-between">
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span
@@ -83,4 +80,4 @@
 			</span>
 		{/if}
 	</div>
-</a>
+</Card>

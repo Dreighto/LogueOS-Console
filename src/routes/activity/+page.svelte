@@ -8,6 +8,7 @@
 	import { formatFullDate } from '$lib/utils/format';
 	import { Clock, Hash, Fingerprint, Terminal } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LivePill from '$lib/components/LivePill.svelte';
 
 	interface Props {
 		data: PageData;
@@ -57,12 +58,7 @@
 		title="Activity"
 		subtitle="The latest stream of thoughts, actions, and results from the team."
 	>
-		<div
-			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
-		>
-			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
-			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Live</span>
-		</div>
+		<LivePill />
 	</PageHeader>
 
 	<ActivityFeed {events} onEventClick={openDetail} />

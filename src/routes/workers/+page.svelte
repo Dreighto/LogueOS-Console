@@ -7,6 +7,7 @@
 	import { workerLabel } from '$lib/config/workers';
 	import { AlertCircle } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import LivePill from '$lib/components/LivePill.svelte';
 
 	interface Props {
 		data: PageData;
@@ -67,12 +68,7 @@
 		title="Team"
 		subtitle="Live status and control for LogueOS dispatch workers."
 	>
-		<div
-			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
-		>
-			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
-			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Live</span>
-		</div>
+		<LivePill />
 	</PageHeader>
 
 	{#if refreshError}
