@@ -28,14 +28,21 @@ function plainLead(body: string): string {
 	if (!body) return '';
 	const cleaned = body
 		.replace(/\r/g, '')
+		// Bots (CodeRabbit etc.) append an auto-generated block — cut from there.
+		.split('<!-- This is an auto-generated comment')[0]
+		.split(/\n#+\s*Summary by CodeRabbit/i)[0]
+		.replace(/<!--[\s\S]*?-->/g, '') // strip HTML comments
 		.split('\n')
 		.filter((line) => !/^\s*#{1,6}\s/.test(line)) // drop heading lines
 		.filter((line) => !/^\s*\|.*\|\s*$/.test(line)) // drop markdown table rows
 		.join('\n')
+		.replace(/!\[[^\]]*\]\([^)]+\)/g, '') // drop images
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links -> text
+		.replace(/<\/?[a-z][^>]*>/gi, '') // strip stray HTML tags
 		.replace(/\*\*(.+?)\*\*/g, '$1') // bold
 		.replace(/`([^`]+)`/g, '$1') // inline code
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links -> text
 		.replace(/^\s*[-*]\s+/gm, '- ') // normalize bullets
+		.replace(/[ \t]+\n/g, '\n') // strip trailing spaces
 		.replace(/\n{3,}/g, '\n\n') // collapse blank runs
 		.replace(/\n+[^\n]*Generated with[^\n]*$/i, '') // drop the CC footer line
 		.trim();
