@@ -171,7 +171,7 @@
 					<div
 						class="sticky top-0 z-10 border-y border-border bg-background px-4 py-1.5 first:border-t-0"
 					>
-						<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+						<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
 							{group.label}
 						</span>
 					</div>
@@ -203,19 +203,19 @@
 											<span class="text-sm font-bold text-foreground">
 												{event.worker || 'System'}
 											</span>
-											<span class="text-[11px] text-muted-foreground">
+											<span class="text-xs text-muted-foreground">
 												{formatEventTime(event.ts)}
 											</span>
 
 											{#if event.level === 'error'}
 												<span
-													class="ml-auto rounded border border-destructive/30 bg-destructive/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-destructive uppercase"
+													class="ml-auto rounded border border-destructive/30 bg-destructive/20 px-1.5 py-0.5 text-xs font-bold tracking-tighter text-destructive uppercase"
 												>
 													Attention
 												</span>
 											{:else if event.level === 'warning'}
 												<span
-													class="ml-auto rounded border border-status-amber/30 bg-status-amber/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-status-amber uppercase"
+													class="ml-auto rounded border border-status-amber/30 bg-status-amber/20 px-1.5 py-0.5 text-xs font-bold tracking-tighter text-status-amber uppercase"
 												>
 													Review
 												</span>
@@ -251,12 +251,12 @@
 									>
 										<div class="flex flex-col gap-1">
 											<span
-												class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+												class="flex items-center gap-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase"
 											>
 												<Clock size={10} />
 												Full Timestamp
 											</span>
-											<span class="font-mono text-[11px] text-foreground">
+											<span class="font-mono text-xs text-foreground">
 												{formatFullDate(event.ts)}
 											</span>
 										</div>
@@ -264,12 +264,12 @@
 										{#if event.ticket_id && event.ticket_id !== 'unknown'}
 											<div class="flex flex-col gap-1">
 												<span
-													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+													class="flex items-center gap-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase"
 												>
 													<Hash size={10} />
 													Ticket
 												</span>
-												<span class="font-mono text-[11px] text-foreground">
+												<span class="font-mono text-xs text-foreground">
 													{event.ticket_id}
 												</span>
 											</div>
@@ -278,7 +278,7 @@
 										{#if event.trace_id}
 											<div class="flex flex-col gap-1 sm:col-span-2">
 												<span
-													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+													class="flex items-center gap-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase"
 												>
 													<Fingerprint size={10} />
 													Trace ID

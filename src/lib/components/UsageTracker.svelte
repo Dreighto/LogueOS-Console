@@ -17,7 +17,7 @@
 	<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase"
 			>
 				<Coins size={10} class="text-status-amber" />
 				Est. 24h Burn
@@ -28,7 +28,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase"
 			>
 				<Zap size={10} class="text-status-blue" />
 				Tokens
@@ -39,7 +39,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase"
 			>
 				<Hash size={10} class="text-status-green" />
 				Dispatches
@@ -50,7 +50,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase"
 			>
 				<BarChart3 size={10} class="text-status-purple" />
 				Avg/Ticket
@@ -68,10 +68,10 @@
 				<div
 					class="flex shrink-0 items-center gap-2 rounded border border-border/50 bg-background/50 px-2 py-1"
 				>
-					<span class="text-[9px] font-bold tracking-wider text-muted-foreground uppercase"
+					<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase"
 						>{workerLabel(worker)}</span
 					>
-					<span class="font-mono text-[10px] font-medium text-foreground"
+					<span class="font-mono text-xs font-medium text-foreground"
 						>${data.cost.toFixed(2)}</span
 					>
 				</div>
@@ -79,7 +79,7 @@
 		</div>
 	{/if}
 	<div class="mt-1 text-right">
-		<span class="text-muted-foreground font-mono text-[9px] tracking-wider">View details →</span>
+		<span class="text-muted-foreground font-mono text-xs tracking-wider">View details →</span>
 	</div>
 </a>
 

@@ -125,7 +125,7 @@
 			<Brain class="text-status-blue" size={18} />
 			<h1 class="text-sm font-bold tracking-widest text-foreground uppercase">Memory</h1>
 		</div>
-		<div class="text-[10px] text-muted-foreground uppercase tracking-widest bg-surface px-2 py-0.5 rounded border border-border">
+		<div class="text-xs text-muted-foreground uppercase tracking-widest bg-surface px-2 py-0.5 rounded border border-border">
 			v2.1.0-PRO
 		</div>
 	</header>
@@ -135,7 +135,7 @@
 			<span>Active Filter: <span class="font-bold text-status-blue">#{selectedTag}</span></span>
 			<button
 				onclick={() => selectedTag = null}
-				class="ml-auto text-[10px] uppercase font-bold tracking-widest text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+				class="ml-auto text-xs uppercase font-bold tracking-widest text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
 			>
 				Clear [x]
 			</button>
@@ -152,12 +152,12 @@
 		<div class="flex flex-col items-center justify-center py-16 text-muted-foreground border border-dashed border-border rounded-lg bg-background/10">
 			<Brain size={36} class="mb-2 opacity-10 text-status-blue" />
 			<h2 class="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">No Matches Found</h2>
-			<p class="text-[11px] text-center px-4 text-muted-foreground">
+			<p class="text-xs text-center px-4 text-muted-foreground">
 				No lessons or observations match the tag <span class="text-status-blue font-bold">#{selectedTag}</span>.
 			</p>
 			<button
 				onclick={() => selectedTag = null}
-				class="mt-4 px-3 py-1 rounded border border-border bg-background/50 text-[10px] uppercase font-bold tracking-widest text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+				class="mt-4 px-3 py-1 rounded border border-border bg-background/50 text-xs uppercase font-bold tracking-widest text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
 			>
 				Clear Filter
 			</button>
@@ -167,7 +167,7 @@
 		<div class="flex border-b border-border gap-1 p-0.5 bg-surface/40 rounded-t-md">
 			<button
 				onclick={() => activeTab = 'canon'}
-				class="flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
+				class="flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
 					activeTab === 'canon'
 						? 'border-status-blue text-status-blue bg-status-blue/5'
 						: 'border-transparent text-muted-foreground hover:text-foreground'
@@ -177,7 +177,7 @@
 			</button>
 			<button
 				onclick={() => activeTab = 'drafts'}
-				class="flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
+				class="flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
 					activeTab === 'drafts'
 						? 'border-status-amber text-status-amber bg-status-amber/5'
 						: 'border-transparent text-muted-foreground hover:text-foreground'
@@ -187,7 +187,7 @@
 			</button>
 			<button
 				onclick={() => activeTab = 'stream'}
-				class="flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
+				class="flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-all border-b-2 rounded-t-sm {
 					activeTab === 'stream'
 						? 'border-status-green text-status-green bg-status-green/5'
 						: 'border-transparent text-muted-foreground hover:text-foreground'
@@ -209,7 +209,7 @@
 									<h3 class="text-xs font-bold text-status-blue leading-tight flex-1">
 										{lesson.title || 'Untitled Lesson'}
 									</h3>
-									<span class="text-[8px] px-1.5 py-0.5 rounded bg-status-blue/20 text-status-blue border border-status-blue/30 font-bold uppercase tracking-tighter shrink-0">
+									<span class="text-[11px] px-1.5 py-0.5 rounded bg-status-blue/20 text-status-blue border border-status-blue/30 font-bold uppercase tracking-tighter shrink-0">
 										High confidence
 									</span>
 								</div>
@@ -218,7 +218,7 @@
 								<div class="flex flex-col gap-2">
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-blue/10 rounded p-3">
-										<p class="text-[11px] text-foreground leading-relaxed font-sans font-medium">
+										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
 											{getPlainEnglish(lesson.text, lesson.title)}
 										</p>
 									</div>
@@ -227,7 +227,7 @@
 									<div>
 										<button
 											onclick={() => toggleExpand(lessonId)}
-											class="text-[9px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 focus:outline-none cursor-pointer py-1"
+											class="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 focus:outline-none cursor-pointer py-1"
 										>
 											<Terminal size={10} />
 											{#if expandedIds[lessonId]}
@@ -238,7 +238,7 @@
 										</button>
 
 										{#if expandedIds[lessonId]}
-											<div class="mt-2 p-3 bg-background rounded border border-border font-mono text-[10px] text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
+											<div class="mt-2 p-3 bg-background rounded border border-border font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
 												{lesson.text}
 											</div>
 										{/if}
@@ -246,11 +246,11 @@
 								</div>
 
 								<div class="flex flex-wrap items-center gap-3 pt-3 mt-3 border-t border-border/50">
-									<div class="flex items-center gap-1.5 text-[9px] text-muted-foreground uppercase">
+									<div class="flex items-center gap-1.5 text-xs text-muted-foreground uppercase">
 										<Clock size={10} />
 										{formatDate(lesson.adopted_date)}
 									</div>
-									<div class="flex items-center gap-1.5 text-[9px] text-muted-foreground uppercase">
+									<div class="flex items-center gap-1.5 text-xs text-muted-foreground uppercase">
 										<Globe size={10} />
 										{lesson.applies_to?.join(', ') || 'Universal'}
 									</div>
@@ -259,7 +259,7 @@
 											{#each lesson.task_shape as tag, i (`${tag}:${i}`)}
 												<button
 													onclick={() => selectedTag = selectedTag === tag ? null : tag}
-													class="text-[8px] px-1 rounded border uppercase tracking-tighter cursor-pointer transition-colors {
+													class="text-[11px] px-1 rounded border uppercase tracking-tighter cursor-pointer transition-colors {
 														selectedTag === tag
 															? 'bg-status-blue/20 text-status-blue border-status-blue/40 font-bold'
 															: 'bg-surface text-muted-foreground border-border hover:bg-muted hover:text-foreground'
@@ -275,7 +275,7 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="text-center py-12 text-[10px] text-muted-foreground italic border border-dashed border-border rounded-lg">
+					<div class="text-center py-12 text-xs text-muted-foreground italic border border-dashed border-border rounded-lg">
 						No promoted lessons match current filter.
 					</div>
 				{/if}
@@ -290,17 +290,17 @@
 							<div class="bg-surface/30 border border-border rounded-lg p-4 relative overflow-hidden transition-all hover:border-muted-foreground/40">
 								{#if lesson.proposed_promotion}
 									<div class="absolute top-0 right-0">
-										<div class="bg-status-amber text-background text-[8px] font-bold px-2 py-0.5 uppercase tracking-tighter">
+										<div class="bg-status-amber text-background text-[11px] font-bold px-2 py-0.5 uppercase tracking-tighter">
 											Promotion Pending
 										</div>
 									</div>
 								{/if}
 
 								<div class="flex items-center gap-3 mb-3 {lesson.proposed_promotion ? 'pr-24' : ''}">
-									<div class="text-[9px] text-muted-foreground uppercase font-bold bg-background px-2 py-0.5 rounded border border-border">
+									<div class="text-xs text-muted-foreground uppercase font-bold bg-background px-2 py-0.5 rounded border border-border">
 										{lesson.project_id}
 									</div>
-									<div class="text-[9px] text-muted-foreground uppercase tracking-tight truncate">
+									<div class="text-xs text-muted-foreground uppercase tracking-tight truncate">
 										Synthesized by {lesson.synthesized_by}
 									</div>
 								</div>
@@ -309,7 +309,7 @@
 								<div class="flex flex-col gap-2">
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-amber/10 rounded p-3">
-										<p class="text-[11px] text-foreground leading-relaxed font-sans font-medium">
+										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
 											{getPlainEnglish(lesson.lesson_text)}
 										</p>
 									</div>
@@ -318,7 +318,7 @@
 									<div>
 										<button
 											onclick={() => toggleExpand(lessonId)}
-											class="text-[9px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 focus:outline-none cursor-pointer py-1"
+											class="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 focus:outline-none cursor-pointer py-1"
 										>
 											<Terminal size={10} />
 											{#if expandedIds[lessonId]}
@@ -329,7 +329,7 @@
 										</button>
 
 										{#if expandedIds[lessonId]}
-											<div class="mt-2 p-3 bg-background rounded border border-border font-mono text-[10px] text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
+											<div class="mt-2 p-3 bg-background rounded border border-border font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
 												{lesson.lesson_text}
 											</div>
 										{/if}
@@ -341,7 +341,7 @@
 										{#each lesson.task_shape_tags as tag, i (`${tag}:${i}`)}
 											<button
 												onclick={() => selectedTag = selectedTag === tag ? null : tag}
-												class="text-[8px] px-1.5 py-0.5 rounded uppercase tracking-tighter cursor-pointer transition-colors {
+												class="text-[11px] px-1.5 py-0.5 rounded uppercase tracking-tighter cursor-pointer transition-colors {
 													selectedTag === tag
 														? 'bg-status-amber/20 text-status-amber border border-status-amber/40 font-bold'
 														: 'bg-surface/50 text-muted-foreground border border-transparent hover:bg-muted/50 hover:text-foreground'
@@ -351,7 +351,7 @@
 											</button>
 										{/each}
 									</div>
-									<span class="text-[9px] text-muted-foreground uppercase shrink-0 ml-2">
+									<span class="text-xs text-muted-foreground uppercase shrink-0 ml-2">
 										{formatDate(lesson.created_at)}
 									</span>
 								</div>
@@ -359,7 +359,7 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="text-center py-12 text-[10px] text-muted-foreground italic border border-dashed border-border rounded-lg">
+					<div class="text-center py-12 text-xs text-muted-foreground italic border border-dashed border-border rounded-lg">
 						No draft lessons match current filter.
 					</div>
 				{/if}
@@ -373,7 +373,7 @@
 							{@const lessonId = `stream-${obs.observation_id}`}
 							<div class="bg-surface/30 border border-border rounded-lg p-3.5 transition-all hover:border-muted-foreground/40">
 								<div class="flex items-center gap-3 mb-2">
-									<span class="text-[9px] font-bold uppercase tracking-wider shrink-0 {
+									<span class="text-xs font-bold uppercase tracking-wider shrink-0 {
 										obs.observation_kind === 'what-didnt-work' ? 'text-status-red' :
 										obs.observation_kind === 'what-worked' ? 'text-status-green' :
 										obs.observation_kind === 'surprise' ? 'text-status-amber' :
@@ -382,9 +382,9 @@
 										{mapObservationKind(obs.observation_kind)}
 									</span>
 									{#if obs.ticket_id}
-										<span class="text-[9px] text-muted-foreground font-mono shrink-0">{obs.ticket_id}</span>
+										<span class="text-xs text-muted-foreground font-mono shrink-0">{obs.ticket_id}</span>
 									{/if}
-									<span class="text-[9px] text-muted-foreground ml-auto shrink-0 font-mono">
+									<span class="text-xs text-muted-foreground ml-auto shrink-0 font-mono">
 										{formatRelativeTime(obs.ts)}
 									</span>
 								</div>
@@ -393,7 +393,7 @@
 								<div class="flex flex-col gap-1.5">
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-green/10 rounded p-2.5">
-										<p class="text-[11px] text-foreground leading-relaxed font-sans font-medium">
+										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
 											{getPlainEnglish(obs.text)}
 										</p>
 									</div>
@@ -402,7 +402,7 @@
 									<div>
 										<button
 											onclick={() => toggleExpand(lessonId)}
-											class="text-[8px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 focus:outline-none cursor-pointer py-0.5"
+											class="text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 focus:outline-none cursor-pointer py-0.5"
 										>
 											<Terminal size={8} />
 											{#if expandedIds[lessonId]}
@@ -413,7 +413,7 @@
 										</button>
 
 										{#if expandedIds[lessonId]}
-											<div class="mt-2 p-2.5 bg-background rounded border border-border font-mono text-[10px] text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
+											<div class="mt-2 p-2.5 bg-background rounded border border-border font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap select-all">
 												{obs.text}
 											</div>
 										{/if}
@@ -425,7 +425,7 @@
 										{#each obs.task_shape as tag, i (`${tag}:${i}`)}
 											<button
 												onclick={() => selectedTag = selectedTag === tag ? null : tag}
-												class="text-[8px] px-1 border rounded lowercase cursor-pointer transition-colors {
+												class="text-[11px] px-1 border rounded lowercase cursor-pointer transition-colors {
 													selectedTag === tag
 														? 'bg-status-green/20 text-status-green border-status-green/40 font-bold'
 														: 'text-muted-foreground border-border hover:border-border hover:text-muted-foreground'
@@ -440,7 +440,7 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="text-center py-12 text-[10px] text-muted-foreground italic border border-dashed border-border rounded-lg">
+					<div class="text-center py-12 text-xs text-muted-foreground italic border border-dashed border-border rounded-lg">
 						No stream observations match current filter.
 					</div>
 				{/if}
@@ -449,7 +449,7 @@
 	{/if}
 
 	<footer class="mt-6 pt-4 border-t border-border/50 text-center">
-		<div class="inline-flex items-center gap-2 text-[9px] text-muted-foreground uppercase tracking-[0.2em] bg-background/30 px-4 py-2 rounded-full border border-border/50">
+		<div class="inline-flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-[0.2em] bg-background/30 px-4 py-2 rounded-full border border-border/50">
 			<Info size={10} />
 			Lessons are promoted from drafts after successful cross-repo validation
 		</div>

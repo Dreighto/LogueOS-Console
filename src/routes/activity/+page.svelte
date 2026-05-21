@@ -63,7 +63,7 @@
 			class="flex items-center gap-2 rounded-full bg-surface px-3 py-1 border border-border"
 		>
 			<div class="h-2 w-2 animate-pulse rounded-full bg-status-green"></div>
-			<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Live</span>
+			<span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Live</span>
 		</div>
 	</header>
 
@@ -76,10 +76,10 @@
 			<!-- Header / Summary -->
 			<div class="flex flex-col gap-2">
 				<div class="flex items-center gap-2">
-					<div class="rounded bg-surface px-2 py-0.5 font-mono text-[10px] font-bold tracking-widest text-muted-foreground uppercase border border-border">
+					<div class="rounded bg-surface px-2 py-0.5 font-mono text-xs font-bold tracking-widest text-muted-foreground uppercase border border-border">
 						{selectedEvent.level}
 					</div>
-					<span class="font-mono text-[10px] text-muted-foreground">{formatFullDate(selectedEvent.ts)}</span>
+					<span class="font-mono text-xs text-muted-foreground">{formatFullDate(selectedEvent.ts)}</span>
 				</div>
 				<h3 class="text-lg font-bold leading-snug">{selectedEvent.summary}</h3>
 			</div>
@@ -87,7 +87,7 @@
 			<!-- Meta Grid -->
 			<div class="grid grid-cols-2 gap-4 rounded-lg border border-border bg-surface/30 p-4">
 				<div class="flex flex-col gap-1">
-					<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+					<span class="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
 						<Terminal size={10} />
 						Source
 					</span>
@@ -96,7 +96,7 @@
 
 				{#if selectedEvent.ticket_id && selectedEvent.ticket_id !== 'unknown'}
 					<div class="flex flex-col gap-1">
-						<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+						<span class="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
 							<Hash size={10} />
 							Ticket
 						</span>
@@ -106,7 +106,7 @@
 
 				{#if selectedEvent.trace_id}
 					<div class="col-span-2 flex flex-col gap-1 border-t border-border/50 pt-3">
-						<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+						<span class="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
 							<Fingerprint size={10} />
 							Trace ID
 						</span>

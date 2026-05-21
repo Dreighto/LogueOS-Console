@@ -211,7 +211,7 @@
 			<Terminal size={16} />
 			<span>Jobs</span>
 		</div>
-		<div class="flex items-center gap-4 font-mono text-[10px]">
+		<div class="flex items-center gap-4 font-mono text-xs">
 			<div class="flex items-center gap-1.5 text-muted-foreground">
 				<span class="h-1.5 w-1.5 rounded-full bg-status-green"></span>
 				GATEWAY ONLINE
@@ -224,7 +224,7 @@
 		<!-- Config Row -->
 		<div class="grid grid-cols-1 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="role" class="font-mono text-[10px] text-muted-foreground uppercase">Role</label>
+				<label for="role" class="font-mono text-xs text-muted-foreground uppercase">Role</label>
 				<select
 					id="role"
 					bind:value={role}
@@ -236,7 +236,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="worker" class="font-mono text-[10px] text-muted-foreground uppercase">Worker</label>
+				<label for="worker" class="font-mono text-xs text-muted-foreground uppercase">Worker</label>
 				<select
 					id="worker"
 					bind:value={worker}
@@ -250,7 +250,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="repo" class="font-mono text-[10px] text-muted-foreground uppercase"
+				<label for="repo" class="font-mono text-xs text-muted-foreground uppercase"
 					>Which project?</label
 				>
 				<select
@@ -265,7 +265,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="ticket" class="font-mono text-[10px] text-muted-foreground uppercase"
+				<label for="ticket" class="font-mono text-xs text-muted-foreground uppercase"
 					>Ticket ID (Optional)</label
 				>
 				<input
@@ -281,7 +281,7 @@
 		<!-- Advanced Row -->
 		<div class="grid grid-cols-1 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="thinking" class="font-mono text-[10px] text-muted-foreground uppercase"
+				<label for="thinking" class="font-mono text-xs text-muted-foreground uppercase"
 					>Thinking Level</label
 				>
 				<select
@@ -298,7 +298,7 @@
 			     (direct dispatch, no Linear ticket). On = file Linear ticket first,
 			     dispatch worker against it. -->
 			<div class="flex flex-col justify-end gap-1.5">
-				<label for="track" class="font-mono text-[10px] text-muted-foreground uppercase"
+				<label for="track" class="font-mono text-xs text-muted-foreground uppercase"
 					>Track in Linear</label
 				>
 				<button
@@ -310,7 +310,7 @@
 						: 'border-border bg-background text-muted-foreground hover:border-border'}"
 				>
 					<span
-						class="flex h-3 w-3 items-center justify-center rounded-sm border text-[8px] {trackInLinear
+						class="flex h-3 w-3 items-center justify-center rounded-sm border text-[11px] {trackInLinear
 							? 'border-status-purple bg-status-purple text-white'
 							: 'border-border'}"
 					>
@@ -326,11 +326,11 @@
 			<div
 				class="flex flex-col gap-3 rounded-sm border border-status-purple/30 bg-status-purple/10 px-3 py-3"
 			>
-				<div class="font-mono text-[10px] tracking-wider text-status-purple uppercase">
+				<div class="font-mono text-xs tracking-wider text-status-purple uppercase">
 					Linear Ticket Fields
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="linear-title" class="font-mono text-[10px] text-muted-foreground uppercase">
+					<label for="linear-title" class="font-mono text-xs text-muted-foreground uppercase">
 						Title <span class="text-status-red">*</span>
 					</label>
 					<input
@@ -343,7 +343,7 @@
 				</div>
 				<div class="grid grid-cols-1 gap-4">
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-team" class="font-mono text-[10px] text-muted-foreground uppercase"
+						<label for="linear-team" class="font-mono text-xs text-muted-foreground uppercase"
 							>Team</label
 						>
 						<select
@@ -357,7 +357,7 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-project" class="font-mono text-[10px] text-muted-foreground uppercase">
+						<label for="linear-project" class="font-mono text-xs text-muted-foreground uppercase">
 							Project (optional)
 						</label>
 						<select
@@ -371,7 +371,7 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-priority" class="font-mono text-[10px] text-muted-foreground uppercase">
+						<label for="linear-priority" class="font-mono text-xs text-muted-foreground uppercase">
 							Priority
 						</label>
 						<select
@@ -392,7 +392,7 @@
 
 		<!-- Prompt Area -->
 		<div class="flex min-h-[150px] flex-1 flex-col gap-1.5">
-			<label for="prompt" class="font-mono text-[10px] text-muted-foreground uppercase"
+			<label for="prompt" class="font-mono text-xs text-muted-foreground uppercase"
 				>Describe what needs to be done</label
 			>
 			<textarea
@@ -443,13 +443,13 @@
 							<Clock size={12} />
 							<span>Worker running... {formatElapsed(elapsedSec)}</span>
 						</div>
-						<span class="text-[10px] opacity-70">Ref: {lastTraceId}</span>
+						<span class="text-xs opacity-70">Ref: {lastTraceId}</span>
 						{#if lastTicketId && lastTicketUrl}
 							<a
 								href={lastTicketUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="w-fit text-[10px] text-status-purple underline hover:text-status-purple"
+								class="w-fit text-xs text-status-purple underline hover:text-status-purple"
 							>
 								Filed: {lastTicketId} →
 							</a>
@@ -458,7 +458,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
+						class="mt-0.5 text-xs underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -475,7 +475,7 @@
 						{#if terminalRun.summary}
 							<span class="leading-relaxed opacity-90">{terminalRun.summary}</span>
 						{/if}
-						<div class="flex flex-wrap items-center gap-3 text-[10px] opacity-70">
+						<div class="flex flex-wrap items-center gap-3 text-xs opacity-70">
 							<span>Ref: {lastTraceId}</span>
 							{#if lastTicketId && lastTicketUrl}
 								<a
@@ -495,7 +495,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
+						class="mt-0.5 text-xs underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -505,7 +505,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="mt-0.5 ml-auto text-[10px] underline opacity-70 hover:opacity-100"
+						class="mt-0.5 ml-auto text-xs underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>
@@ -513,7 +513,7 @@
 					<AlertTriangle size={14} class="mt-0.5" />
 					<div class="flex flex-1 flex-col gap-0.5">
 						<span>Worker may have timed out — no terminal status after 11 min.</span>
-						<div class="flex items-center gap-3 text-[10px] opacity-70">
+						<div class="flex items-center gap-3 text-xs opacity-70">
 							<span>Ref: {lastTraceId}</span>
 							<a href={resolve('/activity')} class="underline">Check Activity →</a>
 						</div>
@@ -521,7 +521,7 @@
 					<button
 						type="button"
 						onclick={dismiss}
-						class="mt-0.5 text-[10px] underline opacity-70 hover:opacity-100"
+						class="mt-0.5 text-xs underline opacity-70 hover:opacity-100"
 					>
 						dismiss
 					</button>

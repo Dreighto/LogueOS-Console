@@ -73,13 +73,13 @@
 			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
 		>
 			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
-			<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Live</span>
+			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Live</span>
 		</div>
 	</header>
 
 	{#if refreshError}
 		<div
-			class="rounded border border-status-red/30 bg-status-red/10 px-3 py-2 font-mono text-[10px] text-status-red"
+			class="rounded border border-status-red/30 bg-status-red/10 px-3 py-2 font-mono text-xs text-status-red"
 		>
 			Refresh error: {refreshError}
 		</div>
