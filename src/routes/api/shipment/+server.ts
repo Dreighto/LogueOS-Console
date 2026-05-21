@@ -39,7 +39,13 @@ function plainLead(body: string): string {
 		.replace(/\n{3,}/g, '\n\n') // collapse blank runs
 		.replace(/\n+[^\n]*Generated with[^\n]*$/i, '') // drop the CC footer line
 		.trim();
-	return cleaned.length > 700 ? cleaned.slice(0, 699).trimEnd() + '...' : cleaned;
+	if (cleaned.length <= 700) return cleaned;
+	// Truncate on a sentence boundary where possible, else a word boundary —
+	// never mid-word.
+	const slice = cleaned.slice(0, 700);
+	const sentenceEnd = slice.lastIndexOf('. ');
+	const cut = sentenceEnd > 400 ? sentenceEnd + 1 : Math.max(slice.lastIndexOf(' '), 400);
+	return slice.slice(0, cut).trimEnd() + ' [...]';
 }
 
 export const GET: RequestHandler = async ({ url }) => {
