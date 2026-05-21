@@ -5,12 +5,14 @@
 //
 // Why we need this file: $lib/server/config can't be imported into
 // +page.svelte (client). The right SvelteKit pattern is to read the
-// config in a server hook (this file) and pass only the safe fields
-// to the page via load(). See PR #2 review (CodeRabbit Critical on
-// $env/dynamic/private leak into client code).
+// config in a server load (this file) and pass only the safe fields
+// to the page.
 
 import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
+import { getTodayShipments, type Shipment } from '$lib/server/shipments';
+import { getDispatchWorkers } from '$lib/config/workers';
+import type { ActiveJob } from '$lib/types/worker';
 import { resolve } from '$app/paths';
 
 interface WorkerState {
@@ -36,7 +38,7 @@ interface StatusBoardData {
 	reviews: { count: number; items: Run[] };
 	workers: { active: number; total: number; items: WorkerState[] };
 	usage: { todayCost: number; recentDispatches: number };
-	completions: { today: number; items: Run[] };
+	completions: { today: number; items: Shipment[] };
 }
 
 const EMPTY: StatusBoardData = {
@@ -48,6 +50,25 @@ const EMPTY: StatusBoardData = {
 	completions: { today: 0, items: [] }
 };
 
+// Collapse the per-slot job feed (/api/workers returns one entry per active
+// lease since LOS-125) to one entry per worker for the landing page's compact
+// roster: busy if the worker holds any job, idle otherwise.
+function rosterFromJobs(jobs: ActiveJob[]): WorkerState[] {
+	return getDispatchWorkers().map((def) => {
+		const job = jobs.find((j) => j && j.worker_id === def.id);
+		return job
+			? {
+					id: def.id,
+					state: 'busy' as const,
+					ticket_id: job.ticket_id,
+					step: job.step,
+					branch: job.branch,
+					since: job.since
+				}
+			: { id: def.id, state: 'idle' as const };
+	});
+}
+
 export const load: PageServerLoad = async ({ fetch }) => {
 	try {
 		const [runsResp, workersResp, usageResp, killResp] = await Promise.all([
@@ -58,24 +79,12 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		]);
 
 		const runsData = runsResp.ok ? await runsResp.json() : { runs: [] };
-		const workersData = workersResp.ok ? await workersResp.json() : { workers: [] };
+		const workersData = workersResp.ok ? await workersResp.json() : { jobs: [] };
 		const usageData = usageResp.ok ? await usageResp.json() : {};
 		const kill = killResp.ok ? await killResp.json() : {};
 
 		const allRuns: Run[] = runsData.runs || [];
-		const workers: WorkerState[] = workersData.workers || [];
-
-		// Today's boundaries
-		const now = new Date();
-		const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-		const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
-
-		const completionsToday = allRuns
-			.filter(
-				(r) =>
-					r.status === 'CONFIRMED_WORKING' && r.timestamp >= todayStart && r.timestamp < todayEnd
-			)
-			.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+		const roster = rosterFromJobs(workersData.jobs || []);
 
 		const status: StatusBoardData = {
 			killSwitch: { active: kill.active === true },
@@ -90,18 +99,16 @@ export const load: PageServerLoad = async ({ fetch }) => {
 					.slice(0, 3)
 			},
 			workers: {
-				active: workers.filter((w) => w.state === 'busy').length,
-				total: workers.length,
-				items: workers
+				active: roster.filter((w) => w.state === 'busy').length,
+				total: roster.length,
+				items: roster
 			},
 			usage: {
 				todayCost: Number(usageData.metrics?.totalPredictedCost ?? 0),
 				recentDispatches: Number(usageData.metrics?.recentDispatches ?? 0)
 			},
-			completions: {
-				today: completionsToday.length,
-				items: completionsToday.slice(0, 10)
-			}
+			// Today's shipments = PRs merged in the local day, across repos (LOS-127).
+			completions: await getTodayShipments()
 		};
 
 		return { status, ...clientSafeConfig };
