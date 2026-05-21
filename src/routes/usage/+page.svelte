@@ -189,13 +189,13 @@
 	<!-- Cost summary cards -->
 	<div class="grid grid-cols-2 gap-2">
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
-			<div class="text-dim text-[9px] font-bold tracking-widest uppercase">MTD Cost</div>
+			<div class="text-muted-foreground text-[9px] font-bold tracking-widest uppercase">MTD Cost</div>
 			<div class="text-base font-bold text-foreground tabular-nums">
 				${data.history.projection.monthToDate.toFixed(2)}
 			</div>
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
-			<div class="text-dim text-[9px] font-bold tracking-widest uppercase">Proj. EOMonth</div>
+			<div class="text-muted-foreground text-[9px] font-bold tracking-widest uppercase">Proj. EOMonth</div>
 			<div
 				class="text-base font-bold tabular-nums {projColor(data.history.projection.projectedEOM)}"
 			>
@@ -210,7 +210,7 @@
 			{@const spark = buildSparkline(w.id)}
 			<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 				<div
-					class="text-dim flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+					class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 				>
 					<span class="h-1.5 w-1.5 rounded-full" style="background-color: {w.color}"></span>
 					{w.shortLabel}
@@ -220,7 +220,7 @@
 						<div class="text-sm font-bold text-foreground tabular-nums">
 							${(data.history.projection.byWorker[w.id] ?? 0).toFixed(2)}
 						</div>
-						<div class="text-dim text-[9px] tabular-nums">
+						<div class="text-muted-foreground text-[9px] tabular-nums">
 							{fmtTokens(workerTokenTotal(w.id))} tok
 						</div>
 					</div>
@@ -244,7 +244,7 @@
 	<!-- Daily cost chart (stacked bars) -->
 	{#if data.history.days.length > 0}
 		<div class="rounded-lg border border-border bg-surface/30 p-3">
-			<div class="text-dim mb-2 text-[9px] font-bold tracking-widest uppercase">Daily Cost</div>
+			<div class="text-muted-foreground mb-2 text-[9px] font-bold tracking-widest uppercase">Daily Cost</div>
 			<div class="no-scrollbar flex items-end gap-1 overflow-x-auto pb-2" style="height: 64px;">
 				{#each [...data.history.days].reverse() as day (day.date)}
 					<div class="flex shrink-0 flex-col items-center gap-0.5" title={dayTooltip(day)}>
@@ -266,21 +266,21 @@
 				{#each workers as w (w.id)}
 					<div class="flex items-center gap-1">
 						<span class="h-2 w-2 rounded opacity-80" style="background-color: {w.color}"></span>
-						<span class="text-dim font-mono text-[9px]">{w.shortLabel}</span>
+						<span class="text-muted-foreground font-mono text-[9px]">{w.shortLabel}</span>
 					</div>
 				{/each}
 			</div>
 		</div>
 	{:else}
 		<div class="rounded-lg border border-dashed border-border p-6 text-center">
-			<p class="text-dim font-mono text-[10px]">No usage data in this period</p>
+			<p class="text-muted-foreground font-mono text-[10px]">No usage data in this period</p>
 		</div>
 	{/if}
 
 	<!-- Hourly activity heatmap -->
 	{#if data.hourlyActivity.length > 0}
 		<div class="rounded-lg border border-border bg-surface/30 p-3">
-			<div class="text-dim mb-2 text-[9px] font-bold tracking-widest uppercase">
+			<div class="text-muted-foreground mb-2 text-[9px] font-bold tracking-widest uppercase">
 				Hourly Activity (UTC)
 			</div>
 			<div class="no-scrollbar overflow-x-auto">
@@ -289,7 +289,7 @@
 					<div class="mb-1 flex">
 						<div class="w-10 shrink-0"></div>
 						{#each HOURS as h (h)}
-							<div class="text-dim w-4 shrink-0 text-center font-mono text-[7px]">
+							<div class="text-muted-foreground w-4 shrink-0 text-center font-mono text-[7px]">
 								{h % 6 === 0 ? String(h).padStart(2, '0') : ''}
 							</div>
 						{/each}
@@ -297,7 +297,7 @@
 					<!-- Rows: one per date, most recent last -->
 					{#each heatmapDates as date (date)}
 						<div class="mb-0.5 flex items-center">
-							<div class="text-dim w-10 shrink-0 font-mono text-[7px]">{fmtDate(date)}</div>
+							<div class="text-muted-foreground w-10 shrink-0 font-mono text-[7px]">{fmtDate(date)}</div>
 							{#each HOURS as h (h)}
 								{@const cell = heatCell(date, h)}
 								<div
@@ -318,7 +318,7 @@
 	<!-- Ticket leaderboard -->
 	{#if leaderboard().length > 0}
 		<div class="rounded-lg border border-border bg-surface/30 p-3">
-			<div class="text-dim mb-2 text-[9px] font-bold tracking-widest uppercase">
+			<div class="text-muted-foreground mb-2 text-[9px] font-bold tracking-widest uppercase">
 				Ticket Leaderboard
 			</div>
 			<div class="flex flex-col gap-1">
@@ -326,7 +326,7 @@
 					<div
 						class="flex items-center gap-2 rounded border border-border/30 bg-surface/20 px-2 py-1.5"
 					>
-						<span class="text-dim w-5 shrink-0 font-mono text-[9px] tabular-nums">#{i + 1}</span>
+						<span class="text-muted-foreground w-5 shrink-0 font-mono text-[9px] tabular-nums">#{i + 1}</span>
 						<span class="min-w-0 flex-1 truncate font-mono text-[10px] font-bold text-foreground"
 							>{ticket.ticket_id}</span
 						>
@@ -341,7 +341,7 @@
 							<span class="font-mono text-[10px] font-bold text-foreground tabular-nums"
 								>${ticket.cost.toFixed(2)}</span
 							>
-							<span class="text-dim font-mono text-[8px] tabular-nums"
+							<span class="text-muted-foreground font-mono text-[8px] tabular-nums"
 								>{ticket.dispatches}d · {fmtTokens(ticket.tokens)}</span
 							>
 						</div>
@@ -351,21 +351,21 @@
 		</div>
 	{:else if data.ticketLeaderboard.length === 0}
 		<div class="rounded-lg border border-dashed border-border p-4 text-center">
-			<p class="text-dim font-mono text-[10px]">No ticket-attributed costs in this period</p>
+			<p class="text-muted-foreground font-mono text-[10px]">No ticket-attributed costs in this period</p>
 		</div>
 	{/if}
 
 	<!-- Burn rate card -->
 	<div class="flex flex-col gap-2 rounded-lg border border-border bg-surface/30 p-3">
-		<div class="text-dim text-[9px] font-bold tracking-widest uppercase">Burn Rate</div>
+		<div class="text-muted-foreground text-[9px] font-bold tracking-widest uppercase">Burn Rate</div>
 		<div class="flex justify-between font-mono text-[11px]">
-			<span class="text-dim">Daily avg</span>
+			<span class="text-muted-foreground">Daily avg</span>
 			<span class="text-foreground tabular-nums"
 				>${data.history.projection.dailyAvg.toFixed(3)}/day</span
 			>
 		</div>
 		<div class="flex justify-between font-mono text-[11px]">
-			<span class="text-dim">Days elapsed</span>
+			<span class="text-muted-foreground">Days elapsed</span>
 			<span class="text-foreground tabular-nums"
 				>{data.history.projection.daysElapsed} / {data.history.projection.daysInMonth}</span
 			>
@@ -380,7 +380,7 @@
 			></div>
 		</div>
 		<div class="flex justify-between font-mono text-[10px]">
-			<span class="text-dim">MTD ${data.history.projection.monthToDate.toFixed(2)}</span>
+			<span class="text-muted-foreground">MTD ${data.history.projection.monthToDate.toFixed(2)}</span>
 			<span class={projColor(data.history.projection.projectedEOM)}
 				>Proj. ${data.history.projection.projectedEOM.toFixed(2)}</span
 			>
@@ -389,10 +389,10 @@
 
 	<!-- Daily breakdown table -->
 	<div class="rounded-lg border border-border bg-surface/30 p-3">
-		<div class="text-dim mb-2 text-[9px] font-bold tracking-widest uppercase">Daily Breakdown</div>
+		<div class="text-muted-foreground mb-2 text-[9px] font-bold tracking-widest uppercase">Daily Breakdown</div>
 		<table class="w-full font-mono text-[10px] tabular-nums">
 			<thead>
-				<tr class="text-dim border-b border-border/50 text-[9px] tracking-wider uppercase">
+				<tr class="text-muted-foreground border-b border-border/50 text-[9px] tracking-wider uppercase">
 					<th class="pb-1 text-left font-bold">Date</th>
 					{#each workers as w (w.id)}
 						<th class="pb-1 text-right font-bold">{w.shortLabel}</th>
@@ -417,11 +417,11 @@
 			</tbody>
 		</table>
 		{#if data.history.days.length === 0}
-			<p class="text-dim py-4 text-center font-mono text-[10px]">No data</p>
+			<p class="text-muted-foreground py-4 text-center font-mono text-[10px]">No data</p>
 		{/if}
 	</div>
 
-	<p class="text-dim pb-2 text-center font-mono text-[10px]">
+	<p class="text-muted-foreground pb-2 text-center font-mono text-[10px]">
 		{data.history.totalEvents} total dispatch events tracked
 	</p>
 </div>

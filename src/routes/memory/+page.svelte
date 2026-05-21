@@ -123,7 +123,7 @@
 	<header class="flex items-center justify-between border-b border-slate-800 pb-3">
 		<div class="flex items-center gap-2">
 			<Brain class="text-blue-400" size={18} />
-			<h1 class="text-sm font-bold tracking-widest text-[#F0F6FC] uppercase">Team Memory</h1>
+			<h1 class="text-sm font-bold tracking-widest text-[#F0F6FC] uppercase">Memory</h1>
 		</div>
 		<div class="text-[10px] text-[#8B949E] uppercase tracking-widest bg-[#161B22] px-2 py-0.5 rounded border border-[#30363D]">
 			v2.1.0-PRO

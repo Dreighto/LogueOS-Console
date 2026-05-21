@@ -4,7 +4,7 @@
 
 <div class="flex flex-col gap-6 h-full max-w-5xl mx-auto py-6 px-4">
     <div class="flex flex-col gap-1">
-        <h1 class="text-2xl font-bold font-mono tracking-tight text-slate-100">Give the Team a Job</h1>
+        <h1 class="text-2xl font-bold font-mono tracking-tight text-slate-100">Jobs</h1>
         <p class="text-sm text-slate-500 font-mono">Describe the work, pick who handles it, and send it off.</p>
     </div>
 

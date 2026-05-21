@@ -54,7 +54,7 @@
 <div class="flex flex-col gap-6">
 	<header class="flex items-center justify-between">
 		<div>
-			<h1 class="font-sans text-2xl font-bold text-[#F0F6FC]">What's Happening</h1>
+			<h1 class="font-sans text-2xl font-bold text-[#F0F6FC]">Activity</h1>
 			<p class="mt-1 text-sm text-[#8B949E]">
 				The latest stream of thoughts, actions, and results from the team.
 			</p>
@@ -79,7 +79,7 @@
 					<div class="rounded bg-surface px-2 py-0.5 font-mono text-[10px] font-bold tracking-widest text-muted-foreground uppercase border border-border">
 						{selectedEvent.level}
 					</div>
-					<span class="font-mono text-[10px] text-dim">{formatFullDate(selectedEvent.ts)}</span>
+					<span class="font-mono text-[10px] text-muted-foreground">{formatFullDate(selectedEvent.ts)}</span>
 				</div>
 				<h3 class="text-lg font-bold leading-snug">{selectedEvent.summary}</h3>
 			</div>
@@ -87,7 +87,7 @@
 			<!-- Meta Grid -->
 			<div class="grid grid-cols-2 gap-4 rounded-lg border border-border bg-surface/30 p-4">
 				<div class="flex flex-col gap-1">
-					<span class="flex items-center gap-1.5 text-[10px] font-bold text-dim uppercase tracking-wider">
+					<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
 						<Terminal size={10} />
 						Source
 					</span>
@@ -96,7 +96,7 @@
 
 				{#if selectedEvent.ticket_id && selectedEvent.ticket_id !== 'unknown'}
 					<div class="flex flex-col gap-1">
-						<span class="flex items-center gap-1.5 text-[10px] font-bold text-dim uppercase tracking-wider">
+						<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
 							<Hash size={10} />
 							Ticket
 						</span>
@@ -106,7 +106,7 @@
 
 				{#if selectedEvent.trace_id}
 					<div class="col-span-2 flex flex-col gap-1 border-t border-border/50 pt-3">
-						<span class="flex items-center gap-1.5 text-[10px] font-bold text-dim uppercase tracking-wider">
+						<span class="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
 							<Fingerprint size={10} />
 							Trace ID
 						</span>
@@ -117,7 +117,7 @@
 
 			<!-- Raw Data / Message -->
 			<div class="flex flex-col gap-3">
-				<h4 class="text-xs font-bold text-dim uppercase tracking-widest px-1">Raw Context</h4>
+				<h4 class="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Raw Context</h4>
 				<div class="rounded-md bg-black/40 p-4 font-mono text-xs leading-relaxed text-slate-300 border border-border/30 overflow-x-auto whitespace-pre-wrap">
 					{JSON.stringify(selectedEvent, null, 2)}
 				</div>

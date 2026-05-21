@@ -85,7 +85,7 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+	<div class="grid grid-cols-1 gap-4">
 		{#each workers as worker (worker.id)}
 			<WorkerCard {worker} />
 		{:else}

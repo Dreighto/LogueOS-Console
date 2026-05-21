@@ -13,7 +13,7 @@
 	import {
 		AlertTriangle,
 		CheckCircle2,
-		Plus,
+		Send,
 		ChevronRight,
 		Power,
 		Activity,
@@ -22,6 +22,7 @@
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { formatRelativeTime } from '$lib/utils/format';
+	import { workerLabel } from '$lib/config/workers';
 
 	let { data }: { data: PageData } = $props();
 
@@ -91,7 +92,7 @@
 	<header class="flex items-center justify-between border-b border-border pb-2">
 		<div class="flex items-center gap-2">
 			<Activity size={16} class="text-blue-400" />
-			<h1 class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Team Heartbeat</h1>
+			<h1 class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Home</h1>
 		</div>
 		<a
 			href={resolve('/settings')}
@@ -155,7 +156,7 @@
 		</div>
 	</section>
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+	<div class="grid grid-cols-1 gap-4">
 		<!-- Workers Section -->
 		<section class="flex flex-col gap-2">
 			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
@@ -174,7 +175,7 @@
 									? 'text-blue-400'
 									: w.state === 'idle'
 										? 'text-slate-400'
-										: 'text-slate-600'}">{w.id === 'gemini' ? 'Antigravity' : w.id}</span
+										: 'text-slate-600'}">{workerLabel(w.id)}</span
 							>
 							<span class="text-[9px] text-slate-500 uppercase"
 								>{w.since ? formatRelativeTime(w.since) : w.state}</span
@@ -282,7 +283,7 @@
 		href={resolve('/ask')}
 		class="mt-2 flex items-center justify-center gap-2 rounded-sm border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:scale-[0.99] active:bg-blue-600/30"
 	>
-		<Plus size={14} />
-		Give the team a job
+		<Send size={14} />
+		Send a job
 	</a>
 </div>
