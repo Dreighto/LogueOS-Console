@@ -115,7 +115,7 @@
 				href={resolve('/settings')}
 				aria-live="assertive"
 				in:fade={{ duration: 300 }}
-				class="active-trigger flex items-center gap-1.5 rounded-md border border-red-500/50 bg-red-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-red-300 uppercase transition-colors hover:bg-red-500/20"
+				class="active-trigger flex items-center gap-1.5 rounded-md border border-status-red/50 bg-status-red/10 px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-status-red uppercase transition-colors hover:bg-status-red/20"
 			>
 				<AlertOctagon size={12} aria-hidden="true" />
 				<span>Halt</span>

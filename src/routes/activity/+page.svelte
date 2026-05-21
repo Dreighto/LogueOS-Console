@@ -54,16 +54,16 @@
 <div class="flex flex-col gap-6">
 	<header class="flex items-center justify-between">
 		<div>
-			<h1 class="font-sans text-2xl font-bold text-[#F0F6FC]">Activity</h1>
-			<p class="mt-1 text-sm text-[#8B949E]">
+			<h1 class="font-sans text-2xl font-bold text-foreground">Activity</h1>
+			<p class="mt-1 text-sm text-muted-foreground">
 				The latest stream of thoughts, actions, and results from the team.
 			</p>
 		</div>
 		<div
-			class="flex items-center gap-2 rounded-full bg-[#161B22] px-3 py-1 border border-[#30363D]"
+			class="flex items-center gap-2 rounded-full bg-surface px-3 py-1 border border-border"
 		>
-			<div class="h-2 w-2 animate-pulse rounded-full bg-[#3FB950]"></div>
-			<span class="text-[11px] font-medium text-[#8B949E] uppercase tracking-wider">Live</span>
+			<div class="h-2 w-2 animate-pulse rounded-full bg-status-green"></div>
+			<span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Live</span>
 		</div>
 	</header>
 
@@ -118,7 +118,7 @@
 			<!-- Raw Data / Message -->
 			<div class="flex flex-col gap-3">
 				<h4 class="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Raw Context</h4>
-				<div class="rounded-md bg-black/40 p-4 font-mono text-xs leading-relaxed text-slate-300 border border-border/30 overflow-x-auto whitespace-pre-wrap">
+				<div class="rounded-md bg-black/40 p-4 font-mono text-xs leading-relaxed text-foreground border border-border/30 overflow-x-auto whitespace-pre-wrap">
 					{JSON.stringify(selectedEvent, null, 2)}
 				</div>
 			</div>

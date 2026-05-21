@@ -64,22 +64,22 @@
 <div class="flex flex-col gap-6">
 	<header class="flex items-center justify-between">
 		<div>
-			<h1 class="font-mono text-lg leading-none font-bold tracking-tight text-[#F0F6FC]">Team</h1>
-			<p class="mt-1 text-sm text-[#8B949E]">
+			<h1 class="font-mono text-lg leading-none font-bold tracking-tight text-foreground">Team</h1>
+			<p class="mt-1 text-sm text-muted-foreground">
 				Live status and control for LogueOS dispatch workers.
 			</p>
 		</div>
 		<div
-			class="flex items-center gap-2 rounded-full border border-[#30363D] bg-[#161B22] px-3 py-1"
+			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
 		>
-			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-[#3FB950]"></div>
-			<span class="text-[10px] font-bold tracking-widest text-[#8B949E] uppercase">Live</span>
+			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
+			<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Live</span>
 		</div>
 	</header>
 
 	{#if refreshError}
 		<div
-			class="rounded border border-red-900/30 bg-red-900/10 px-3 py-2 font-mono text-[10px] text-red-400"
+			class="rounded border border-status-red/30 bg-status-red/10 px-3 py-2 font-mono text-[10px] text-status-red"
 		>
 			Refresh error: {refreshError}
 		</div>
@@ -90,7 +90,7 @@
 			<WorkerCard {worker} />
 		{:else}
 			<div
-				class="col-span-full flex h-32 items-center justify-center rounded-lg border border-dashed border-[#30363D] text-[#8B949E] font-mono text-xs"
+				class="col-span-full flex h-32 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground font-mono text-xs"
 			>
 				NO ACTIVE WORKERS DETECTED
 			</div>
@@ -98,12 +98,12 @@
 	</div>
 
 	{#if hasIssues}
-		<section class="mt-4 rounded-lg border border-red-900/20 bg-red-900/5 p-4">
-			<h2 class="flex items-center gap-2 text-xs font-bold tracking-widest text-red-400 uppercase">
+		<section class="mt-4 rounded-lg border border-status-red/20 bg-status-red/5 p-4">
+			<h2 class="flex items-center gap-2 text-xs font-bold tracking-widest text-status-red uppercase">
 				<AlertCircle size={14} />
 				Operational Notes
 			</h2>
-			<ul class="mt-3 list-inside list-disc space-y-2 font-mono text-xs text-red-400/80">
+			<ul class="mt-3 list-inside list-disc space-y-2 font-mono text-xs text-status-red/80">
 				{#if data.errorMsg}
 					<li>SYSTEM: {data.errorMsg}</li>
 				{/if}

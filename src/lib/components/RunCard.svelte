@@ -26,7 +26,7 @@
 <a
 	href={detailHref ?? '#'}
 	data-sveltekit-preload-data="hover"
-	class="flex cursor-pointer flex-col justify-between rounded-sm border border-border bg-surface p-2 transition-all hover:bg-[#1C2128] active:scale-[0.99]"
+	class="flex cursor-pointer flex-col justify-between rounded-sm border border-border bg-surface p-2 transition-all hover:bg-surface active:scale-[0.99]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
@@ -54,16 +54,16 @@
 	</div>
 
 	<div class="mt-1 flex items-baseline gap-2 overflow-hidden">
-		<span class="shrink-0 font-mono text-[10px] font-bold text-[#F0F0F0] uppercase">
+		<span class="shrink-0 font-mono text-[10px] font-bold text-foreground uppercase">
 			{run.ticket_id || '---'}
 		</span>
-		<p class="truncate font-sans text-xs text-[#8A8A9A]">
+		<p class="truncate font-sans text-xs text-muted-foreground">
 			{summaryPreview}
 		</p>
 	</div>
 
-	<div class="mt-auto flex items-center gap-2 font-mono text-[11px] text-[#6B7280]">
-		<span class="rounded bg-[#21262D] px-1.5 py-0.5 text-[#8A8A9A]">
+	<div class="mt-auto flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+		<span class="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
 			{truncateTraceId(run.trace_id)}
 		</span>
 		<span class="flex items-center before:mr-2 before:content-['·']">

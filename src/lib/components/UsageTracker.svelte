@@ -19,7 +19,7 @@
 			<div
 				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
-				<Coins size={10} class="text-orange-400" />
+				<Coins size={10} class="text-status-amber" />
 				Est. 24h Burn
 			</div>
 			<div class="text-lg font-bold text-foreground tabular-nums">
@@ -30,7 +30,7 @@
 			<div
 				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
-				<Zap size={10} class="text-blue-500" />
+				<Zap size={10} class="text-status-blue" />
 				Tokens
 			</div>
 			<div class="text-lg font-bold text-foreground tabular-nums">
@@ -41,7 +41,7 @@
 			<div
 				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
-				<Hash size={10} class="text-emerald-400" />
+				<Hash size={10} class="text-status-green" />
 				Dispatches
 			</div>
 			<div class="text-lg font-bold text-foreground tabular-nums">
@@ -52,7 +52,7 @@
 			<div
 				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
-				<BarChart3 size={10} class="text-purple-400" />
+				<BarChart3 size={10} class="text-status-purple" />
 				Avg/Ticket
 			</div>
 			<div class="text-lg font-bold text-foreground tabular-nums">

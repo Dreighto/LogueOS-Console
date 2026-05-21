@@ -87,12 +87,12 @@
 	}
 </script>
 
-<div class="mx-auto flex max-w-2xl flex-col gap-4 p-2 font-mono text-slate-200 md:p-4">
+<div class="mx-auto flex max-w-2xl flex-col gap-4 p-2 font-mono text-foreground md:p-4">
 	<!-- Q1: Is the team running? -->
 	<header class="flex items-center justify-between border-b border-border pb-2">
 		<div class="flex items-center gap-2">
-			<Activity size={16} class="text-blue-400" />
-			<h1 class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Home</h1>
+			<Activity size={16} class="text-status-blue" />
+			<h1 class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">Home</h1>
 		</div>
 		<a
 			href={resolve('/settings')}
@@ -117,7 +117,7 @@
 
 	<!-- Q3: Is anything stuck? (MOVED TO TOP FOR TRIAGE VISIBILITY) -->
 	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+		<div class="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase">
 			<span>Blockers & Reviews</span>
 			<span class="flex gap-2">
 				<span class={s.failures.count > 0 ? 'text-status-red' : ''}
@@ -131,7 +131,7 @@
 			{#each attentionItems as item, i (item.timestamp + i)}
 				<a
 					href={resolve('/activity')}
-					class="group flex items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-slate-600"
+					class="group flex items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-border"
 				>
 					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
 						<AlertTriangle size={14} class="shrink-0 text-status-red" />
@@ -140,17 +140,17 @@
 					{/if}
 					<div class="flex min-w-0 flex-1 flex-col">
 						<div class="flex items-center gap-2">
-							<span class="text-[10px] font-bold text-slate-200">{item.ticket_id || 'unknown'}</span
+							<span class="text-[10px] font-bold text-foreground">{item.ticket_id || 'unknown'}</span
 							>
-							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
+							<span class="text-[9px] text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
 						</div>
-						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
+						<div class="truncate text-[10px] text-muted-foreground">{item.summary}</div>
 					</div>
-					<ChevronRight size={12} class="text-slate-600 group-hover:text-slate-400" />
+					<ChevronRight size={12} class="text-muted-foreground group-hover:text-muted-foreground" />
 				</a>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
-					<span class="text-[10px] text-slate-600 uppercase italic">No stuck work detected</span>
+					<span class="text-[10px] text-muted-foreground uppercase italic">No stuck work detected</span>
 				</div>
 			{/each}
 		</div>
@@ -159,7 +159,7 @@
 	<div class="grid grid-cols-1 gap-4">
 		<!-- Workers Section -->
 		<section class="flex flex-col gap-2">
-			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+			<div class="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase">
 				<span>Workers</span>
 				<span>{s.workers.active} / {s.workers.total} active</span>
 			</div>
@@ -167,40 +167,40 @@
 				{#each s.workers.items as w (w.id)}
 					<a
 						href={resolve('/workers')}
-						class="group flex flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-blue-500/40"
+						class="group flex flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-status-blue/40"
 					>
 						<div class="flex items-center justify-between">
 							<span
 								class="text-[11px] font-bold tracking-tight uppercase {w.state === 'busy'
-									? 'text-blue-400'
+									? 'text-status-blue'
 									: w.state === 'idle'
-										? 'text-slate-400'
-										: 'text-slate-600'}">{workerLabel(w.id)}</span
+										? 'text-muted-foreground'
+										: 'text-muted-foreground'}">{workerLabel(w.id)}</span
 							>
-							<span class="text-[9px] text-slate-500 uppercase"
+							<span class="text-[9px] text-muted-foreground uppercase"
 								>{w.since ? formatRelativeTime(w.since) : w.state}</span
 							>
 						</div>
 						{#if w.state === 'busy'}
-							<div class="truncate text-[10px] tracking-tight text-slate-300 uppercase">
-								<span class="text-blue-400">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
+							<div class="truncate text-[10px] tracking-tight text-foreground uppercase">
+								<span class="text-status-blue">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
 									w.step
 								)}
 							</div>
 							{#if w.branch}
-								<div class="truncate text-[9px] text-slate-500 italic">
+								<div class="truncate text-[9px] text-muted-foreground italic">
 									{formatBranch(w.branch)}
 								</div>
 							{/if}
 						{:else}
-							<div class="text-[10px] font-bold tracking-widest text-slate-600 uppercase">
+							<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 								{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
 							</div>
 						{/if}
 					</a>
 				{:else}
 					<div class="rounded-sm border border-dashed border-border p-2 text-center">
-						<span class="text-[10px] text-slate-600 uppercase italic">No workers</span>
+						<span class="text-[10px] text-muted-foreground uppercase italic">No workers</span>
 					</div>
 				{/each}
 			</div>
@@ -208,18 +208,18 @@
 
 		<!-- Work Summary -->
 		<section class="flex flex-col gap-2">
-			<div class="text-[10px] font-bold text-slate-500 uppercase">Work Today</div>
+			<div class="text-[10px] font-bold text-muted-foreground uppercase">Work Today</div>
 			<div class="flex flex-col gap-2">
 				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
-					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Shipped</span>
+					<span class="text-[9px] tracking-widest text-muted-foreground uppercase">Shipped</span>
 					<span class="text-lg font-bold text-status-green">{s.completions.today}</span>
 				</div>
 				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
-					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Attention</span>
+					<span class="text-[9px] tracking-widest text-muted-foreground uppercase">Attention</span>
 					<span
 						class="text-lg font-bold {s.failures.count + s.reviews.count > 0
 							? 'text-status-amber'
-							: 'text-slate-500'}">{s.failures.count + s.reviews.count}</span
+							: 'text-muted-foreground'}">{s.failures.count + s.reviews.count}</span
 					>
 				</div>
 			</div>
@@ -227,23 +227,23 @@
 
 		<!-- Q5: How much did this cost? -->
 		<section class="flex flex-col gap-2">
-			<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+			<div class="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase">
 				<span>Today's Spend</span>
 				<a
 					href={resolve('/usage')}
-					class="flex items-center gap-1 transition-colors hover:text-blue-400"
+					class="flex items-center gap-1 transition-colors hover:text-status-blue"
 				>
 					Details <ExternalLink size={8} />
 				</a>
 			</div>
 			<div class="grid grid-cols-2 gap-2">
 				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
-					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Cost (USD)</span>
+					<span class="text-[9px] tracking-widest text-muted-foreground uppercase">Cost (USD)</span>
 					<span class="text-lg font-bold text-status-green">${s.usage.todayCost.toFixed(2)}</span>
 				</div>
 				<div class="flex flex-col gap-1 rounded-sm border border-border bg-surface p-2">
-					<span class="text-[9px] tracking-widest text-slate-500 uppercase">Dispatches</span>
-					<span class="text-lg font-bold text-blue-400">{s.usage.recentDispatches}</span>
+					<span class="text-[9px] tracking-widest text-muted-foreground uppercase">Dispatches</span>
+					<span class="text-lg font-bold text-status-blue">{s.usage.recentDispatches}</span>
 				</div>
 			</div>
 		</section>
@@ -251,7 +251,7 @@
 
 	<!-- Q4: What just got done? -->
 	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase">
+		<div class="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase">
 			<span>Today's Shipments</span>
 			<span>{s.completions.today} total</span>
 		</div>
@@ -264,14 +264,14 @@
 							<span class="text-[10px] font-bold text-status-green"
 								>{item.ticket_id || 'shipped'}</span
 							>
-							<span class="text-[9px] text-slate-500">{formatRelativeTime(item.timestamp)}</span>
+							<span class="text-[9px] text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
 						</div>
-						<div class="truncate text-[10px] text-slate-400">{item.summary}</div>
+						<div class="truncate text-[10px] text-muted-foreground">{item.summary}</div>
 					</div>
 				</div>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
-					<span class="text-[10px] text-slate-600 uppercase italic">Nothing shipped yet today</span>
+					<span class="text-[10px] text-muted-foreground uppercase italic">Nothing shipped yet today</span>
 				</div>
 			{/each}
 		</div>
@@ -281,7 +281,7 @@
 	<a
 		data-testid="row-dispatch"
 		href={resolve('/ask')}
-		class="mt-2 flex items-center justify-center gap-2 rounded-sm border border-blue-500/50 bg-blue-600/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-blue-400 uppercase transition-colors hover:bg-blue-600/20 active:scale-[0.99] active:bg-blue-600/30"
+		class="mt-2 flex items-center justify-center gap-2 rounded-sm border border-status-blue/50 bg-status-blue/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] text-status-blue uppercase transition-colors hover:bg-status-blue/20 active:scale-[0.99] active:bg-status-blue/30"
 	>
 		<Send size={14} />
 		Send a job

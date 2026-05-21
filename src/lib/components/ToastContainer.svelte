@@ -12,10 +12,10 @@
 	};
 
 	const colors = {
-		info: 'bg-slate-900 border-slate-800 text-slate-200',
-		success: 'bg-emerald-950 border-emerald-900/50 text-emerald-400',
-		warning: 'bg-amber-950 border-amber-900/50 text-amber-400',
-		error: 'bg-red-950 border-red-900/50 text-red-400'
+		info: 'bg-background border-border text-foreground',
+		success: 'bg-status-green border-status-green/50 text-status-green',
+		warning: 'bg-status-amber border-status-amber/50 text-status-amber',
+		error: 'bg-status-red border-status-red/50 text-status-red'
 	};
 </script>
 
