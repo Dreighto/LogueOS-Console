@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { Brain, Clock, Globe, ShieldCheck, Microscope, Info, Terminal } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -120,15 +121,10 @@
 </svelte:head>
 
 <div class="flex flex-col gap-5 font-mono text-foreground">
-	<header class="flex items-center justify-between border-b border-border pb-3">
-		<div class="flex items-center gap-2">
-			<Brain class="text-status-blue" size={18} />
-			<h1 class="text-sm font-bold tracking-widest text-foreground uppercase">Memory</h1>
-		</div>
-		<div class="text-xs text-muted-foreground uppercase tracking-widest bg-surface px-2 py-0.5 rounded border border-border">
-			v2.1.0-PRO
-		</div>
-	</header>
+	<PageHeader
+		title="Memory"
+		subtitle="What the team has learned from past work."
+	/>
 
 	{#if selectedTag}
 		<div class="flex items-center gap-2 px-3 py-1.5 rounded border border-status-blue/20 bg-status-blue/5 text-xs text-status-blue font-mono">

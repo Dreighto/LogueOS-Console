@@ -5,6 +5,7 @@
 	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -134,7 +135,7 @@
 
 <div class="flex flex-col gap-4">
 
-	<h1 class="font-sans text-xl font-bold tracking-tight">Settings</h1>
+	<PageHeader title="Settings" />
 
 	<!-- Connection Status section (LOS-70). Pills show whether each LogueOS
 	     service is reachable from the Console box. Same poll cadence as the

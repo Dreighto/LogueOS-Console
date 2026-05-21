@@ -6,6 +6,7 @@
 	import type { WorkerStatus } from '$lib/types/worker';
 	import { workerLabel } from '$lib/config/workers';
 	import { AlertCircle } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	interface Props {
 		data: PageData;
@@ -62,20 +63,17 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	<header class="flex items-center justify-between">
-		<div>
-			<h1 class="font-mono text-lg leading-none font-bold tracking-tight text-foreground">Team</h1>
-			<p class="mt-1 text-sm text-muted-foreground">
-				Live status and control for LogueOS dispatch workers.
-			</p>
-		</div>
+	<PageHeader
+		title="Team"
+		subtitle="Live status and control for LogueOS dispatch workers."
+	>
 		<div
 			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
 		>
 			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
 			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Live</span>
 		</div>
-	</header>
+	</PageHeader>
 
 	{#if refreshError}
 		<div
