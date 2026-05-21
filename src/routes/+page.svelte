@@ -23,6 +23,7 @@
 	import type { PageData } from './$types';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import { workerLabel } from '$lib/config/workers';
+	import Drawer from '$lib/components/Drawer.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -37,6 +38,49 @@
 	$effect(() => {
 		s = data.status;
 	});
+
+	// --- Shipment detail drawer ---
+	interface ShipmentItem {
+		timestamp: string;
+		ticket_id: string | null;
+		summary: string;
+		pr: string;
+	}
+	let shipmentOpen = $state(false);
+	let selectedShipment = $state<ShipmentItem | null>(null);
+	let shipmentDetail = $state<{ summary: string; url: string } | null>(null);
+	let shipmentLoading = $state(false);
+	let shipmentError = $state<string | null>(null);
+
+	async function openShipment(item: ShipmentItem) {
+		selectedShipment = item;
+		shipmentDetail = null;
+		shipmentError = null;
+		shipmentOpen = true;
+		const hash = item.pr.indexOf('#');
+		if (hash < 0) {
+			shipmentError = 'No pull request is linked to this shipment.';
+			return;
+		}
+		const repo = item.pr.slice(0, hash);
+		const number = item.pr.slice(hash + 1);
+		shipmentLoading = true;
+		try {
+			const resp = await fetch(
+				resolve('/api/shipment') +
+					`?repo=${encodeURIComponent(repo)}&number=${encodeURIComponent(number)}`
+			);
+			if (resp.ok) {
+				shipmentDetail = await resp.json();
+			} else {
+				shipmentError = 'Could not load the explanation.';
+			}
+		} catch {
+			shipmentError = 'Could not load the explanation.';
+		} finally {
+			shipmentLoading = false;
+		}
+	}
 
 	async function refresh() {
 		try {
@@ -257,18 +301,21 @@
 		</div>
 		<div class="flex flex-col gap-1">
 			{#each s.completions.items as item, i (item.timestamp + i)}
-				<div class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2">
+				<button
+					type="button"
+					onclick={() => openShipment(item)}
+					class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2 text-left transition-colors hover:border-status-green/40 active:scale-[0.99]"
+				>
 					<CheckCircle2 size={14} class="shrink-0 text-status-green" />
 					<div class="flex min-w-0 flex-col">
 						<div class="flex items-center gap-2">
-							<span class="text-xs font-bold text-status-green"
-								>{item.ticket_id || 'shipped'}</span
-							>
+							<span class="text-xs font-bold text-status-green">{item.ticket_id || 'shipped'}</span>
 							<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
 						</div>
 						<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
 					</div>
-				</div>
+					<ChevronRight size={12} class="ml-auto shrink-0 text-muted-foreground" />
+				</button>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
 					<span class="text-xs text-muted-foreground uppercase italic">Nothing shipped yet today</span>
@@ -287,3 +334,46 @@
 		Send a job
 	</a>
 </div>
+
+<Drawer bind:show={shipmentOpen} title="Shipment">
+	{#if selectedShipment}
+		<div class="flex flex-col gap-4 font-sans">
+			<div class="flex flex-col gap-1">
+				{#if selectedShipment.ticket_id}
+					<span class="text-xs font-bold tracking-widest text-status-green uppercase"
+						>{selectedShipment.ticket_id}</span
+					>
+				{/if}
+				<h3 class="text-base leading-snug font-bold text-foreground">{selectedShipment.summary}</h3>
+				<span class="text-xs text-muted-foreground">
+					Merged {formatRelativeTime(selectedShipment.timestamp)} - {selectedShipment.pr}
+				</span>
+			</div>
+
+			{#if shipmentLoading}
+				<p class="text-sm text-muted-foreground">Loading the explanation...</p>
+			{:else if shipmentError}
+				<p class="text-sm text-status-amber">{shipmentError}</p>
+			{:else if shipmentDetail}
+				<div class="flex flex-col gap-1.5">
+					<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase"
+						>In plain English</span
+					>
+					<p class="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+						{shipmentDetail.summary || 'No description was written for this pull request.'}
+					</p>
+				</div>
+				{#if shipmentDetail.url}
+					<a
+						href={shipmentDetail.url}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-xs font-medium text-status-blue hover:underline"
+					>
+						View the full pull request on GitHub
+					</a>
+				{/if}
+			{/if}
+		</div>
+	{/if}
+</Drawer>

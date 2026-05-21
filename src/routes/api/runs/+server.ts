@@ -4,6 +4,7 @@ import { serverConfig } from '$lib/server/config';
 import type { Run } from '$lib/types/run';
 import { coerceRunStatus } from '$lib/types/run';
 import { dedupeRuns } from '$lib/utils/runs';
+import fs from 'node:fs';
 
 function parseRun(comp: any): Run {
 	return {
@@ -24,8 +25,7 @@ function parseRun(comp: any): Run {
 }
 
 // Test heartbeats and synthetic stale-cleanup backfill rows are not real runs.
-// Left in, they inflate the status board's failure / review counts. Drop them
-// at the source so every downstream consumer sees a clean feed.
+// Drop them at the source so downstream consumers see a clean feed.
 function isTestArtifact(run: Run): boolean {
 	const ticket = run.ticket_id ?? '';
 	const trace = run.trace_id ?? '';
@@ -38,10 +38,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : serverConfig.feedLimit;
 	const traceIdFilter = url.searchParams.get('trace_id');
 
-	// Live polling path: read the dispatch listener's primary output directly.
-	// /api/v1/completion-log is a downstream mirror with async ingestion lag, so
-	// it's the wrong source for "did this dispatch finish yet" — the inbox
-	// result.json is authoritative.
+	// Live single-dispatch poll: the gateway's dispatch-result is authoritative
+	// for "did this trace finish yet". Left unchanged.
 	if (traceIdFilter) {
 		try {
 			const resp = await fetch(
@@ -61,22 +59,32 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 	}
 
+	// List path: read the authoritative completion log on disk directly. The
+	// gateway's /api/v1/completion-log mirror has async ingestion lag (it had
+	// been weeks-stale) — the on-disk log is the fresh, accurate source. LOS-128.
 	try {
-		const response = await fetch(`${serverConfig.gatewayUrl}/api/v1/completion-log`);
-		if (!response.ok) {
-			throw new Error(`Gateway returned ${response.status}`);
+		const raw = fs.existsSync(serverConfig.completionLogPath)
+			? fs.readFileSync(serverConfig.completionLogPath, 'utf-8')
+			: '';
+		const rawCompletions: any[] = [];
+		for (const line of raw.split('\n')) {
+			if (!line.trim()) continue;
+			try {
+				rawCompletions.push(JSON.parse(line));
+			} catch {
+				// skip malformed line
+			}
 		}
-		const data = await response.json();
-		const rawCompletions = data.completions || [];
 
-		const parsedRuns: Run[] = rawCompletions.map(parseRun).filter((r: Run) => !isTestArtifact(r));
+		const parsedRuns: Run[] = rawCompletions.map(parseRun).filter((r) => !isTestArtifact(r));
 		const dedupedRuns = dedupeRuns(parsedRuns);
 
 		const runs = dedupedRuns.slice(-limit).reverse();
-		const total_in_log = rawCompletions.length;
-		const truncated = dedupedRuns.length > limit;
-
-		return json({ runs, total_in_log, truncated });
+		return json({
+			runs,
+			total_in_log: rawCompletions.length,
+			truncated: dedupedRuns.length > limit
+		});
 	} catch (e: unknown) {
 		console.error('Runs API Error:', e);
 		return json({ error: 'internal_server_error' }, { status: 500 });
