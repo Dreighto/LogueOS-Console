@@ -538,7 +538,7 @@
 		<button
 			onclick={handleSubmit}
 			disabled={status === 'submitting' || status === 'waiting' || !prompt.trim()}
-			class="flex items-center gap-2 rounded bg-status-blue px-6 py-2 font-mono text-xs font-bold text-white shadow-lg shadow-blue-900/20 transition-all hover:bg-status-blue active:scale-95 disabled:bg-muted disabled:text-muted-foreground"
+			class="flex items-center gap-2 rounded bg-status-blue px-6 py-2 font-mono text-xs font-bold text-white shadow-lg shadow-status-blue/20 transition-all hover:bg-status-blue active:scale-95 disabled:bg-muted disabled:text-muted-foreground"
 		>
 			{#if status === 'submitting'}
 				<Loader2 size={14} class="animate-spin" />
