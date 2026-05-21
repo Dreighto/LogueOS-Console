@@ -124,3 +124,17 @@ export function workerShortLabel(name: string | null | undefined): string {
 export function workerColor(name: string | null | undefined): string {
 	return resolveWorker(name)?.color ?? FALLBACK_COLOR;
 }
+
+/** Display label for a work lane. */
+export function laneLabel(lane: string): string {
+	if (lane === 'backend') return 'Backend';
+	if (lane === 'frontend') return 'Frontend';
+	if (lane === 'operator') return 'Operator';
+	return lane ? lane.charAt(0).toUpperCase() + lane.slice(1) : 'Unknown';
+}
+
+/** The dispatch lanes the Team screen renders, in display order. */
+export function dispatchLanes(): ('backend' | 'frontend')[] {
+	const roles = new Set(getDispatchWorkers().map((w) => w.role));
+	return (['backend', 'frontend'] as const).filter((l) => roles.has(l));
+}
