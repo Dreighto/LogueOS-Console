@@ -1,132 +1,128 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { serverConfig } from '$lib/server/config';
-import type { WorkerStatus } from '$lib/types/worker';
+import type { ActiveJob, WorkerNote, Lane } from '$lib/types/worker';
 import { getDispatchWorkers, resolveWorker } from '$lib/config/workers';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
+// worktree_leases.json is keyed by slot path. Reading it per-slot (not per
+// worker) is what lets the console show concurrent dispatches — see LOS-125.
+const LEASES_PATH = 'D:\\dev\\LogueOS-Orchestrator\\data\\worktree_leases.json';
+const HEARTBEAT_RECENCY_MS = 30 * 60 * 1000;
+
+interface Lease {
+	worker?: string;
+	trace_id?: string;
+	ticket_id?: string;
+	leased_at?: string;
+	branch?: string;
+	/** Set by the orchestrator (LOS-126); the true lane of the work. */
+	lane?: string;
+}
+
 export const GET: RequestHandler = async () => {
-	// Base roster — registry-driven (see $lib/config/workers).
-	const workers: Record<string, WorkerStatus> = {};
-	for (const def of getDispatchWorkers()) {
-		workers[def.id] = { id: def.id, state: 'idle' };
-	}
+	const jobs: ActiveJob[] = [];
+	const notes: WorkerNote[] = [];
 
 	try {
-		// 1. Read DEFINITIVE active leases from worktree_leases.json
-		// This replaces the unreliable log-trailing logic.
-		const leasesPath = path.resolve('D:\\dev\\LogueOS-Orchestrator\\data\\worktree_leases.json');
-		if (fs.existsSync(leasesPath)) {
-			const leases = JSON.parse(fs.readFileSync(leasesPath, 'utf-8'));
-			for (const slotPath in leases) {
+		// 1. Active leases — ONE job per non-null slot. The file is keyed by slot,
+		//    so concurrent leases for the same worker are all preserved. The old
+		//    per-worker-id map kept only the last lease — the collapse bug.
+		const busyWorkerIds = new Set<string>();
+		if (fs.existsSync(LEASES_PATH)) {
+			const leases = JSON.parse(fs.readFileSync(LEASES_PATH, 'utf-8')) as Record<
+				string,
+				Lease | null
+			>;
+			for (const slotPath of Object.keys(leases)) {
 				const lease = leases[slotPath];
-				if (lease && lease.worker) {
-					// Resolve the lease worker name (e.g. 'claude-code-1') to a
-					// registry id. Unknown workers are skipped.
-					const def = resolveWorker(lease.worker);
-					if (!def) continue;
-
-					workers[def.id] = {
-						id: def.id,
-						state: 'busy',
-						trace_id: lease.trace_id,
-						ticket_id: lease.ticket_id,
-						since: lease.leased_at,
-						branch: lease.branch
-					};
-				}
+				if (!lease || !lease.worker) continue;
+				const def = resolveWorker(lease.worker);
+				if (!def || def.role === 'operator') continue;
+				busyWorkerIds.add(def.id);
+				// Lane: the orchestrator-recorded lane wins (LOS-126); until that
+				// lands, fall back to the worker's home role.
+				const lane: Lane =
+					lease.lane === 'frontend' || lease.lane === 'backend'
+						? lease.lane
+						: (def.role as Lane);
+				jobs.push({
+					slot: slotPath.split(/[\\/]/).slice(-2).join('/'),
+					trace_id: lease.trace_id,
+					worker_id: def.id,
+					lane,
+					ticket_id: lease.ticket_id,
+					branch: lease.branch,
+					since: lease.leased_at
+				});
 			}
 		}
 
-		// 2. Enrich busy workers with real-time progress from cc_heartbeat_log.jsonl.
-		// Only enrich if the heartbeat matches the busy worker's CURRENT lease —
-		// either same trace_id (preferred) or same ticket_id, AND is recent
-		// (within the last 30 min). Without these filters, May-2 ghost heartbeats
-		// from PRO-258 stamp every "claude-code is busy" view forever because
-		// dispatched workers no longer emit heartbeats and the log is dominated
-		// by stale entries (cc_heartbeat_log.jsonl is append-only — can't be
-		// truncated, must be filtered at read time).
-		const HEARTBEAT_RECENCY_MS = 30 * 60 * 1000;
-		const now = Date.now();
-		const resolvedHeartbeatPath = path.resolve(serverConfig.heartbeatsLogPath);
-		if (fs.existsSync(resolvedHeartbeatPath)) {
-			const hbStream = fs.createReadStream(resolvedHeartbeatPath);
-			const rlHb = readline.createInterface({
-				input: hbStream,
+		// 2. Enrich each job with live progress from the heartbeat log. Match on
+		//    the job's own trace_id / ticket_id; recent heartbeats only (the log
+		//    is append-only and dominated by stale entries).
+		const hbPath = path.resolve(serverConfig.heartbeatsLogPath);
+		if (jobs.length > 0 && fs.existsSync(hbPath)) {
+			const now = Date.now();
+			const rl = readline.createInterface({
+				input: fs.createReadStream(hbPath),
 				crlfDelay: Infinity
 			});
-
-			for await (const line of rlHb) {
+			for await (const line of rl) {
 				if (!line.trim()) continue;
 				try {
 					const hb = JSON.parse(line);
-					const rawId = hb.worker_id || hb.worker;
-					if (!rawId) continue;
-
-					const def = resolveWorker(rawId);
-					if (!def) continue;
-
-					const worker = workers[def.id];
-					if (!worker || worker.state !== 'busy') continue;
-
-					// Filter 1: trace_id or ticket_id must match the active lease.
-					const hbTrace = hb.trace_id ?? null;
-					const hbTicket = hb.ticket_id ?? null;
-					const matchesLease =
-						(hbTrace && worker.trace_id && hbTrace === worker.trace_id) ||
-						(hbTicket && worker.ticket_id && hbTicket === worker.ticket_id);
-					if (!matchesLease) continue;
-
-					// Filter 2: only recent heartbeats (last 30 min).
 					const hbTs = Date.parse(hb.ts ?? hb.timestamp ?? '');
 					if (!Number.isFinite(hbTs) || now - hbTs > HEARTBEAT_RECENCY_MS) continue;
-
-					worker.ticket_id = hb.ticket_id || worker.ticket_id;
-					worker.step = hb.step || worker.step;
-					worker.branch = hb.branch || worker.branch;
-					worker.last_file_written = hb.last_file_written || worker.last_file_written;
-					if (hb.trace_id) worker.trace_id = hb.trace_id;
-				} catch (e) {
-					// Ignore
+					for (const job of jobs) {
+						const matches =
+							(hb.trace_id && job.trace_id && hb.trace_id === job.trace_id) ||
+							(hb.ticket_id && job.ticket_id && hb.ticket_id === job.ticket_id);
+						if (!matches) continue;
+						if (hb.step) job.step = hb.step;
+						if (hb.branch) job.branch = hb.branch;
+						if (hb.last_file_written) job.last_file_written = hb.last_file_written;
+					}
+				} catch {
+					// skip malformed line
 				}
 			}
 		}
 
-		// 3. Last exit status for idle workers — sourced from the dispatch
-		// listener's worker_exit events. The completion log keys rows by
-		// worktree-slot id (e.g. 'project-miru-w1') and carries inconsistent
-		// status strings, so it can't be matched to a registry worker; the
-		// listener's worker_exit event carries a clean worker name + status.
-		const resolvedWorkerLogPath = path.resolve(serverConfig.workerLogPath);
-		if (fs.existsSync(resolvedWorkerLogPath)) {
-			const wlStream = fs.createReadStream(resolvedWorkerLogPath);
-			const rlWl = readline.createInterface({
-				input: wlStream,
+		// 3. Operational notes — a dispatch worker with no active job whose last
+		//    recorded exit was not clean. Sourced from the listener's worker_exit
+		//    events (chronological; the last one wins).
+		const lastExit: Record<string, string> = {};
+		const wlPath = path.resolve(serverConfig.workerLogPath);
+		if (fs.existsSync(wlPath)) {
+			const rl = readline.createInterface({
+				input: fs.createReadStream(wlPath),
 				crlfDelay: Infinity
 			});
-
-			// Last worker_exit wins — the log is chronological.
-			for await (const line of rlWl) {
+			for await (const line of rl) {
 				if (!line.trim()) continue;
 				try {
 					const evt = JSON.parse(line);
 					if (evt.msg !== 'worker_exit') continue;
 					const def = resolveWorker(evt.worker);
-					if (def && workers[def.id]?.state === 'idle') {
-						workers[def.id].last_exit_status = evt.status;
-					}
+					if (def) lastExit[def.id] = evt.status;
 				} catch {
-					// Ignore malformed lines
+					// skip malformed line
 				}
+			}
+		}
+		for (const def of getDispatchWorkers()) {
+			if (busyWorkerIds.has(def.id)) continue;
+			const status = lastExit[def.id];
+			if (status && !['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(status)) {
+				notes.push({ worker_id: def.id, last_exit_status: status });
 			}
 		}
 	} catch (error) {
 		console.error('Error reading worker states:', error);
 	}
 
-	return json({
-		workers: Object.values(workers)
-	});
+	return json({ jobs, notes });
 };

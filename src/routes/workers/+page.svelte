@@ -2,12 +2,12 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
-	import WorkerCard from '$lib/components/WorkerCard.svelte';
-	import type { WorkerStatus } from '$lib/types/worker';
-	import { workerLabel } from '$lib/config/workers';
+	import type { ActiveJob, WorkerNote, Lane } from '$lib/types/worker';
+	import { dispatchLanes, laneLabel, workerShortLabel } from '$lib/config/workers';
 	import { AlertCircle } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import LivePill from '$lib/components/LivePill.svelte';
+	import JobCard from '$lib/components/JobCard.svelte';
 
 	interface Props {
 		data: PageData;
@@ -15,31 +15,45 @@
 
 	let { data }: Props = $props();
 
-	function getInitial() {
-		return data.workers;
+	// Wrapped so svelte-check doesn't flag a captured-initial-value reference —
+	// the $effect blocks below re-sync these from `data` on navigation.
+	function initialJobs() {
+		return data.jobs;
 	}
-	let workers = $state<WorkerStatus[]>(getInitial());
+	function initialNotes() {
+		return data.notes;
+	}
+	let jobs = $state<ActiveJob[]>(initialJobs());
+	let notes = $state<WorkerNote[]>(initialNotes());
 	let refreshError = $state<string | null>(null);
 
 	$effect(() => {
-		workers = data.workers;
+		jobs = data.jobs;
+	});
+	$effect(() => {
+		notes = data.notes;
 	});
 
-	async function refreshWorkers() {
-		// Background poll — refresh silently. The worker cards update in place
-		// and the header "Live" dot is the ambient freshness signal; a per-poll
-		// banner just flickers and shifts the layout every few seconds.
+	// The lanes to render, from the worker registry — backend, frontend.
+	const lanes = dispatchLanes();
+
+	// Jobs bucketed by lane. A job's lane is the nature of the WORK, so a
+	// cross-functional worker simply appears under whichever lane its job is.
+	let jobsByLane = $derived(
+		Object.fromEntries(lanes.map((l) => [l, jobs.filter((j) => j.lane === l)])) as Record<
+			Lane,
+			ActiveJob[]
+		>
+	);
+
+	async function refresh() {
 		refreshError = null;
 		try {
-			// resolve() honors kit.paths.base ('/console'). Bare fetch('/api/workers')
-			// hits the SITE root (n8n on the operator's tailscale serve) and gets
-			// back HTML 404, which the JSON parser then chokes on with "Unexpected
-			// token '<'". Same base-path-bug pattern as the server-side load fix
-			// shipped earlier today (see canon adopted-lessons.md).
 			const response = await fetch(resolve('/api/workers'));
 			if (response.ok) {
 				const result = await response.json();
-				workers = result.workers;
+				jobs = result.jobs;
+				notes = result.notes;
 			} else {
 				refreshError = `Status ${response.status}`;
 			}
@@ -49,25 +63,13 @@
 	}
 
 	onMount(() => {
-		const interval = setInterval(refreshWorkers, data.config.pollIntervalMs);
+		const interval = setInterval(refresh, data.config.pollIntervalMs);
 		return () => clearInterval(interval);
 	});
-
-	// Detection for "Operational notes only shown when there is an actual issue"
-	let hasIssues = $derived(
-		data.errorMsg ||
-			workers.some(
-				(w) =>
-					w.last_exit_status && !['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(w.last_exit_status)
-			)
-	);
 </script>
 
 <div class="flex flex-col gap-6">
-	<PageHeader
-		title="Team"
-		subtitle="Live status and control for LogueOS dispatch workers."
-	>
+	<PageHeader title="Team" subtitle="Live dispatch work, by lane.">
 		<LivePill />
 	</PageHeader>
 
@@ -79,21 +81,34 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4">
-		{#each workers as worker (worker.id)}
-			<WorkerCard {worker} />
-		{:else}
-			<div
-				class="col-span-full flex h-32 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground font-mono text-xs"
-			>
-				NO ACTIVE WORKERS DETECTED
+	{#each lanes as lane (lane)}
+		<section class="flex flex-col gap-3">
+			<div class="flex items-center justify-between border-b border-border pb-1.5">
+				<h2 class="text-xs font-bold tracking-widest text-foreground uppercase">
+					{laneLabel(lane)}
+				</h2>
+				<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+					{jobsByLane[lane].length === 0 ? 'idle' : `${jobsByLane[lane].length} running`}
+				</span>
 			</div>
-		{/each}
-	</div>
 
-	{#if hasIssues}
-		<section class="mt-4 rounded-lg border border-status-red/20 bg-status-red/5 p-4">
-			<h2 class="flex items-center gap-2 text-xs font-bold tracking-widest text-status-red uppercase">
+			{#each jobsByLane[lane] as job (job.trace_id ?? job.slot)}
+				<JobCard {job} />
+			{:else}
+				<div
+					class="rounded-sm border border-dashed border-border px-3 py-4 text-center font-mono text-xs text-muted-foreground"
+				>
+					No active {laneLabel(lane).toLowerCase()} work
+				</div>
+			{/each}
+		</section>
+	{/each}
+
+	{#if notes.length > 0 || data.errorMsg}
+		<section class="rounded-lg border border-status-red/20 bg-status-red/5 p-4">
+			<h2
+				class="flex items-center gap-2 text-xs font-bold tracking-widest text-status-red uppercase"
+			>
 				<AlertCircle size={14} />
 				Operational Notes
 			</h2>
@@ -101,8 +116,8 @@
 				{#if data.errorMsg}
 					<li>SYSTEM: {data.errorMsg}</li>
 				{/if}
-				{#each workers.filter((w) => w.last_exit_status && !['CONFIRMED_WORKING', 'INCONCLUSIVE'].includes(w.last_exit_status)) as w (w.id)}
-					<li>WORKER {workerLabel(w.id)}: Last session ended with {w.last_exit_status}</li>
+				{#each notes as note (note.worker_id)}
+					<li>{workerShortLabel(note.worker_id)}: last session ended with {note.last_exit_status}</li>
 				{/each}
 			</ul>
 		</section>
