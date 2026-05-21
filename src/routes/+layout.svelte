@@ -130,8 +130,6 @@
 	<main class="relative flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar">
 		{#key page.url.pathname}
 			<div
-				in:fly={{ x: 10, duration: 300, delay: 150 }}
-				out:fade={{ duration: 150 }}
 				class="h-full p-4"
 			>
 				{@render children()}
@@ -163,7 +161,7 @@
 
 					{#if page.url.pathname === tab.path}
 						<div
-							in:fly={{ y: 4, duration: 400 }}
+							in:fly={{ y: 4, duration: 150 }}
 							class="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_10px_rgba(163,230,53,1)]"
 						></div>
 					{/if}
