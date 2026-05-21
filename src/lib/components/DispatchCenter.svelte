@@ -207,28 +207,28 @@
 <div class="flex h-full flex-col overflow-hidden rounded-sm border border-border bg-surface">
 	<!-- Header -->
 	<div class="flex items-center justify-between border-b border-border bg-background px-4 py-2">
-		<div class="flex items-center gap-2 font-mono text-sm tracking-wider text-slate-300 uppercase">
+		<div class="flex items-center gap-2 font-mono text-sm tracking-wider text-foreground uppercase">
 			<Terminal size={16} />
 			<span>Jobs</span>
 		</div>
 		<div class="flex items-center gap-4 font-mono text-[10px]">
-			<div class="flex items-center gap-1.5 text-slate-500">
-				<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+			<div class="flex items-center gap-1.5 text-muted-foreground">
+				<span class="h-1.5 w-1.5 rounded-full bg-status-green"></span>
 				GATEWAY ONLINE
 			</div>
 		</div>
 	</div>
 
 	<!-- Main Body -->
-	<div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-slate-100">
+	<div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4 text-foreground">
 		<!-- Config Row -->
 		<div class="grid grid-cols-1 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="role" class="font-mono text-[10px] text-slate-500 uppercase">Role</label>
+				<label for="role" class="font-mono text-[10px] text-muted-foreground uppercase">Role</label>
 				<select
 					id="role"
 					bind:value={role}
-					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
+					class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground transition-colors focus:border-status-blue focus:outline-none"
 				>
 					<option value="frontend">Frontend (UI)</option>
 					<option value="backend">Backend (code & logic)</option>
@@ -236,11 +236,11 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="worker" class="font-mono text-[10px] text-slate-500 uppercase">Worker</label>
+				<label for="worker" class="font-mono text-[10px] text-muted-foreground uppercase">Worker</label>
 				<select
 					id="worker"
 					bind:value={worker}
-					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
+					class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground transition-colors focus:border-status-blue focus:outline-none"
 				>
 					<option value="auto">Auto (route by role)</option>
 					{#each dispatchWorkers as w (w.id)}
@@ -250,13 +250,13 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="repo" class="font-mono text-[10px] text-slate-500 uppercase"
+				<label for="repo" class="font-mono text-[10px] text-muted-foreground uppercase"
 					>Which project?</label
 				>
 				<select
 					id="repo"
 					bind:value={targetRepo}
-					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
+					class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground transition-colors focus:border-status-blue focus:outline-none"
 				>
 					<option value="project-miru">project-miru</option>
 					<option value="LogueOS-Console">LogueOS-Console</option>
@@ -265,7 +265,7 @@
 			</div>
 
 			<div class="flex flex-col gap-1.5">
-				<label for="ticket" class="font-mono text-[10px] text-slate-500 uppercase"
+				<label for="ticket" class="font-mono text-[10px] text-muted-foreground uppercase"
 					>Ticket ID (Optional)</label
 				>
 				<input
@@ -273,7 +273,7 @@
 					type="text"
 					bind:value={ticketId}
 					placeholder="e.g. LOS-65"
-					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:border-blue-500 focus:outline-none"
+					class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-status-blue focus:outline-none"
 				/>
 			</div>
 		</div>
@@ -281,13 +281,13 @@
 		<!-- Advanced Row -->
 		<div class="grid grid-cols-1 gap-4">
 			<div class="flex flex-col gap-1.5">
-				<label for="thinking" class="font-mono text-[10px] text-slate-500 uppercase"
+				<label for="thinking" class="font-mono text-[10px] text-muted-foreground uppercase"
 					>Thinking Level</label
 				>
 				<select
 					id="thinking"
 					bind:value={thinkingLevel}
-					class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 transition-colors focus:border-blue-500 focus:outline-none"
+					class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground transition-colors focus:border-status-blue focus:outline-none"
 				>
 					<option value="none">Standard</option>
 					<option value="extended">Extended Thinking</option>
@@ -298,7 +298,7 @@
 			     (direct dispatch, no Linear ticket). On = file Linear ticket first,
 			     dispatch worker against it. -->
 			<div class="flex flex-col justify-end gap-1.5">
-				<label for="track" class="font-mono text-[10px] text-slate-500 uppercase"
+				<label for="track" class="font-mono text-[10px] text-muted-foreground uppercase"
 					>Track in Linear</label
 				>
 				<button
@@ -307,12 +307,12 @@
 					onclick={() => (trackInLinear = !trackInLinear)}
 					class="flex items-center gap-2 rounded-sm border p-1.5 font-mono text-xs transition-colors {trackInLinear
 						? 'border-status-purple/40 bg-status-purple/10 text-status-purple'
-						: 'border-border bg-background text-slate-500 hover:border-slate-700'}"
+						: 'border-border bg-background text-muted-foreground hover:border-border'}"
 				>
 					<span
 						class="flex h-3 w-3 items-center justify-center rounded-sm border text-[8px] {trackInLinear
 							? 'border-status-purple bg-status-purple text-white'
-							: 'border-slate-600'}"
+							: 'border-border'}"
 					>
 						{#if trackInLinear}✓{/if}
 					</span>
@@ -330,26 +330,26 @@
 					Linear Ticket Fields
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<label for="linear-title" class="font-mono text-[10px] text-slate-500 uppercase">
-						Title <span class="text-red-400">*</span>
+					<label for="linear-title" class="font-mono text-[10px] text-muted-foreground uppercase">
+						Title <span class="text-status-red">*</span>
 					</label>
 					<input
 						id="linear-title"
 						type="text"
 						bind:value={linearTitle}
 						placeholder="One-line summary of the work"
-						class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 placeholder:text-slate-700 focus:border-purple-500 focus:outline-none"
+						class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-status-purple focus:outline-none"
 					/>
 				</div>
 				<div class="grid grid-cols-1 gap-4">
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-team" class="font-mono text-[10px] text-slate-500 uppercase"
+						<label for="linear-team" class="font-mono text-[10px] text-muted-foreground uppercase"
 							>Team</label
 						>
 						<select
 							id="linear-team"
 							bind:value={linearTeam}
-							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
+							class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground focus:border-status-purple focus:outline-none"
 						>
 							{#each LINEAR_TEAMS as t (t)}
 								<option value={t}>{t}</option>
@@ -357,13 +357,13 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-project" class="font-mono text-[10px] text-slate-500 uppercase">
+						<label for="linear-project" class="font-mono text-[10px] text-muted-foreground uppercase">
 							Project (optional)
 						</label>
 						<select
 							id="linear-project"
 							bind:value={linearProject}
-							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
+							class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground focus:border-status-purple focus:outline-none"
 						>
 							{#each linearProjectOptions as p (p)}
 								<option value={p}>{p || '— none —'}</option>
@@ -371,13 +371,13 @@
 						</select>
 					</div>
 					<div class="flex flex-col gap-1.5">
-						<label for="linear-priority" class="font-mono text-[10px] text-slate-500 uppercase">
+						<label for="linear-priority" class="font-mono text-[10px] text-muted-foreground uppercase">
 							Priority
 						</label>
 						<select
 							id="linear-priority"
 							bind:value={linearPriority}
-							class="rounded border border-slate-800 bg-slate-900 p-1.5 font-mono text-xs text-slate-200 focus:border-purple-500 focus:outline-none"
+							class="rounded border border-border bg-background p-1.5 font-mono text-xs text-foreground focus:border-status-purple focus:outline-none"
 						>
 							<option value={0}>0 — No priority</option>
 							<option value={1}>1 — Urgent</option>
@@ -392,14 +392,14 @@
 
 		<!-- Prompt Area -->
 		<div class="flex min-h-[150px] flex-1 flex-col gap-1.5">
-			<label for="prompt" class="font-mono text-[10px] text-slate-500 uppercase"
+			<label for="prompt" class="font-mono text-[10px] text-muted-foreground uppercase"
 				>Describe what needs to be done</label
 			>
 			<textarea
 				id="prompt"
 				bind:value={prompt}
 				placeholder="What needs to be done?"
-				class="flex-1 resize-none rounded border border-slate-800 bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 placeholder:text-slate-700 focus:border-blue-500 focus:outline-none"
+				class="flex-1 resize-none rounded border border-border bg-background p-3 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-status-blue focus:outline-none"
 			></textarea>
 		</div>
 
@@ -415,18 +415,18 @@
 			<div
 				class="flex items-start gap-3 rounded border px-3 py-2 font-mono text-xs {status ===
 				'submitting'
-					? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+					? 'border-status-blue/20 bg-status-blue/10 text-status-blue'
 					: status === 'waiting'
-						? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+						? 'border-status-blue/20 bg-status-blue/10 text-status-blue'
 						: status === 'timeout'
-							? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+							? 'border-status-amber/20 bg-status-amber/10 text-status-amber'
 							: status === 'completed' && completedTone === 'green'
-								? 'border-green-500/20 bg-green-500/10 text-green-400'
+								? 'border-status-green/20 bg-status-green/10 text-status-green'
 								: status === 'completed' && completedTone === 'amber'
-									? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+									? 'border-status-amber/20 bg-status-amber/10 text-status-amber'
 									: status === 'completed'
-										? 'border-red-500/20 bg-red-500/10 text-red-400'
-										: 'border-red-500/20 bg-red-500/10 text-red-400'}"
+										? 'border-status-red/20 bg-status-red/10 text-status-red'
+										: 'border-status-red/20 bg-status-red/10 text-status-red'}"
 			>
 				{#if status === 'submitting'}
 					<Loader2 size={14} class="mt-0.5 animate-spin" />
@@ -434,9 +434,9 @@
 				{:else if status === 'waiting'}
 					<span class="relative mt-0.5 flex h-3 w-3">
 						<span
-							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-60"
+							class="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-blue opacity-60"
 						></span>
-						<span class="relative inline-flex h-3 w-3 rounded-full bg-blue-500"></span>
+						<span class="relative inline-flex h-3 w-3 rounded-full bg-status-blue"></span>
 					</span>
 					<div class="flex flex-1 flex-col gap-0.5">
 						<div class="flex items-center gap-2">
@@ -449,7 +449,7 @@
 								href={lastTicketUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="w-fit text-[10px] text-purple-300 underline hover:text-purple-200"
+								class="w-fit text-[10px] text-status-purple underline hover:text-status-purple"
 							>
 								Filed: {lastTicketId} →
 							</a>
@@ -482,7 +482,7 @@
 									href={lastTicketUrl}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="text-purple-300 underline hover:text-purple-200"
+									class="text-status-purple underline hover:text-status-purple"
 								>
 									Filed: {lastTicketId} →
 								</a>
@@ -534,11 +534,11 @@
 	</div>
 
 	<!-- Footer / Action -->
-	<div class="flex justify-end border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+	<div class="flex justify-end border-t border-border bg-background/50 px-4 py-3">
 		<button
 			onclick={handleSubmit}
 			disabled={status === 'submitting' || status === 'waiting' || !prompt.trim()}
-			class="flex items-center gap-2 rounded bg-blue-600 px-6 py-2 font-mono text-xs font-bold text-white shadow-lg shadow-blue-900/20 transition-all hover:bg-blue-500 active:scale-95 disabled:bg-slate-800 disabled:text-slate-600"
+			class="flex items-center gap-2 rounded bg-status-blue px-6 py-2 font-mono text-xs font-bold text-white shadow-lg shadow-blue-900/20 transition-all hover:bg-status-blue active:scale-95 disabled:bg-muted disabled:text-muted-foreground"
 		>
 			{#if status === 'submitting'}
 				<Loader2 size={14} class="animate-spin" />

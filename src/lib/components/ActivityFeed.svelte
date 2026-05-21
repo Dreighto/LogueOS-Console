@@ -96,13 +96,13 @@
 	function getLevelColor(level: ActivityEvent['level']) {
 		switch (level) {
 			case 'success':
-				return 'text-[#3FB950] bg-[#3FB950]/10 border-[#3FB950]/20';
+				return 'text-status-green bg-status-green/10 border-status-green/20';
 			case 'warning':
-				return 'text-[#D29922] bg-[#D29922]/10 border-[#D29922]/20';
+				return 'text-status-amber bg-status-amber/10 border-status-amber/20';
 			case 'error':
-				return 'text-[#F85149] bg-[#F85149]/10 border-[#F85149]/20';
+				return 'text-destructive bg-destructive/10 border-destructive/20';
 			default:
-				return 'text-[#8B949E] bg-[#8B949E]/10 border-[#30363D]';
+				return 'text-muted-foreground bg-muted-foreground/10 border-border';
 		}
 	}
 
@@ -130,11 +130,11 @@
 
 <div class="flex flex-col gap-4">
 	<!-- Filter Chips -->
-	<div class="flex w-fit gap-2 rounded-lg border border-[#30363D] bg-[#0D1117] p-1">
+	<div class="flex w-fit gap-2 rounded-lg border border-border bg-background p-1">
 		<button
 			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter === 'all'
-				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
-				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+				? 'border border-border bg-muted text-foreground'
+				: 'text-muted-foreground hover:text-foreground'}"
 			onclick={() => (currentFilter = 'all')}
 		>
 			All
@@ -142,8 +142,8 @@
 		<button
 			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
 			'needs-attention'
-				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
-				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+				? 'border border-border bg-muted text-foreground'
+				: 'text-muted-foreground hover:text-foreground'}"
 			onclick={() => (currentFilter = 'needs-attention')}
 		>
 			Needs Attention
@@ -151,17 +151,17 @@
 		<button
 			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
 			'finished'
-				? 'border border-[#30363D] bg-[#21262D] text-[#F0F6FC]'
-				: 'text-[#8B949E] hover:text-[#C9D1D9]'}"
+				? 'border border-border bg-muted text-foreground'
+				: 'text-muted-foreground hover:text-foreground'}"
 			onclick={() => (currentFilter = 'finished')}
 		>
 			Finished
 		</button>
 	</div>
 
-	<div class="flex flex-col overflow-hidden rounded-lg border border-[#30363D] bg-[#161B22]">
+	<div class="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
 		{#if filteredEvents().length === 0}
-			<div class="p-12 text-center text-[#8B949E]">
+			<div class="p-12 text-center text-muted-foreground">
 				<p>Nothing here — the team is running clean</p>
 			</div>
 		{:else}
@@ -169,9 +169,9 @@
 				{#each groupedEvents() as group (group.label)}
 					<!-- Date Group Header -->
 					<div
-						class="sticky top-0 z-10 border-y border-[#30363D] bg-[#0D1117] px-4 py-1.5 first:border-t-0"
+						class="sticky top-0 z-10 border-y border-border bg-background px-4 py-1.5 first:border-t-0"
 					>
-						<span class="text-[10px] font-bold tracking-widest text-[#8B949E] uppercase">
+						<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 							{group.label}
 						</span>
 					</div>
@@ -181,11 +181,11 @@
 						{@const levelColor = getLevelColor(event.level)}
 						{@const isExpanded = expandedEvents.has(event.id)}
 
-						<div class="group relative transition-colors hover:bg-[#1C2128]">
+						<div class="group relative transition-colors hover:bg-surface">
 							<div class="flex items-stretch">
 								<button
 									type="button"
-									class="flex flex-1 items-start gap-3 p-3 text-left focus:bg-[#1C2128] focus:outline-none"
+									class="flex flex-1 items-start gap-3 p-3 text-left focus:bg-surface focus:outline-none"
 									onclick={() => onEventClick?.(event)}
 								>
 									<!-- Avatar-like Icon -->
@@ -200,29 +200,29 @@
 									<!-- Content Area -->
 									<div class="min-w-0 flex-grow">
 										<div class="mb-0.5 flex items-baseline gap-2">
-											<span class="text-sm font-bold text-[#F0F6FC]">
+											<span class="text-sm font-bold text-foreground">
 												{event.worker || 'System'}
 											</span>
-											<span class="text-[11px] text-[#8B949E]">
+											<span class="text-[11px] text-muted-foreground">
 												{formatEventTime(event.ts)}
 											</span>
 
 											{#if event.level === 'error'}
 												<span
-													class="ml-auto rounded border border-[#F85149]/30 bg-[#F85149]/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-[#F85149] uppercase"
+													class="ml-auto rounded border border-destructive/30 bg-destructive/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-destructive uppercase"
 												>
 													Attention
 												</span>
 											{:else if event.level === 'warning'}
 												<span
-													class="ml-auto rounded border border-[#D29922]/30 bg-[#D29922]/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-[#D29922] uppercase"
+													class="ml-auto rounded border border-status-amber/30 bg-status-amber/20 px-1.5 py-0.5 text-[9px] font-bold tracking-tighter text-status-amber uppercase"
 												>
 													Review
 												</span>
 											{/if}
 										</div>
 
-										<p class="text-sm leading-relaxed break-words text-[#C9D1D9]">
+										<p class="text-sm leading-relaxed break-words text-foreground">
 											{event.summary}
 										</p>
 									</div>
@@ -231,7 +231,7 @@
 								<!-- Inline Expand Toggle (Secondary) -->
 								<button
 									type="button"
-									class="flex items-center justify-center border-l border-[#30363D]/30 px-3 text-[#484F58] transition-colors hover:text-[#8B949E]"
+									class="flex items-center justify-center border-l border-border/30 px-3 text-muted-foreground transition-colors hover:text-muted-foreground"
 									onclick={() => toggleExpand(event.id)}
 									aria-label={isExpanded ? 'Collapse' : 'Expand'}
 								>
@@ -247,16 +247,16 @@
 							{#if isExpanded}
 								<div class="ml-11 px-4 pt-0 pb-4">
 									<div
-										class="grid grid-cols-1 gap-3 rounded-md border border-[#30363D] bg-[#0D1117] p-3 sm:grid-cols-2"
+										class="grid grid-cols-1 gap-3 rounded-md border border-border bg-background p-3 sm:grid-cols-2"
 									>
 										<div class="flex flex-col gap-1">
 											<span
-												class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+												class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
 											>
 												<Clock size={10} />
 												Full Timestamp
 											</span>
-											<span class="font-mono text-[11px] text-[#F0F6FC]">
+											<span class="font-mono text-[11px] text-foreground">
 												{formatFullDate(event.ts)}
 											</span>
 										</div>
@@ -264,12 +264,12 @@
 										{#if event.ticket_id && event.ticket_id !== 'unknown'}
 											<div class="flex flex-col gap-1">
 												<span
-													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
 												>
 													<Hash size={10} />
 													Ticket
 												</span>
-												<span class="font-mono text-[11px] text-[#F0F6FC]">
+												<span class="font-mono text-[11px] text-foreground">
 													{event.ticket_id}
 												</span>
 											</div>
@@ -278,7 +278,7 @@
 										{#if event.trace_id}
 											<div class="flex flex-col gap-1 sm:col-span-2">
 												<span
-													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-[#8B949E] uppercase"
+													class="flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
 												>
 													<Fingerprint size={10} />
 													Trace ID

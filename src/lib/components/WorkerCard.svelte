@@ -89,7 +89,7 @@
 </script>
 
 <div
-	class="flex flex-col gap-2 rounded-sm border border-border bg-surface p-2.5 font-mono transition-all hover:border-[#444C56] active:scale-[0.99]"
+	class="flex flex-col gap-2 rounded-sm border border-border bg-surface p-2.5 font-mono transition-all hover:border-border active:scale-[0.99]"
 >
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-3">
@@ -97,11 +97,11 @@
 				class="h-2 w-2 rounded-full transition-colors duration-500"
 				style="background-color: {stateInfo.color}"
 			></div>
-			<h3 class="text-xs font-bold tracking-wider text-[#F0F6FC] uppercase">
+			<h3 class="text-xs font-bold tracking-wider text-foreground uppercase">
 				{workerLabel(worker.id)}
 			</h3>
 		</div>
-		<span class="text-[10px] font-medium tracking-widest text-[#8B949E] uppercase">
+		<span class="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
 			{stateInfo.label}
 		</span>
 	</div>
@@ -114,14 +114,14 @@
 		>
 			<div class="flex flex-col gap-1">
 				<span
-					class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
+					class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-muted-foreground uppercase"
 				>
 					<Play size={10} />
 					WORKING ON
 				</span>
-				<div class="text-sm leading-snug font-medium text-[#F0F6FC]">
+				<div class="text-sm leading-snug font-medium text-foreground">
 					{#if worker.ticket_id}
-						<span class="text-[#3B82F6]">{worker.ticket_id}:</span>
+						<span class="text-status-blue">{worker.ticket_id}:</span>
 					{/if}
 					{worker.step || 'Initializing...'}
 				</div>
@@ -130,12 +130,12 @@
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
 					<span
-						class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-[#8B949E] uppercase"
+						class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-muted-foreground uppercase"
 					>
 						<Clock size={10} />
 						ELAPSED
 					</span>
-					<span class="text-xs text-[#F0F6FC]">
+					<span class="text-xs text-foreground">
 						{formatRelativeTime(worker.since || '')}
 					</span>
 				</div>
@@ -146,8 +146,8 @@
 					onclick={handleKillClick}
 					onblur={disarmConfirm}
 					class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold uppercase transition-colors {confirming
-						? 'border-red-500 bg-red-500/20 text-red-400'
-						: 'border-[#30363D] bg-[#21262D] text-[#8B949E] hover:border-red-500/50 hover:text-red-400'}"
+						? 'border-status-red bg-status-red/20 text-status-red'
+						: 'border-border bg-muted text-muted-foreground hover:border-status-red/50 hover:text-status-red'}"
 				>
 					{#if submitting}
 						<div
@@ -163,16 +163,16 @@
 	{:else if worker.state === 'idle'}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#30363D] bg-background"
+			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-border bg-background"
 		>
-			<span class="text-[10px] font-bold tracking-widest text-[#484F58] uppercase">[ IDLE ]</span>
+			<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">[ IDLE ]</span>
 		</div>
 	{:else}
 		<div
 			in:fade={{ duration: 300 }}
-			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-[#484F58]/30 bg-background"
+			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-muted-foreground/30 bg-background"
 		>
-			<span class="text-[10px] font-bold tracking-widest text-[#484F58]/50 uppercase"
+			<span class="text-[10px] font-bold tracking-widest text-muted-foreground/50 uppercase"
 				>[ OFFLINE ]</span
 			>
 		</div>
@@ -181,7 +181,7 @@
 	{#if hasIssue || errorMsg}
 		<div
 			in:scale={{ duration: 200, start: 0.9 }}
-			class="mt-1 flex items-start gap-2 rounded border border-red-900/30 bg-red-900/10 p-2 text-[10px] text-red-400"
+			class="mt-1 flex items-start gap-2 rounded border border-status-red/30 bg-status-red/10 p-2 text-[10px] text-status-red"
 		>
 			<AlertCircle size={14} class="mt-0.5 shrink-0" />
 			<div class="flex flex-col gap-0.5">

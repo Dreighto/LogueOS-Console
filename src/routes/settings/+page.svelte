@@ -166,7 +166,7 @@
 
 		{#if servicesError && services.length > 0}
 			<div
-				class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 font-mono text-[11px] text-amber-400"
+				class="flex items-start gap-2 rounded-md border border-status-amber/20 bg-status-amber/5 p-2 font-mono text-[11px] text-status-amber"
 			>
 				<AlertCircle size={14} class="mt-0.5 shrink-0" />
 				<span>Service check failed: {servicesError}</span>
@@ -179,15 +179,15 @@
 	     primary signal: amber = paused, green = running. -->
 	<section
 		class="rounded-lg border p-4 {killSwitch.active
-			? 'border-amber-500/40 bg-amber-500/5'
-			: 'border-emerald-500/30 bg-emerald-500/5'}"
+			? 'border-status-amber/40 bg-status-amber/5'
+			: 'border-status-green/30 bg-status-green/5'}"
 		aria-labelledby="kill-switch-heading"
 	>
 		<div class="flex items-start gap-3">
 			{#if killSwitch.active}
-				<PauseCircle size={28} class="shrink-0 text-amber-400" aria-hidden="true" />
+				<PauseCircle size={28} class="shrink-0 text-status-amber" aria-hidden="true" />
 			{:else}
-				<ShieldCheck size={28} class="shrink-0 text-emerald-400" aria-hidden="true" />
+				<ShieldCheck size={28} class="shrink-0 text-status-green" aria-hidden="true" />
 			{/if}
 			<div class="flex flex-1 flex-col gap-1">
 				<h2 id="kill-switch-heading" class="font-sans text-lg font-bold tracking-tight">
@@ -195,8 +195,8 @@
 				</h2>
 				<p
 					class="font-mono text-[10px] tracking-widest uppercase {killSwitch.active
-						? 'text-amber-400'
-						: 'text-emerald-400'}"
+						? 'text-status-amber'
+						: 'text-status-green'}"
 				>
 					{killSwitch.active ? 'Work is paused' : 'Running normally'}
 				</p>
@@ -204,15 +204,15 @@
 		</div>
 
 		{#if killSwitch.active}
-			<div class="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs">
-				<p class="font-sans text-amber-300">
+			<div class="mt-4 rounded-md border border-status-amber/20 bg-status-amber/10 p-3 text-xs">
+				<p class="font-sans text-status-amber">
 					Work is paused. All workers will stop before starting new tasks.
 				</p>
 				{#if killSwitch.note}
-					<p class="mt-1 font-sans text-amber-400/80">{killSwitch.note}</p>
+					<p class="mt-1 font-sans text-status-amber/80">{killSwitch.note}</p>
 				{/if}
 				{#if killSwitch.activated_by || killSwitch.activated_at}
-					<p class="mt-2 font-mono text-[10px] text-amber-500/70">
+					<p class="mt-2 font-mono text-[10px] text-status-amber/70">
 						{#if killSwitch.activated_by}Paused by {killSwitch.activated_by}{/if}{#if killSwitch.activated_by && killSwitch.activated_at} · {/if}{#if killSwitch.activated_at}{formatRelativeTime(killSwitch.activated_at)}{/if}
 					</p>
 				{/if}
@@ -224,7 +224,7 @@
 				<button
 					type="button"
 					onclick={() => openConfirm('clear')}
-					class="flex w-full items-center justify-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-emerald-300 uppercase transition-colors hover:bg-emerald-500/20 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none"
+					class="flex w-full items-center justify-center gap-2 rounded-md border border-status-green/40 bg-status-green/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-status-green uppercase transition-colors hover:bg-status-green/20 focus:ring-2 focus:ring-status-green/50 focus:outline-none"
 				>
 					<ShieldCheck size={16} />
 					Resume work
@@ -233,7 +233,7 @@
 				<button
 					type="button"
 					onclick={() => openConfirm('activate')}
-					class="flex w-full items-center justify-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-amber-300 uppercase transition-colors hover:bg-amber-500/20 focus:ring-2 focus:ring-amber-500/50 focus:outline-none"
+					class="flex w-full items-center justify-center gap-2 rounded-md border border-status-amber/40 bg-status-amber/10 px-4 py-3 font-sans text-sm font-bold tracking-wider text-status-amber uppercase transition-colors hover:bg-status-amber/20 focus:ring-2 focus:ring-status-amber/50 focus:outline-none"
 				>
 					<PauseCircle size={16} />
 					Pause all work
@@ -246,7 +246,7 @@
 
 		{#if fetchError}
 			<div
-				class="mt-3 flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/5 p-2 font-mono text-[11px] text-red-400"
+				class="mt-3 flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-[11px] text-status-red"
 			>
 				<AlertCircle size={14} class="mt-0.5 shrink-0" />
 				<span>State refresh failed: {fetchError}</span>
@@ -331,7 +331,7 @@
 
 			{#if submitError}
 				<div
-					class="flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/5 p-2 font-mono text-[11px] text-red-400"
+					class="flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-[11px] text-status-red"
 				>
 					<AlertCircle size={14} class="mt-0.5 shrink-0" />
 					<span>{submitError}</span>
@@ -345,8 +345,8 @@
 					disabled={submitting}
 					class="flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2.5 font-sans text-sm font-bold tracking-wider uppercase transition-colors focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {pendingAction ===
 					'activate'
-						? 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 focus:ring-amber-500/50'
-						: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 focus:ring-emerald-500/50'}"
+						? 'border-status-amber/40 bg-status-amber/10 text-status-amber hover:bg-status-amber/20 focus:ring-status-amber/50'
+						: 'border-status-green/40 bg-status-green/10 text-status-green hover:bg-status-green/20 focus:ring-status-green/50'}"
 				>
 					{submitting
 						? 'Working…'

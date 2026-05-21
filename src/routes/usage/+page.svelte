@@ -38,9 +38,9 @@
 	}
 
 	function projColor(cost: number): string {
-		if (cost < 50) return 'text-emerald-400';
-		if (cost < 80) return 'text-amber-400';
-		return 'text-red-400';
+		if (cost < 50) return 'text-status-green';
+		if (cost < 80) return 'text-status-amber';
+		return 'text-status-red';
 	}
 
 	function fmtDate(dateStr: string): string {
@@ -163,7 +163,7 @@
 	<div class="flex items-center justify-between">
 		<a
 			href={resolve('/')}
-			class="flex items-center gap-1 font-sans text-sm text-[#8A8A9A] transition-colors hover:text-[#F0F0F0]"
+			class="flex items-center gap-1 font-sans text-sm text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ChevronLeft size={16} /> Back
 		</a>

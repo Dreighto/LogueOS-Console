@@ -19,7 +19,7 @@
 	<div class="flex items-center gap-4">
 		<a
 			href={resolve('/')}
-			class="flex items-center gap-1 font-sans text-sm text-[#8A8A9A] transition-colors hover:text-[#F0F0F0]"
+			class="flex items-center gap-1 font-sans text-sm text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ChevronLeft size={16} />
 			Back to Runs
@@ -28,7 +28,7 @@
 
 	{#if data.errorMsg}
 		<div
-			class="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400"
+			class="flex items-center gap-3 rounded-lg border border-status-red/20 bg-status-red/5 p-4 text-sm text-status-red"
 		>
 			<AlertCircle size={18} class="shrink-0" />
 			<div class="flex flex-col">
@@ -38,17 +38,17 @@
 		</div>
 	{:else if data.notFoundTraceId}
 		<div
-			class="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#21262D] p-12 text-center"
+			class="flex flex-col items-center justify-center rounded-lg border border-dashed border-muted p-12 text-center"
 		>
-			<Search size={32} class="mb-3 text-[#6B7280]" />
-			<p class="font-sans text-lg font-semibold text-[#8A8A9A]">Run not found</p>
-			<p class="mt-1 font-mono text-xs text-[#6B7280]">
-				No run with trace_id <code class="rounded bg-[#0D1117] px-1.5 py-0.5">{data.notFoundTraceId}</code> in the completion log.
+			<Search size={32} class="mb-3 text-muted-foreground" />
+			<p class="font-sans text-lg font-semibold text-muted-foreground">Run not found</p>
+			<p class="mt-1 font-mono text-xs text-muted-foreground">
+				No run with trace_id <code class="rounded bg-background px-1.5 py-0.5">{data.notFoundTraceId}</code> in the completion log.
 				The run may have happened before the log started, or the URL may have a typo.
 			</p>
 			<a
 				href={resolve('/')}
-				class="mt-6 inline-flex items-center gap-1 rounded-md bg-[#A3E635] px-3 py-1.5 text-xs font-semibold text-[#0D1117] transition-all hover:shadow-[0_0_12px_rgba(163,230,53,0.4)]"
+				class="mt-6 inline-flex items-center gap-1 rounded-md bg-cta px-3 py-1.5 text-xs font-semibold text-background transition-all hover:shadow-[0_0_12px_rgba(163,230,53,0.4)]"
 			>
 				<ChevronLeft size={12} />
 				Back to Runs

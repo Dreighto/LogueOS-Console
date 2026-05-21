@@ -10,7 +10,7 @@
 		color?: string;
 	}
 
-	let { title, runs, defaultOpen = true, color = 'text-slate-300' }: Props = $props();
+	let { title, runs, defaultOpen = true, color = 'text-foreground' }: Props = $props();
 	let isOpen = $state(defaultOpen);
 
 	function toggle() {
@@ -18,29 +18,29 @@
 	}
 </script>
 
-<div class="flex flex-col overflow-hidden rounded-lg border border-[#21262D] bg-surface/5">
+<div class="flex flex-col overflow-hidden rounded-lg border border-muted bg-surface/5">
 	<button
-		class="flex items-center justify-between bg-[#161B22] px-3 py-2 text-left transition-colors hover:bg-[#1C2128]"
+		class="flex items-center justify-between bg-surface px-3 py-2 text-left transition-colors hover:bg-surface"
 		onclick={toggle}
 		aria-expanded={isOpen}
 	>
 		<div class="flex items-center gap-2">
 			{#if isOpen}
-				<ChevronDown size={14} class="text-[#8A8A9A]" />
+				<ChevronDown size={14} class="text-muted-foreground" />
 			{:else}
-				<ChevronRight size={14} class="text-[#8A8A9A]" />
+				<ChevronRight size={14} class="text-muted-foreground" />
 			{/if}
 			<span class="font-mono text-xs font-bold tracking-wider uppercase {color}">
 				{title}
 			</span>
-			<span class="rounded bg-[#21262D] px-1.5 py-0.5 font-mono text-[10px] text-[#8A8A9A]">
+			<span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
 				{runs.length}
 			</span>
 		</div>
 	</button>
 
 	{#if isOpen}
-		<div class="flex flex-col gap-2 bg-[#050505] p-2">
+		<div class="flex flex-col gap-2 bg-background p-2">
 			{#each runs as run, i (`${run.trace_id ?? ''}|${run.timestamp}|${run.ticket_id ?? ''}|${i}`)}
 				<RunCard {run} />
 			{/each}
