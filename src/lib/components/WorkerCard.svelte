@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { Square, AlertCircle, Play, Clock } from 'lucide-svelte';
 	import { scale, fade } from 'svelte/transition';
+	import Card from '$lib/components/Card.svelte';
 
 	interface Props {
 		worker: WorkerStatus;
@@ -88,9 +89,7 @@
 	);
 </script>
 
-<div
-	class="flex flex-col gap-2 rounded-sm border border-border bg-surface p-2.5 font-mono transition-all hover:border-border active:scale-[0.99]"
->
+<Card class="flex flex-col gap-2 font-mono">
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-3">
 			<div
@@ -190,4 +189,4 @@
 			</div>
 		</div>
 	{/if}
-</div>
+</Card>
