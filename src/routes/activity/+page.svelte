@@ -7,6 +7,7 @@
 	import type { ActivityEvent } from '$lib/types/activity';
 	import { formatFullDate } from '$lib/utils/format';
 	import { Clock, Hash, Fingerprint, Terminal } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	interface Props {
 		data: PageData;
@@ -52,20 +53,17 @@
 </script>
 
 <div class="flex flex-col gap-6">
-	<header class="flex items-center justify-between">
-		<div>
-			<h1 class="font-sans text-2xl font-bold text-foreground">Activity</h1>
-			<p class="mt-1 text-sm text-muted-foreground">
-				The latest stream of thoughts, actions, and results from the team.
-			</p>
-		</div>
+	<PageHeader
+		title="Activity"
+		subtitle="The latest stream of thoughts, actions, and results from the team."
+	>
 		<div
-			class="flex items-center gap-2 rounded-full bg-surface px-3 py-1 border border-border"
+			class="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1"
 		>
-			<div class="h-2 w-2 animate-pulse rounded-full bg-status-green"></div>
-			<span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Live</span>
+			<div class="h-1.5 w-1.5 animate-pulse rounded-full bg-status-green"></div>
+			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Live</span>
 		</div>
-	</header>
+	</PageHeader>
 
 	<ActivityFeed {events} onEventClick={openDetail} />
 </div>
