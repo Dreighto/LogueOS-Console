@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { ChevronLeft } from 'lucide-svelte';
 	import { resolve } from '$app/paths';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import type { DailyUsage, HourlyBucket, TicketCost } from '$lib/types/usage';
@@ -159,15 +159,10 @@
 </svelte:head>
 
 <div class="flex flex-col gap-4">
-	<!-- Header -->
-	<div class="flex items-center justify-between">
-		<a
-			href={resolve('/')}
-			class="flex items-center gap-1 font-sans text-sm text-muted-foreground transition-colors hover:text-foreground"
-		>
-			<ChevronLeft size={16} /> Back
-		</a>
-		<h1 class="font-mono text-sm font-bold tracking-widest text-foreground uppercase">API Usage</h1>
+	<PageHeader
+		title="API Usage"
+		subtitle="Spend and dispatch volume across the team."
+	>
 		<div class="flex items-center gap-1 rounded border border-border bg-surface/30 p-0.5">
 			<button
 				class="min-h-[44px] rounded px-2 py-0.5 font-mono text-xs tracking-wider uppercase transition-colors {data.days ===
@@ -184,7 +179,7 @@
 				onclick={() => goto(resolve('/usage') + '?days=30')}>30d</button
 			>
 		</div>
-	</div>
+	</PageHeader>
 
 	<!-- Cost summary cards -->
 	<div class="grid grid-cols-2 gap-2">

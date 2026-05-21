@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { onNavigate } from '$app/navigation';
-	import { Home, Cpu, Activity, Brain, Send, Settings, AlertOctagon } from 'lucide-svelte';
+	import { Home, Cpu, Activity, Brain, Send, Settings, DollarSign, AlertOctagon } from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
@@ -19,8 +19,7 @@
 		{ name: 'Team', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Memory', path: '/memory', icon: Brain },
-		{ name: 'Jobs', path: '/ask', icon: Send },
-		{ name: 'Settings', path: '/settings', icon: Settings }
+		{ name: 'Jobs', path: '/ask', icon: Send }
 	] as const;
 
 	// Seed kill-switch state from SSR. Client polls so the header stays in
@@ -74,10 +73,6 @@
 			});
 		});
 	});
-
-	// Terminal route was gutted 2026-05-19 — until it can be replaced with
-	// something better. Header/nav now render unconditionally; no full-viewport
-	// iframe special-case to maintain.
 </script>
 
 <svelte:head>
@@ -106,21 +101,45 @@
 			<h1 class="font-sans text-lg font-bold tracking-tight text-white">LogueOS Console</h1>
 		</div>
 
-		{#if killSwitch.active}
-			<!-- Kill-switch live indicator. Tappable so the operator can jump
-			     straight to /settings to clear it, no matter which tab they
-			     are on. The aria-live region announces the state change for
-			     screen readers when the indicator first appears. -->
+		<div class="flex items-center gap-1">
+			{#if killSwitch.active}
+				<!-- Kill-switch live indicator. Tappable so the operator can jump
+				     straight to /settings to clear it, no matter which tab they
+				     are on. The aria-live region announces the state change for
+				     screen readers when the indicator first appears. -->
+				<a
+					href={resolve('/settings')}
+					aria-live="assertive"
+					in:fade={{ duration: 300 }}
+					class="active-trigger flex items-center gap-1.5 rounded-md border border-status-red/50 bg-status-red/10 px-2 py-1 font-mono text-xs font-bold tracking-widest text-status-red uppercase transition-colors hover:bg-status-red/20"
+				>
+					<AlertOctagon size={12} aria-hidden="true" />
+					<span>Halt</span>
+				</a>
+			{/if}
+			<!-- Usage and Settings are occasional meta screens, kept out of the
+			     five-tab bottom nav and reachable from here instead. -->
+			<a
+				href={resolve('/usage')}
+				aria-label="API usage"
+				aria-current={page.url.pathname === '/usage' ? 'page' : undefined}
+				class="active-trigger flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface"
+				class:text-cta={page.url.pathname === '/usage'}
+				class:text-muted-foreground={page.url.pathname !== '/usage'}
+			>
+				<DollarSign size={18} aria-hidden="true" />
+			</a>
 			<a
 				href={resolve('/settings')}
-				aria-live="assertive"
-				in:fade={{ duration: 300 }}
-				class="active-trigger flex items-center gap-1.5 rounded-md border border-status-red/50 bg-status-red/10 px-2 py-1 font-mono text-xs font-bold tracking-widest text-status-red uppercase transition-colors hover:bg-status-red/20"
+				aria-label="Settings"
+				aria-current={page.url.pathname === '/settings' ? 'page' : undefined}
+				class="active-trigger flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface"
+				class:text-cta={page.url.pathname === '/settings'}
+				class:text-muted-foreground={page.url.pathname !== '/settings'}
 			>
-				<AlertOctagon size={12} aria-hidden="true" />
-				<span>Halt</span>
+				<Settings size={18} aria-hidden="true" />
 			</a>
-		{/if}
+		</div>
 	</header>
 
 	<!-- Main Content.
