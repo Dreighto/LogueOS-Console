@@ -152,7 +152,7 @@
 
 		{#if services.length === 0}
 			<div
-				class="rounded-md border border-dashed border-border bg-surface/30 p-3 font-mono text-[11px] text-muted-foreground"
+				class="rounded-md border border-dashed border-border bg-surface/30 p-3 font-mono text-xs text-muted-foreground"
 			>
 				No services reported. {#if servicesError}({servicesError}){/if}
 			</div>
@@ -166,7 +166,7 @@
 
 		{#if servicesError && services.length > 0}
 			<div
-				class="flex items-start gap-2 rounded-md border border-status-amber/20 bg-status-amber/5 p-2 font-mono text-[11px] text-status-amber"
+				class="flex items-start gap-2 rounded-md border border-status-amber/20 bg-status-amber/5 p-2 font-mono text-xs text-status-amber"
 			>
 				<AlertCircle size={14} class="mt-0.5 shrink-0" />
 				<span>Service check failed: {servicesError}</span>
@@ -194,7 +194,7 @@
 					Pause Everything
 				</h2>
 				<p
-					class="font-mono text-[10px] tracking-widest uppercase {killSwitch.active
+					class="font-mono text-xs tracking-widest uppercase {killSwitch.active
 						? 'text-status-amber'
 						: 'text-status-green'}"
 				>
@@ -212,7 +212,7 @@
 					<p class="mt-1 font-sans text-status-amber/80">{killSwitch.note}</p>
 				{/if}
 				{#if killSwitch.activated_by || killSwitch.activated_at}
-					<p class="mt-2 font-mono text-[10px] text-status-amber/70">
+					<p class="mt-2 font-mono text-xs text-status-amber/70">
 						{#if killSwitch.activated_by}Paused by {killSwitch.activated_by}{/if}{#if killSwitch.activated_by && killSwitch.activated_at} · {/if}{#if killSwitch.activated_at}{formatRelativeTime(killSwitch.activated_at)}{/if}
 					</p>
 				{/if}
@@ -238,7 +238,7 @@
 					<PauseCircle size={16} />
 					Pause all work
 				</button>
-				<p class="text-center font-mono text-[10px] text-muted-foreground">
+				<p class="text-center font-mono text-xs text-muted-foreground">
 					Stops workers from picking up new tasks. In-progress work finishes its current step, then halts.
 				</p>
 			{/if}
@@ -246,7 +246,7 @@
 
 		{#if fetchError}
 			<div
-				class="mt-3 flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-[11px] text-status-red"
+				class="mt-3 flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-xs text-status-red"
 			>
 				<AlertCircle size={14} class="mt-0.5 shrink-0" />
 				<span>State refresh failed: {fetchError}</span>
@@ -258,7 +258,7 @@
 	     running when triaging Console issues. Values are inlined at build
 	     time via vite.config.ts `define`; zero runtime cost. -->
 	<footer
-		class="text-muted-foreground mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
+		class="text-muted-foreground mt-6 border-t border-border pt-3 text-center font-mono text-xs"
 		aria-label="Build identity"
 	>
 		{__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
@@ -314,7 +314,7 @@
 			</p>
 
 			<label class="flex flex-col gap-1">
-				<span class="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+				<span class="font-mono text-xs tracking-wider text-muted-foreground uppercase">
 					Reason (optional)
 				</span>
 				<input
@@ -331,7 +331,7 @@
 
 			{#if submitError}
 				<div
-					class="flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-[11px] text-status-red"
+					class="flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-xs text-status-red"
 				>
 					<AlertCircle size={14} class="mt-0.5 shrink-0" />
 					<span>{submitError}</span>

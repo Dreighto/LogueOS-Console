@@ -89,19 +89,19 @@
 
 			<div class="flex flex-wrap gap-2">
 				<span
-					class="rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+					class="rounded px-2 py-0.5 text-xs font-bold tracking-wider uppercase"
 					style="background-color: {runWorkerColor}22; color: {runWorkerColor}; border: 1px solid {runWorkerColor}44"
 				>
 					{workerLabel(run.worker)}
 				</span>
 				<span
-					class="rounded border border-border bg-muted px-2 py-0.5 text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+					class="rounded border border-border bg-muted px-2 py-0.5 text-xs font-bold tracking-wider text-muted-foreground uppercase"
 				>
 					{run.status}
 				</span>
 				{#if run.branch}
 					<span
-						class="flex items-center gap-1 rounded border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+						class="flex items-center gap-1 rounded border border-border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
 					>
 						<GitBranch size={10} />
 						{run.branch}
@@ -113,24 +113,24 @@
 		<!-- Details Grid -->
 		<div class="grid grid-cols-2 gap-4 border-y border-muted py-4">
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Trace ID</span>
+				<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">Trace ID</span>
 				<span class="truncate font-mono text-xs text-muted-foreground">{run.trace_id || '---'}</span>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Timestamp</span>
+				<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">Timestamp</span>
 				<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
 					<Clock size={12} />
 					{formatFullDate(run.timestamp)}
 				</div>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">Duration</span>
+				<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">Duration</span>
 				<span class="text-xs text-muted-foreground">
 					{run.duration_ms != null ? formatDuration(run.duration_ms) : '---'}
 				</span>
 			</div>
 			<div class="flex flex-col gap-1">
-				<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+				<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase"
 					>Pull Request</span
 				>
 				{#if run.pr_number && prRepo}
@@ -156,7 +156,7 @@
 			<div class="flex flex-col gap-3">
 				<div class="flex items-center gap-2">
 					<Files size={14} class="text-muted-foreground" />
-					<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+					<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 						Files Touched ({run.files_touched.length})
 					</span>
 				</div>

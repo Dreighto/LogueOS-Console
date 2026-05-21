@@ -101,7 +101,7 @@
 				{workerLabel(worker.id)}
 			</h3>
 		</div>
-		<span class="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+		<span class="text-xs font-medium tracking-widest text-muted-foreground uppercase">
 			{stateInfo.label}
 		</span>
 	</div>
@@ -114,7 +114,7 @@
 		>
 			<div class="flex flex-col gap-1">
 				<span
-					class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-muted-foreground uppercase"
+					class="flex items-center gap-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase"
 				>
 					<Play size={10} />
 					WORKING ON
@@ -130,7 +130,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex flex-col gap-1">
 					<span
-						class="flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-muted-foreground uppercase"
+						class="flex items-center gap-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase"
 					>
 						<Clock size={10} />
 						ELAPSED
@@ -145,7 +145,7 @@
 					disabled={!killable || submitting}
 					onclick={handleKillClick}
 					onblur={disarmConfirm}
-					class="flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold uppercase transition-colors {confirming
+					class="flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold uppercase transition-colors {confirming
 						? 'border-status-red bg-status-red/20 text-status-red'
 						: 'border-border bg-muted text-muted-foreground hover:border-status-red/50 hover:text-status-red'}"
 				>
@@ -165,14 +165,14 @@
 			in:fade={{ duration: 300 }}
 			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-border bg-background"
 		>
-			<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">[ IDLE ]</span>
+			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">[ IDLE ]</span>
 		</div>
 	{:else}
 		<div
 			in:fade={{ duration: 300 }}
 			class="flex h-12 items-center justify-center rounded-sm border border-dashed border-muted-foreground/30 bg-background"
 		>
-			<span class="text-[10px] font-bold tracking-widest text-muted-foreground/50 uppercase"
+			<span class="text-xs font-bold tracking-widest text-muted-foreground/50 uppercase"
 				>[ OFFLINE ]</span
 			>
 		</div>
@@ -181,7 +181,7 @@
 	{#if hasIssue || errorMsg}
 		<div
 			in:scale={{ duration: 200, start: 0.9 }}
-			class="mt-1 flex items-start gap-2 rounded border border-status-red/30 bg-status-red/10 p-2 text-[10px] text-status-red"
+			class="mt-1 flex items-start gap-2 rounded border border-status-red/30 bg-status-red/10 p-2 text-xs text-status-red"
 		>
 			<AlertCircle size={14} class="mt-0.5 shrink-0" />
 			<div class="flex flex-col gap-0.5">

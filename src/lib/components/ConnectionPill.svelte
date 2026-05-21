@@ -49,7 +49,7 @@
 				? 'bg-status-green shadow-[0_0_4px_#22c55e]'
 				: 'bg-status-red'}"
 		></div>
-		<span class="font-mono text-[10px] tracking-tighter uppercase {colorClass}">
+		<span class="font-mono text-xs tracking-tighter uppercase {colorClass}">
 			{status === 'online' ? 'Running normally' : 'Not responding'}
 </span>
 	</div>

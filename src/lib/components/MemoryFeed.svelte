@@ -16,19 +16,19 @@
 	<div class="flex p-1 bg-background/80 rounded-lg border border-border">
 		<button
 			onclick={() => activeTab = 'lessons'}
-			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'lessons' ? 'bg-status-blue/10 text-status-blue shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			class="flex-1 px-2 py-1.5 text-xs font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'lessons' ? 'bg-status-blue/10 text-status-blue shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
 		>
 			Canon
 		</button>
 		<button
 			onclick={() => activeTab = 'provisional'}
-			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'provisional' ? 'bg-status-amber/10 text-status-amber shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			class="flex-1 px-2 py-1.5 text-xs font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'provisional' ? 'bg-status-amber/10 text-status-amber shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
 		>
 			Drafts
 		</button>
 		<button
 			onclick={() => activeTab = 'raw'}
-			class="flex-1 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'raw' ? 'bg-status-green/10 text-status-green shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+			class="flex-1 px-2 py-1.5 text-xs font-bold tracking-wider uppercase rounded-md transition-all {activeTab === 'raw' ? 'bg-status-green/10 text-status-green shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
 		>
 			Raw
 		</button>
@@ -45,7 +45,7 @@
 							</div>
 							<div>
 								<h3 class="text-sm font-semibold text-foreground line-clamp-1">{lesson.lesson_text.slice(0, 60)}...</h3>
-								<div class="flex items-center gap-3 text-[10px] text-muted-foreground uppercase tracking-wider">
+								<div class="flex items-center gap-3 text-xs text-muted-foreground uppercase tracking-wider">
 									<span class="flex items-center gap-1">
 										<Globe size={10} />
 										{lesson.project_id}
@@ -58,7 +58,7 @@
 							</div>
 						</div>
 						{#if lesson.proposed_promotion}
-							<span class="rounded bg-status-amber/10 px-2 py-0.5 text-[10px] font-medium text-status-amber border border-status-amber/20">
+							<span class="rounded bg-status-amber/10 px-2 py-0.5 text-xs font-medium text-status-amber border border-status-amber/20">
 								PROMOTION PENDING
 							</span>
 						{/if}
@@ -70,7 +70,7 @@
 
 					<div class="flex flex-wrap gap-1.5">
 						{#each lesson.task_shape_tags as tag, i (`${tag}:${i}`)}
-							<span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[10px] text-foreground border border-border/50">
+							<span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-foreground border border-border/50">
 								<Tag size={8} />
 								{tag}
 							</span>
@@ -93,7 +93,7 @@
 							</div>
 							<div>
 								<h3 class="text-sm font-semibold text-foreground line-clamp-1">{obs.text.slice(0, 60)}...</h3>
-								<div class="flex items-center gap-3 text-[10px] text-muted-foreground uppercase tracking-wider">
+								<div class="flex items-center gap-3 text-xs text-muted-foreground uppercase tracking-wider">
 									<span class="flex items-center gap-1">
 										<Globe size={10} />
 										{obs.project_id}
@@ -105,7 +105,7 @@
 								</div>
 							</div>
 						</div>
-						<span class="rounded bg-status-green/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-status-green border border-status-green/30 uppercase">
+						<span class="rounded bg-status-green/20 px-2 py-0.5 text-xs font-bold tracking-wider text-status-green border border-status-green/30 uppercase">
 							{obs.observation_kind}
 						</span>
 					</div>
@@ -116,7 +116,7 @@
 
 					<div class="flex flex-wrap gap-1.5">
 						{#each obs.task_shape as tag, i (`${tag}:${i}`)}
-							<span class="flex items-center gap-1 rounded-md bg-status-green/30 px-2 py-1 text-[10px] text-status-green border border-status-green/20">
+							<span class="flex items-center gap-1 rounded-md bg-status-green/30 px-2 py-1 text-xs text-status-green border border-status-green/20">
 								<Tag size={8} />
 								{tag}
 							</span>
@@ -139,7 +139,7 @@
 							</div>
 							<div>
 								<h3 class="text-sm font-semibold text-foreground line-clamp-1">{lesson.title || lesson.text.slice(0, 60)}</h3>
-								<div class="flex items-center gap-3 text-[10px] text-muted-foreground uppercase tracking-wider">
+								<div class="flex items-center gap-3 text-xs text-muted-foreground uppercase tracking-wider">
 									<span class="flex items-center gap-1">
 										<Clock size={10} />
 										Adopted {lesson.adopted_date}
@@ -147,7 +147,7 @@
 								</div>
 							</div>
 						</div>
-						<span class="rounded bg-status-blue/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-status-blue border border-status-blue/30 uppercase">
+						<span class="rounded bg-status-blue/20 px-2 py-0.5 text-xs font-bold tracking-wider text-status-blue border border-status-blue/30 uppercase">
 							{lesson.severity}
 						</span>
 					</div>
@@ -158,14 +158,14 @@
 
 					<div class="flex flex-wrap gap-1.5">
 						{#each lesson.applies_to as scope, i (`${scope}:${i}`)}
-							<span class="flex items-center gap-1 rounded-md bg-status-blue/30 px-2 py-1 text-[10px] text-status-blue border border-status-blue/20">
+							<span class="flex items-center gap-1 rounded-md bg-status-blue/30 px-2 py-1 text-xs text-status-blue border border-status-blue/20">
 								<Globe size={8} />
 								{scope === '*' ? 'Universal' : scope}
 							</span>
 						{/each}
 						{#if lesson.task_shape}
 							{#each lesson.task_shape as tag, i (`${tag}:${i}`)}
-								<span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground border border-border/50">
+								<span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground border border-border/50">
 									<Tag size={8} />
 									{tag}
 								</span>

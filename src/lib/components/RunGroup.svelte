@@ -33,7 +33,7 @@
 			<span class="font-mono text-xs font-bold tracking-wider uppercase {color}">
 				{title}
 			</span>
-			<span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+			<span class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
 				{runs.length}
 			</span>
 		</div>

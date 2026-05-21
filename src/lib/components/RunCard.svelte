@@ -31,7 +31,7 @@
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span
-				class="rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wider uppercase"
+				class="rounded px-1.5 py-0.5 text-xs font-medium tracking-wider uppercase"
 				style="background-color: {runWorkerColor}22; color: {runWorkerColor}; border: 1px solid {runWorkerColor}44"
 			>
 				{workerLabel(run.worker)}
@@ -54,7 +54,7 @@
 	</div>
 
 	<div class="mt-1 flex items-baseline gap-2 overflow-hidden">
-		<span class="shrink-0 font-mono text-[10px] font-bold text-foreground uppercase">
+		<span class="shrink-0 font-mono text-xs font-bold text-foreground uppercase">
 			{run.ticket_id || '---'}
 		</span>
 		<p class="truncate font-sans text-xs text-muted-foreground">
@@ -62,7 +62,7 @@
 		</p>
 	</div>
 
-	<div class="mt-auto flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+	<div class="mt-auto flex items-center gap-2 font-mono text-xs text-muted-foreground">
 		<span class="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
 			{truncateTraceId(run.trace_id)}
 		</span>
