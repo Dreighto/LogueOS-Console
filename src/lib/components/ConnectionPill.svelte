@@ -46,7 +46,7 @@
 	<div class="flex items-center gap-1.5">
 		<div
 			class="h-1.5 w-1.5 rounded-full {status === 'online'
-				? 'bg-status-green shadow-[0_0_4px_#22c55e]'
+				? 'bg-status-green shadow-[0_0_4px_var(--color-status-green)]'
 				: 'bg-status-red'}"
 		></div>
 		<span class="font-mono text-xs tracking-tighter uppercase {colorClass}">

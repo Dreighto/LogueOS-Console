@@ -165,7 +165,7 @@
 				<p>Nothing here — the team is running clean</p>
 			</div>
 		{:else}
-			<div class="max-h-[calc(100vh-320px)] divide-y divide-[#30363D] overflow-y-auto">
+			<div class="max-h-[calc(100vh-320px)] divide-y divide-border overflow-y-auto">
 				{#each groupedEvents() as group (group.label)}
 					<!-- Date Group Header -->
 					<div
