@@ -11,6 +11,10 @@ node_modules
 # Playwright test artifacts (build output, never committed)
 test-results/
 
+# Playwright MCP scratch dir — created in cwd whenever the playwright MCP
+# server saves output and no --output-dir is set. Per-run, never shared.
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db
