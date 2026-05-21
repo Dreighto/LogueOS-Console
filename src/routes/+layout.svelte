@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { onNavigate } from '$app/navigation';
-	import { Play, Cpu, Activity, Brain, MessageSquare, Settings, AlertOctagon } from 'lucide-svelte';
+	import { Home, Cpu, Activity, Brain, Send, Settings, AlertOctagon } from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
@@ -15,11 +15,11 @@
 	// type-checks. SvelteKit 2.59 generates these from the file-system routes
 	// and rejects bare-string route IDs at the type level.
 	const tabs = [
-		{ name: 'Runs', path: '/', icon: Play },
-		{ name: 'Workers', path: '/workers', icon: Cpu },
+		{ name: 'Home', path: '/', icon: Home },
+		{ name: 'Team', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Memory', path: '/memory', icon: Brain },
-		{ name: 'Ask', path: '/ask', icon: MessageSquare },
+		{ name: 'Jobs', path: '/ask', icon: Send },
 		{ name: 'Settings', path: '/settings', icon: Settings }
 	] as const;
 
@@ -104,10 +104,6 @@
 			     duplication. -->
 			<img src="{base}/favicon.png" alt="" width="28" height="28" class="h-7 w-7 shrink-0" />
 			<h1 class="font-sans text-lg font-bold tracking-tight text-white">LogueOS Console</h1>
-			<span
-				class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-				>v1a</span
-			>
 		</div>
 
 		{#if killSwitch.active}

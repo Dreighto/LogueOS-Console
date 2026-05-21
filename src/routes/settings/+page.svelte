@@ -153,7 +153,7 @@
 
 		{#if services.length === 0}
 			<div
-				class="rounded-md border border-dashed border-border bg-surface/30 p-3 font-mono text-[11px] text-dim"
+				class="rounded-md border border-dashed border-border bg-surface/30 p-3 font-mono text-[11px] text-muted-foreground"
 			>
 				No services reported. {#if servicesError}({servicesError}){/if}
 			</div>
@@ -259,7 +259,7 @@
 	     running when triaging Console issues. Values are inlined at build
 	     time via vite.config.ts `define`; zero runtime cost. -->
 	<footer
-		class="text-dim mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
+		class="text-muted-foreground mt-6 border-t border-border pt-3 text-center font-mono text-[10px]"
 		aria-label="Build identity"
 	>
 		{__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
@@ -326,7 +326,7 @@
 						? 'e.g. live demo at 3pm, pausing non-essential work'
 						: 'e.g. demo done, resuming normal ops'}
 					disabled={submitting}
-					class="placeholder:text-dim rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:border-cta focus:ring-1 focus:ring-cta focus:outline-none"
+					class="placeholder:text-muted-foreground rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:border-cta focus:ring-1 focus:ring-cta focus:outline-none"
 				/>
 			</label>
 

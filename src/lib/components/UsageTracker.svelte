@@ -17,7 +17,7 @@
 	<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-dim flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
 				<Coins size={10} class="text-orange-400" />
 				Est. 24h Burn
@@ -28,7 +28,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-dim flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
 				<Zap size={10} class="text-blue-500" />
 				Tokens
@@ -39,7 +39,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-dim flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
 				<Hash size={10} class="text-emerald-400" />
 				Dispatches
@@ -50,7 +50,7 @@
 		</div>
 		<div class="flex flex-col gap-1 rounded-lg border border-border bg-surface/30 p-3">
 			<div
-				class="text-dim flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
+				class="text-muted-foreground flex items-center gap-1.5 text-[9px] font-bold tracking-widest uppercase"
 			>
 				<BarChart3 size={10} class="text-purple-400" />
 				Avg/Ticket
@@ -79,7 +79,7 @@
 		</div>
 	{/if}
 	<div class="mt-1 text-right">
-		<span class="text-dim font-mono text-[9px] tracking-wider">View details →</span>
+		<span class="text-muted-foreground font-mono text-[9px] tracking-wider">View details →</span>
 	</div>
 </a>
 
