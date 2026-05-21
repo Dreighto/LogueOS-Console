@@ -5,7 +5,6 @@
 	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
-	import { fade, scale } from 'svelte/transition';
 
 	let { data }: { data: PageData } = $props();
 
@@ -133,7 +132,7 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4" in:fade={{ duration: 300 }}>
+<div class="flex flex-col gap-4">
 
 	<h1 class="font-sans text-xl font-bold tracking-tight">Settings</h1>
 
