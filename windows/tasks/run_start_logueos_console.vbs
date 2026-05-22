@@ -1,5 +1,5 @@
 ' run_start_logueos_console.vbs -- canon Window-subsystem wrapper for the
-' MiruRestartLogueOSConsole scheduled task.
+' LogueOS-StartConsole scheduled task.
 '
 ' Why this file exists:
 '   When Task Scheduler launches powershell.exe directly with -WindowStyle
