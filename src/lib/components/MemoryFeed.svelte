@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ProvisionalLesson, AdoptedLesson, Observation } from '$lib/types/memory';
-	import { Brain, Tag, Clock, Globe, ShieldCheck, Microscope } from 'lucide-svelte';
+	import { Brain, Tag, Clock, Globe, ShieldCheck, Microscope, Check, Edit, X } from 'lucide-svelte';
 
 	let { provisional = [], lessons = [], raw = [] }: { provisional: ProvisionalLesson[], lessons: AdoptedLesson[], raw: Observation[] } = $props();
 
@@ -75,6 +75,22 @@
 								{tag}
 							</span>
 						{/each}
+					</div>
+
+					<!-- Triage Controls -->
+					<div class="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-3">
+						<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
+							<Edit size={10} />
+							Edit
+						</button>
+						<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-status-red transition-colors hover:bg-status-red/10">
+							<X size={10} />
+							Reject
+						</button>
+						<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-status-green transition-colors hover:bg-status-green/10">
+							<Check size={10} />
+							Promote
+						</button>
 					</div>
 				</div>
 			{:else}

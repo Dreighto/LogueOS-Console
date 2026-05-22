@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { onNavigate } from '$app/navigation';
-	import { Home, Cpu, Activity, Brain, Send, Settings, DollarSign, AlertOctagon } from 'lucide-svelte';
+	import { Home, Cpu, Activity, Brain, Send, Settings, DollarSign, AlertOctagon, Pause, RefreshCw, Power } from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
@@ -142,6 +142,25 @@
 		</div>
 	</header>
 
+	<!-- Global Command Bar -->
+	<div class="z-20 flex items-center gap-2 border-b border-border bg-surface/50 px-4 py-1.5 backdrop-blur-sm">
+		<span class="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">System</span>
+		<div class="h-3 w-px bg-border"></div>
+		<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground transition-colors hover:bg-white/5">
+			<Pause size={10} />
+			Pause
+		</button>
+		<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground transition-colors hover:bg-white/5">
+			<RefreshCw size={10} />
+			Sync
+		</button>
+		<div class="flex-1"></div>
+		<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-status-amber transition-colors hover:bg-status-amber/10">
+			<Power size={10} />
+			Restart
+		</button>
+	</div>
+
 	<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav
 	     is part of the flex flow, ensuring it sits at the true bottom.
@@ -203,7 +222,7 @@
 		/* Match the locked design token (bg). The home indicator on iPhone is
 		   translucent and adapts tint to background luminance, so this dark color
 		   gives the auto-light home-bar treatment. */
-		background-color: #0d1117;
+		background-color: #050505;
 		height: 100%;
 		overflow: hidden;
 	}
@@ -215,10 +234,10 @@
 		background: transparent;
 	}
 	.custom-scrollbar::-webkit-scrollbar-thumb {
-		background: #30363d;
+		background: #27272a;
 		border-radius: 10px;
 	}
 	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-		background: #484f58;
+		background: #3f3f46;
 	}
 </style>

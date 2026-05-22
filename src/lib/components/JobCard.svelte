@@ -3,7 +3,7 @@
 	import { formatRelativeTime } from '$lib/utils/format';
 	import { workerShortLabel, workerColor } from '$lib/config/workers';
 	import { resolve } from '$app/paths';
-	import { Square } from 'lucide-svelte';
+	import { Square, Terminal } from 'lucide-svelte';
 	import Card from '$lib/components/Card.svelte';
 
 	interface Props {
@@ -79,6 +79,13 @@
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			<span class="text-xs text-muted-foreground">{formatRelativeTime(job.since || '')}</span>
+			<button
+				type="button"
+				class="active-trigger flex items-center gap-1 rounded border border-border bg-muted px-2 py-1 text-xs font-bold uppercase text-muted-foreground transition-colors hover:border-status-blue/50 hover:text-status-blue"
+			>
+				<Terminal size={10} />
+				Logs
+			</button>
 			<button
 				type="button"
 				disabled={!killable || submitting}

@@ -71,11 +71,12 @@ function rosterFromJobs(jobs: ActiveJob[]): WorkerState[] {
 
 export const load: PageServerLoad = async ({ fetch }) => {
 	try {
-		const [runsResp, workersResp, usageResp, killResp] = await Promise.all([
+		const [runsResp, workersResp, usageResp, killResp, completionsData] = await Promise.all([
 			fetch(resolve('/api/runs')),
 			fetch(resolve('/api/workers')),
 			fetch(resolve('/api/usage')),
-			fetch(resolve('/api/kill-switch'))
+			fetch(resolve('/api/kill-switch')),
+			getTodayShipments()
 		]);
 
 		const runsData = runsResp.ok ? await runsResp.json() : { runs: [] };
@@ -108,7 +109,7 @@ export const load: PageServerLoad = async ({ fetch }) => {
 				recentDispatches: Number(usageData.metrics?.recentDispatches ?? 0)
 			},
 			// Today's shipments = PRs merged in the local day, across repos (LOS-127).
-			completions: await getTodayShipments()
+			completions: completionsData
 		};
 
 		return { status, ...clientSafeConfig };
