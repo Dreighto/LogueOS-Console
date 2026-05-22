@@ -11,6 +11,7 @@ export interface ProvisionalLesson {
 	expires_at: string;
 	synthesized_by: string;
 	project_id: string;
+	plain_english_summary?: string;
 }
 
 export interface AdoptedLesson {
@@ -21,6 +22,7 @@ export interface AdoptedLesson {
 	severity: LessonSeverity;
 	applies_to: string[]; // project_ids or ['*']
 	task_shape?: string[];
+	plain_english_summary?: string;
 }
 
 export interface Observation {
@@ -32,4 +34,5 @@ export interface Observation {
 	task_shape: string[];
 	observation_kind: string;
 	text: string;
+	plain_english_summary?: string;
 }

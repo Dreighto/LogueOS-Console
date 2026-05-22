@@ -32,7 +32,8 @@
 	// invalidation, causing the whole page to flicker. With $state we
 	// fetch /api/status and assign in-place; Svelte 5 diffs field-by-field.
 	let s = $state(data.status);
-	import { fade, scale } from 'svelte/transition';
+	import { fade, scale, slide } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	// Keep in sync if SvelteKit navigates and re-runs the server load.
 	$effect(() => {
@@ -173,10 +174,11 @@
 		</div>
 		<div class="flex flex-col gap-1">
 			{#each attentionItems as item, i (item.timestamp + i)}
-				<a
-					href={resolve('/activity')}
-					class="group flex items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-border"
-				>
+				<div animate:flip={{ duration: 300 }} in:slide={{ duration: 300 }}>
+					<a
+						href={resolve('/activity')}
+						class="group active-trigger flex w-full items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-border hover:bg-surface/50"
+					>
 					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
 						<AlertTriangle size={14} class="shrink-0 text-status-red" />
 					{:else}
@@ -184,14 +186,14 @@
 					{/if}
 					<div class="flex min-w-0 flex-1 flex-col">
 						<div class="flex items-center gap-2">
-							<span class="text-xs font-bold text-foreground">{item.ticket_id || 'unknown'}</span
-							>
+							<span class="text-xs font-bold text-foreground">{item.ticket_id || 'unknown'}</span>
 							<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
 						</div>
 						<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
 					</div>
-					<ChevronRight size={12} class="text-muted-foreground group-hover:text-muted-foreground" />
-				</a>
+						<ChevronRight size={12} class="text-muted-foreground group-hover:text-muted-foreground" />
+					</a>
+				</div>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
 					<span class="text-xs text-muted-foreground uppercase italic">No stuck work detected</span>
@@ -209,10 +211,11 @@
 			</div>
 			<div class="flex flex-col gap-1">
 				{#each s.workers.items as w (w.id)}
-					<a
-						href={resolve('/workers')}
-						class="group flex flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-status-blue/40"
-					>
+					<div animate:flip={{ duration: 300 }} in:slide={{ duration: 300 }}>
+						<a
+							href={resolve('/workers')}
+							class="group active-trigger flex w-full flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-status-blue/40 hover:bg-surface/50"
+						>
 						<div class="flex items-center justify-between">
 							<span
 								class="text-xs font-bold tracking-tight uppercase {w.state === 'busy'
@@ -241,7 +244,8 @@
 								{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
 							</div>
 						{/if}
-					</a>
+						</a>
+					</div>
 				{:else}
 					<div class="rounded-sm border border-dashed border-border p-2 text-center">
 						<span class="text-xs text-muted-foreground uppercase italic">No workers</span>
@@ -301,21 +305,23 @@
 		</div>
 		<div class="flex flex-col gap-1">
 			{#each s.completions.items as item, i (item.timestamp + i)}
-				<button
-					type="button"
-					onclick={() => openShipment(item)}
-					class="flex items-center gap-3 rounded-sm border border-border bg-surface p-2 text-left transition-colors hover:border-status-green/40 active:scale-[0.99]"
-				>
-					<CheckCircle2 size={14} class="shrink-0 text-status-green" />
-					<div class="flex min-w-0 flex-col">
-						<div class="flex items-center gap-2">
-							<span class="text-xs font-bold text-status-green">{item.ticket_id || 'shipped'}</span>
-							<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
+				<div animate:flip={{ duration: 300 }} in:slide={{ duration: 300 }}>
+					<button
+						type="button"
+						onclick={() => openShipment(item)}
+						class="active-trigger flex w-full items-center gap-3 rounded-sm border border-border bg-surface p-2 text-left transition-colors hover:border-status-green/40 hover:bg-surface/50"
+					>
+						<CheckCircle2 size={14} class="shrink-0 text-status-green" />
+						<div class="flex min-w-0 flex-col">
+							<div class="flex items-center gap-2">
+								<span class="text-xs font-bold text-status-green">{item.ticket_id || 'shipped'}</span>
+								<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
+							</div>
+							<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
 						</div>
-						<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
-					</div>
-					<ChevronRight size={12} class="ml-auto shrink-0 text-muted-foreground" />
-				</button>
+						<ChevronRight size={12} class="ml-auto shrink-0 text-muted-foreground" />
+					</button>
+				</div>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
 					<span class="text-xs text-muted-foreground uppercase italic">Nothing shipped yet today</span>
@@ -351,7 +357,12 @@
 			</div>
 
 			{#if shipmentLoading}
-				<p class="text-sm text-muted-foreground">Loading the explanation...</p>
+				<div class="flex flex-col gap-1.5 animate-pulse">
+					<div class="h-3 w-32 rounded bg-muted"></div>
+					<div class="h-4 w-full rounded bg-surface"></div>
+					<div class="h-4 w-5/6 rounded bg-surface"></div>
+					<div class="h-4 w-4/6 rounded bg-surface"></div>
+				</div>
 			{:else if shipmentError}
 				<p class="text-sm text-status-amber">{shipmentError}</p>
 			{:else if shipmentDetail}

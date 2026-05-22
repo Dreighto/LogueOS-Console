@@ -8,6 +8,8 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import LivePill from '$lib/components/LivePill.svelte';
 	import JobCard from '$lib/components/JobCard.svelte';
+	import { slide } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	interface Props {
 		data: PageData;
@@ -93,7 +95,9 @@
 			</div>
 
 			{#each jobsByLane[lane] as job (job.trace_id ?? job.slot)}
-				<JobCard {job} />
+				<div animate:flip={{ duration: 300 }} in:slide={{ duration: 300 }}>
+					<JobCard {job} />
+				</div>
 			{:else}
 				<div
 					class="rounded-sm border border-dashed border-border px-3 py-4 text-center font-mono text-xs text-muted-foreground"

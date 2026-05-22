@@ -14,6 +14,7 @@ type ProvisionalRow = {
 	expires_at: string;
 	synthesized_by: string;
 	project_id: string;
+	plain_english_summary?: string;
 };
 
 type LessonRow = {
@@ -22,6 +23,7 @@ type LessonRow = {
 	created_at: string;
 	project_id?: string;
 	task_shape?: string;
+	plain_english_summary?: string;
 };
 
 type ObservationRow = {
@@ -33,6 +35,7 @@ type ObservationRow = {
 	text: string;
 	task_shape?: string;
 	timestamp: string;
+	plain_english_summary?: string;
 };
 
 export async function getMemoryData() {
@@ -62,6 +65,7 @@ export async function getMemoryData() {
 			return {
 				...row,
 				task_shape_tags,
+				plain_english_summary: row.plain_english_summary,
 				proposed_promotion: row.proposed_promotion === 1
 			} as ProvisionalLesson;
 		});
@@ -85,7 +89,8 @@ export async function getMemoryData() {
 				adopted_date: row.created_at,
 				severity: 'hard-rule',
 				applies_to: row.project_id ? [row.project_id] : ['*'],
-				task_shape
+				task_shape,
+				plain_english_summary: row.plain_english_summary
 			} as AdoptedLesson;
 		});
 
@@ -100,7 +105,8 @@ export async function getMemoryData() {
 			observation_kind: row.observation_kind,
 			text: row.text,
 			ticket_id: row.ticket_id,
-			task_shape: row.task_shape ? (() => { try { return JSON.parse(row.task_shape!); } catch { return []; } })() : []
+			task_shape: row.task_shape ? (() => { try { return JSON.parse(row.task_shape!); } catch { return []; } })() : [],
+			plain_english_summary: row.plain_english_summary
 		} as Observation));
 	} finally {
 		db.close();
