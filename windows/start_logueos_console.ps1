@@ -176,7 +176,7 @@ exit $lastExit
 #
 #   powershell -ExecutionPolicy Bypass -File windows\install_logueos_console_task.ps1
 #
-# That script registers MiruRestartLogueOSConsole with a task action of:
+# That script registers LogueOS-StartConsole with a task action of:
 #   wscript.exe "<repo>\windows\tasks\run_start_logueos_console.vbs"
 # wscript is Window-subsystem (no console allocation) and the VBS launches
 # powershell.exe with SW_HIDE at process-creation time, so the console never
@@ -184,11 +184,10 @@ exit $lastExit
 # from a non-console caller. See windows\tasks\run_start_logueos_console.vbs.
 #
 # Verify it starts:
-#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
+#   Start-ScheduledTask -TaskName "LogueOS-StartConsole"
 #   Start-Sleep 5
 #   (Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction SilentlyContinue).OwningProcess
 #
-# To restart later (from any PowerShell, no elevation needed since LogonType=S4U):
-#   Stop-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
-#   Start-ScheduledTask -TaskPath "\Miru\" -TaskName "MiruRestartLogueOSConsole"
+# To restart later (kill-then-start, no elevation needed):
+#   Start-ScheduledTask -TaskName "LogueOS-RestartConsole"
 # ---------------------------------------------------------------------------

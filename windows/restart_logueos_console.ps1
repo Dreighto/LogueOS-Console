@@ -32,8 +32,8 @@ Set-Content -Path $logPath -Value "" -Encoding UTF8
 
 $taskName = "LogueOS-RestartConsole"
 # Path-qualified: a bare -TaskName is ambiguous if a stray same-named task
-# exists at another TaskPath. The installer registers this task under \Miru\.
-$taskPath = "\Miru\"
+# exists at another TaskPath. The installer registers this task at the root path.
+$taskPath = "\"
 
 Write-LogLine "target_surface=LOGUEOS_CONSOLE_18767"
 Write-LogLine "action=trigger_scheduled_task"
