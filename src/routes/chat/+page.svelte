@@ -18,6 +18,7 @@
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Markdown from '$lib/components/Markdown.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -211,14 +212,14 @@
 
 					<!-- Speech Bubble -->
 					<div
-						class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed whitespace-pre-wrap select-text
-							{m.sender === 'operator' 
-								? 'bg-cta/15 border border-cta/30 text-white rounded-tr-none' 
-								: m.sender === 'system' 
-									? 'bg-surface/50 border border-border/50 text-muted-foreground w-full max-w-none text-center font-mono text-xs py-1.5' 
+						class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed select-text
+							{m.sender === 'operator'
+								? 'bg-cta/15 border border-cta/30 text-white rounded-tr-none'
+								: m.sender === 'system'
+									? 'bg-surface/50 border border-border/50 text-muted-foreground w-full max-w-none text-center font-mono text-xs py-1.5'
 									: 'bg-surface border border-border text-foreground rounded-tl-none'}"
 					>
-						{m.message}
+						<Markdown content={m.message} />
 
 						<!-- Render interactive action cards if present -->
 						{#if m.interactive_action}
