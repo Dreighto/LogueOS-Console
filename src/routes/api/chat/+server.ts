@@ -175,7 +175,27 @@ emit ONE terminal activity row so the chat tab knows you're done:
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "<brief reason>"
 
 Without this terminal emit the streaming bubble never closes. Treat it as
-non-optional. The script is fast (~30ms).`;
+non-optional. The script is fast (~30ms).
+
+NARRATION STYLE — your stdout streams live to the operator's chat as a
+"streaming" bubble. NEVER write pause-framed narration like:
+
+  ✗ "I'll pause here until the build finishes"
+  ✗ "Waiting for the test suite to complete"
+  ✗ "Let me wait for X..."
+  ✗ "I'll hold here while..."
+
+That phrasing makes the operator think you've stalled. Instead, narrate
+as ACTIVE progress and emit an activity row for any long subprocess:
+
+  ✓ "Running the build now."
+    → python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action ran --target "npm run build"
+  ✓ "Type-checking the diff."
+    → python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action ran --target "svelte-check"
+
+Keep stdout narration short and present-tense. The chat already shows
+the activity ticker + spinner — you don't need to announce that you're
+waiting.`;
 
 			try {
 				const response = await fetchWithTimeout(

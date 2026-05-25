@@ -123,7 +123,9 @@ The --trace_id flag is REQUIRED. After your final emit_chat_message, ALWAYS emit
 
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action completed
   # OR if the task ended badly:
-  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "<brief reason>"`;
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "<brief reason>"
+
+NARRATION STYLE — your stdout streams live to the operator's chat as a "streaming" bubble. NEVER write pause-framed narration like "I'll pause here until X finishes", "waiting for Y", "let me wait for...". That phrasing makes the operator think you've stalled. Instead, narrate as ACTIVE present-tense progress ("Running the build now.", "Type-checking the diff.") and emit an activity row for any long subprocess: \`python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action ran --target "<command>"\`. The chat already shows the activity ticker + spinner — don't announce that you're waiting.`;
 
 	switch (action) {
 		case 'critique':
