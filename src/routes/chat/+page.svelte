@@ -18,7 +18,10 @@
 		BookOpen,
 		Edit3,
 		CheckCircle2,
-		Plus
+		Plus,
+		Paperclip,
+		Sparkles,
+		RefreshCw
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import { formatShortTime } from '$lib/utils/format';
@@ -37,6 +40,35 @@
 	let agentLock = $state<'auto' | 'claude-code' | 'agy'>('auto');
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
+	let textareaEl = $state<HTMLTextAreaElement | null>(null);
+	let attachInputEl = $state<HTMLInputElement | null>(null);
+	let examplesOpen = $state(false);
+
+	// Starter prompt library — small, hand-curated. Kept inline so opening
+	// the drawer is zero-fetch. Categories help orient as the list grows.
+	const STARTER_PROMPTS: { category: string; label: string; prompt: string }[] = [
+		{ category: 'Brainstorm', label: 'Suggest a feature', prompt: '@agy suggest a new feature for the Console that would speed up my workflow. Be specific and pitch the tradeoffs.' },
+		{ category: 'Brainstorm', label: 'Refactor ideas', prompt: '@agy look at the chat tab and suggest 3 refactor ideas, ordered by impact-per-effort.' },
+		{ category: 'Review', label: 'Audit recent diff', prompt: '@cc audit the last 5 commits on main for any regressions or rough edges.' },
+		{ category: 'Review', label: 'Check theme tokens', prompt: '@agy check that all color usage in the Console uses theme tokens (no hex literals).' },
+		{ category: 'Verify', label: 'Run the test suite', prompt: '@cc run the unit test suite and report any failures.' },
+		{ category: 'Verify', label: 'Smoke test the build', prompt: '@cc verify the latest build runs and key routes (/console, /chat, /activity) load.' },
+		{ category: 'Investigate', label: 'Why is X slow?', prompt: '@cc investigate why dispatch responses are slow — trace the wait between operator send and final reply.' },
+		{ category: 'Investigate', label: 'Triage Linear', prompt: '@cc do a 3-day Linear ticket sweep and report what should move state.' }
+	];
+
+	// Auto-grow the textarea up to ~6 visible lines. CSS-only (resize: none)
+	// won't grow at all; we set the height directly from scrollHeight so the
+	// composer expands as you type. Done in an effect — no per-keystroke
+	// listener, no layout thrash.
+	$effect(() => {
+		// Re-runs whenever textDraft changes.
+		const _ = textDraft;
+		if (!textareaEl) return;
+		textareaEl.style.height = 'auto';
+		const next = Math.min(textareaEl.scrollHeight, 168); // ~6 lines at text-base
+		textareaEl.style.height = `${next}px`;
+	});
 
 	// Worker activity (per-trace): live progress from emit_chat_activity.py.
 	// Keyed by trace_id; arrays are oldest-first per trace.
@@ -451,6 +483,106 @@
 		return m.sender === 'system' && m.message.startsWith('--- NEW CONVERSATION ---');
 	}
 
+	// ──────────────────────────────────────────────────────────────────────
+	// Per-message workflow actions: critique / build / verify / copy / retry
+	// ──────────────────────────────────────────────────────────────────────
+	// Each worker reply gets a small footer row of action buttons. These let
+	// the operator chain agents (AGY brainstorm → CC critique → AGY build →
+	// CC verify) without leaving the chat, just by tapping a button on the
+	// reply they want to act on.
+	let workflowSubmitting = $state<string | null>(null); // `${msgId}:${action}`
+
+	function isWorkerReply(m: ChatMessage): boolean {
+		// 'operator' messages we sent, 'system' marker rows — neither qualify
+		// for workflow actions. Anything else (cc, agy, future workers) is a
+		// reply we can act on.
+		return m.sender !== 'operator' && m.sender !== 'system';
+	}
+
+	async function copyToClipboard(text: string): Promise<boolean> {
+		try {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(text);
+				return true;
+			}
+		} catch {
+			/* fall through to manual */
+		}
+		// Fallback: hidden textarea + execCommand. Older iOS Safari versions
+		// silently fail navigator.clipboard outside user-gesture contexts.
+		try {
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.style.position = 'fixed';
+			ta.style.left = '-9999px';
+			document.body.appendChild(ta);
+			ta.select();
+			const ok = document.execCommand('copy');
+			document.body.removeChild(ta);
+			return ok;
+		} catch {
+			return false;
+		}
+	}
+
+	async function handleWorkflowAction(
+		messageId: number,
+		action: 'critique' | 'build' | 'verify' | 'retry' | 'copy',
+		opts: { agent?: 'claude-code' | 'agy'; messageText?: string } = {}
+	) {
+		const key = `${messageId}:${action}`;
+		if (workflowSubmitting !== null) return;
+		workflowSubmitting = key;
+
+		try {
+			if (action === 'copy') {
+				const ok = await copyToClipboard(opts.messageText || '');
+				toasts.add(ok ? 'Copied to clipboard.' : 'Copy failed.', ok ? 'success' : 'error');
+				return;
+			}
+
+			// For dispatching actions, pick the target agent. Critique and
+			// retry default to "the other one" (a CC reply → CC critique would
+			// be circular). Build defaults to AGY (frontend leaning). Verify
+			// defaults to CC. Operator can override via the agent pill if they
+			// want differently — fall back to agentLock when explicit.
+			const sourceMsg = messages.find((mm) => mm.id === messageId);
+			const sourceSender = sourceMsg?.sender;
+			let agent: 'claude-code' | 'agy' = 'claude-code';
+			if (opts.agent) {
+				agent = opts.agent;
+			} else if (action === 'critique' || action === 'retry') {
+				agent = sourceSender === 'cc' ? 'agy' : 'claude-code';
+			} else if (action === 'build') {
+				agent = 'agy';
+			} else if (action === 'verify') {
+				agent = 'claude-code';
+			}
+
+			const resp = await fetch(resolve('/api/chat/workflow'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action,
+					source_message_id: messageId,
+					target_agent: agent,
+					target_repo: 'LogueOS-Console'
+				})
+			});
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${resp.status}`);
+			}
+			toasts.add(`${action} dispatched to ${agent}.`, 'success');
+			void pollMessages();
+		} catch (e: unknown) {
+			const msg = e instanceof Error ? e.message : 'workflow error';
+			toasts.add(msg, 'error');
+		} finally {
+			workflowSubmitting = null;
+		}
+	}
+
 	// Inline-streaming helpers. For each system "Agent dispatched" bubble with
 	// an active trace, we render a SYNTHETIC worker bubble that grows with
 	// the SSE stream while the worker is in flight. When the real worker
@@ -541,8 +673,8 @@
 						<div class="h-px flex-1 bg-border"></div>
 					</div>
 				{:else}
-				<!-- Message Container -->
-				<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'} animate-fade-in">
+				<!-- Message Container — left-border thread-grouped when trace_id present -->
+				<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'} {m.trace_id ? 'thread-grouped' : ''} animate-fade-in">
 					
 					<!-- Metadata strip -->
 					<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase text-muted-foreground">
@@ -629,6 +761,86 @@
 							</div>
 						{/if}
 					</div>
+
+					<!-- Per-message workflow actions on WORKER replies only.
+					     Five icons: Critique, Build, Verify, Copy, Retry. All
+					     compact + tooltip-labeled to stay out of the way on
+					     phone. Pure render — no extra fetches. -->
+					{#if isWorkerReply(m)}
+						<div class="flex items-center gap-1 mt-0.5 text-muted-foreground">
+							<button
+								type="button"
+								onclick={() => handleWorkflowAction(m.id, 'critique')}
+								disabled={workflowSubmitting !== null}
+								title="Send to the other agent for critique"
+								aria-label="Critique"
+								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+							>
+								{#if workflowSubmitting === `${m.id}:critique`}
+									<Loader2 size={10} class="animate-spin" />
+								{:else}
+									<HelpCircle size={10} />
+								{/if}
+								<span>Critique</span>
+							</button>
+							<button
+								type="button"
+								onclick={() => handleWorkflowAction(m.id, 'build')}
+								disabled={workflowSubmitting !== null}
+								title="Dispatch AGY to implement this proposal"
+								aria-label="Build"
+								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+							>
+								{#if workflowSubmitting === `${m.id}:build`}
+									<Loader2 size={10} class="animate-spin" />
+								{:else}
+									<Terminal size={10} />
+								{/if}
+								<span>Build</span>
+							</button>
+							<button
+								type="button"
+								onclick={() => handleWorkflowAction(m.id, 'verify')}
+								disabled={workflowSubmitting !== null}
+								title="Dispatch CC to verify the implementation/claim"
+								aria-label="Verify"
+								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+							>
+								{#if workflowSubmitting === `${m.id}:verify`}
+									<Loader2 size={10} class="animate-spin" />
+								{:else}
+									<CheckCircle2 size={10} />
+								{/if}
+								<span>Verify</span>
+							</button>
+							<button
+								type="button"
+								onclick={() => handleWorkflowAction(m.id, 'copy', { messageText: m.message })}
+								disabled={workflowSubmitting !== null}
+								title="Copy reply to clipboard"
+								aria-label="Copy"
+								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+							>
+								<BookOpen size={10} />
+								<span>Copy</span>
+							</button>
+							<button
+								type="button"
+								onclick={() => handleWorkflowAction(m.id, 'retry')}
+								disabled={workflowSubmitting !== null}
+								title="Retry the original operator request with the other agent"
+								aria-label="Retry"
+								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+							>
+								{#if workflowSubmitting === `${m.id}:retry`}
+									<Loader2 size={10} class="animate-spin" />
+								{:else}
+									<RefreshCw size={10} />
+								{/if}
+								<span>Retry</span>
+							</button>
+						</div>
+					{/if}
 
 						<!-- Activity ticker: for any message tied to a worker trace, render the
 						     stream of progress events emitted via tools/emit_chat_activity.py.
@@ -726,38 +938,48 @@
 			{/if}
 		</div>
 
-	<!-- Typing Input Area -->
-	<div class="shrink-0 border-t border-border bg-background/95 p-3 flex flex-col gap-2">
-		
-		<!-- Quick Suggestion Pill strip -->
-		<div class="flex items-center gap-1.5 overflow-x-auto py-0.5 select-none custom-scrollbar">
-			<button
-				type="button"
-				onclick={() => { textDraft = '@agy audit our code config'; }}
-				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
-			>
-				@agy audit
-			</button>
-			<button
-				type="button"
-				onclick={() => { textDraft = '@cc run vitest'; }}
-				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
-			>
-				@cc run vitest
-			</button>
-			<button
-				type="button"
-				onclick={() => { textDraft = '@agy check theme vars'; }}
-				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
-			>
-				@agy theme
-			</button>
-		</div>
+	<!-- Composer: single-row pill cluster + auto-grow textarea with inline
+	     attach + send icons + examples drawer. Replaces the old 3-row stack
+	     (suggestions + Send-to row + input) for ~30% less vertical space
+	     on phone. -->
+	<div class="shrink-0 border-t border-border bg-background/95 p-2 flex flex-col gap-1.5">
 
-		<!-- Agent switcher: explicit override of the @-mention heuristic.
-		     'Auto' = use heuristic; the others lock dispatches to that worker. -->
-		<div class="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground select-none">
-			<span class="shrink-0">Send to:</span>
+		<!-- Examples drawer (collapsed by default; only rendered when open) -->
+		{#if examplesOpen}
+			<div class="flex flex-col gap-1 px-1 pb-1 animate-fade-in">
+				{#each Array.from(new Set(STARTER_PROMPTS.map((p) => p.category))) as cat (cat)}
+					<div class="flex items-center gap-1.5 mt-0.5">
+						<span class="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 w-20">{cat}</span>
+						<div class="flex flex-wrap gap-1">
+							{#each STARTER_PROMPTS.filter((p) => p.category === cat) as ex (ex.label)}
+								<button
+									type="button"
+									onclick={() => { textDraft = ex.prompt; examplesOpen = false; textareaEl?.focus(); }}
+									class="px-2 py-0.5 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors active:scale-95"
+								>
+									{ex.label}
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		<!-- Control row: examples button + agent switcher pills, single line -->
+		<div class="flex items-center gap-2 select-none text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+			<button
+				type="button"
+				onclick={() => (examplesOpen = !examplesOpen)}
+				class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30"
+				title="Open examples / starter prompts"
+				aria-label="Examples"
+			>
+				<Sparkles size={10} />
+				<span>Examples</span>
+			</button>
+			<span class="text-muted-foreground/50">·</span>
+			<span class="shrink-0">Send to</span>
 			<div class="flex items-center gap-1">
 				<button
 					type="button"
@@ -795,30 +1017,57 @@
 			</div>
 		</div>
 
-		<!-- Input field -->
-		<div class="relative flex items-center">
+		<!-- Input field: attach + textarea + send in one flex row -->
+		<div class="flex items-end gap-1.5">
+			<input
+				type="file"
+				accept="image/*"
+				multiple
+				bind:this={attachInputEl}
+				onchange={(e) => {
+					const input = e.target as HTMLInputElement;
+					const files = Array.from(input.files || []).filter((f) => f.type.startsWith('image/'));
+					if (files.length > 0) void handleImageFiles(files);
+					input.value = '';
+				}}
+				class="hidden"
+			/>
+			<button
+				type="button"
+				onclick={() => attachInputEl?.click()}
+				disabled={uploading}
+				aria-label="Attach image"
+				title="Attach image (or paste / drop one)"
+				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors active:scale-90 hover:text-foreground hover:border-foreground/30 disabled:opacity-40 disabled:pointer-events-none"
+			>
+				{#if uploading}
+					<Loader2 size={16} class="animate-spin" />
+				{:else}
+					<Paperclip size={16} />
+				{/if}
+			</button>
 			<textarea
 				bind:value={textDraft}
+				bind:this={textareaEl}
 				onkeypress={handleKeyPress}
 				onpaste={handlePaste}
 				ondrop={handleDrop}
 				ondragover={(e) => e.preventDefault()}
 				rows="1"
-				placeholder={uploading ? 'Uploading image...' : "Message your agents (paste an image or '@agy run a check')..."}
+				placeholder={uploading ? 'Uploading image...' : "Message your agents..."}
 				autocomplete="off"
 				autocorrect="off"
 				autocapitalize="none"
 				spellcheck="false"
-				class="w-full rounded-md border border-border bg-surface px-4 py-3 pr-12 font-sans text-base text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none max-h-32"
-				style="min-height: 44px;"
+				class="flex-1 rounded-md border border-border bg-surface px-3 py-2 font-sans text-base text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none overflow-y-auto custom-scrollbar"
+				style="min-height: 40px; max-height: 168px;"
 			></textarea>
-
 			<button
 				type="button"
 				onclick={handleSendMessage}
 				disabled={!textDraft.trim() || sending}
 				aria-label="Send message"
-				class="absolute right-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-md border border-cta/20 bg-cta/10 text-cta transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:pointer-events-none hover:bg-cta/20"
+				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border border-cta/30 bg-cta/15 text-cta transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:pointer-events-none hover:bg-cta/25"
 			>
 				{#if sending}
 					<Loader2 size={16} class="animate-spin" />
@@ -848,6 +1097,17 @@
 
 	.animate-fade-in {
 		animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	/* Visual thread grouping: subtle left-border on any message that's part
+	   of a dispatch thread (has a trace_id). Connects the system "dispatched"
+	   row, the activity ticker, the streaming bubble, and the final worker
+	   reply into one visually-connected group without nesting them in a DOM
+	   wrapper. CSS-only — zero JS cost. */
+	.thread-grouped {
+		border-left: 2px solid rgb(255 255 255 / 0.06);
+		padding-left: 0.5rem;
+		margin-left: 0.25rem;
 	}
 
 	@keyframes fadeIn {
