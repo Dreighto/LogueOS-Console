@@ -14,7 +14,10 @@
 		Loader2,
 		MessageSquare,
 		Play,
-		HelpCircle
+		HelpCircle,
+		BookOpen,
+		Edit3,
+		CheckCircle2
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -29,7 +32,40 @@
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
 
+	// Worker activity (per-trace): live progress from emit_chat_activity.py.
+	// Keyed by trace_id; arrays are oldest-first per trace.
+	type Activity = {
+		id: number;
+		trace_id: string;
+		action: string;
+		target: string | null;
+		timestamp: string;
+	};
+	let activityByTrace = $state<Record<string, Activity[]>>({});
+
 	const POLL_INTERVAL_MS = 3000;
+	// Faster cadence while at least one trace is in flight (worker is doing
+	// something we want to render quickly). Falls back to baseline when idle.
+	const ACTIVITY_POLL_FAST_MS = 1000;
+	const ACTIVITY_POLL_IDLE_MS = 3000;
+
+	// A trace is "active" if it has been mentioned by a system message but
+	// hasn't emitted a terminal action yet (completed/failed). The UI uses
+	// this to decide whether to keep polling activity for it.
+	function isTraceActive(traceId: string): boolean {
+		const rows = activityByTrace[traceId] || [];
+		if (rows.length === 0) return true; // mentioned but no activity yet
+		const last = rows[rows.length - 1]?.action || '';
+		return !(last === 'completed' || last === 'failed');
+	}
+
+	function tracesFromMessages(msgs: ChatMessage[]): string[] {
+		const set = new Set<string>();
+		for (const m of msgs) {
+			if (m.trace_id) set.add(m.trace_id);
+		}
+		return Array.from(set);
+	}
 
 	// Scroll the chat container to the absolute bottom.
 	async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
@@ -60,20 +96,68 @@
 		}
 	}
 
+	// Pull all activity rows for every trace mentioned in the current chat.
+	// One trip per trace is wasteful as the active-trace set grows; for the
+	// foreseeable usage volume (≤10 traces visible) the single round-trip
+	// per poll-tick is fine.
+	async function pollActivity() {
+		const traces = tracesFromMessages(messages);
+		if (traces.length === 0) return;
+
+		const updates: Record<string, Activity[]> = { ...activityByTrace };
+		await Promise.all(
+			traces.map(async (traceId) => {
+				try {
+					const resp = await fetch(
+						resolve('/api/chat/activity') + `?trace_id=${encodeURIComponent(traceId)}`
+					);
+					if (!resp.ok) return;
+					const body = await resp.json();
+					updates[traceId] = body.activity || [];
+				} catch {
+					// silent
+				}
+			})
+		);
+		activityByTrace = updates;
+	}
+
+	function anyTraceActive(): boolean {
+		return tracesFromMessages(messages).some(isTraceActive);
+	}
+
 	onMount(() => {
 		scrollToBottom('auto');
 		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
+
+		// Activity ticker — separate cadence than messages so a running worker
+		// can paint progress without forcing the heavier message poll to speed
+		// up too. setTimeout chain lets us adapt cadence based on whether any
+		// trace is currently active.
+		let activityTimer: ReturnType<typeof setTimeout> | null = null;
+		const scheduleActivity = () => {
+			if (activityTimer !== null) clearTimeout(activityTimer);
+			const next = anyTraceActive() ? ACTIVITY_POLL_FAST_MS : ACTIVITY_POLL_IDLE_MS;
+			activityTimer = setTimeout(async () => {
+				await pollActivity();
+				scheduleActivity();
+			}, next);
+		};
+		// Kick off the first activity fetch immediately, then schedule.
+		void pollActivity().then(scheduleActivity);
 
 		// Re-fetch instantly when screen returns to focus
 		const onVisibility = () => {
 			if (document.visibilityState === 'visible') {
 				pollMessages();
+				void pollActivity();
 			}
 		};
 		document.addEventListener('visibilitychange', onVisibility);
 
 		return () => {
 			clearInterval(interval);
+			if (activityTimer !== null) clearTimeout(activityTimer);
 			document.removeEventListener('visibilitychange', onVisibility);
 		};
 	});
@@ -348,10 +432,58 @@
 							</div>
 						{/if}
 					</div>
-				</div>
-			{/each}
-		{/if}
-	</div>
+
+						<!-- Activity ticker: for any message tied to a worker trace, render the
+						     stream of progress events emitted via tools/emit_chat_activity.py.
+						     If the trace is mentioned but has no activity yet, show a pulsing
+						     "Working..." placeholder. -->
+						{#if m.trace_id}
+							{@const acts = activityByTrace[m.trace_id] || []}
+							{@const active = isTraceActive(m.trace_id)}
+							{#if acts.length > 0 || active}
+								<div class="mt-1 flex flex-col gap-0.5 font-mono text-[11px] {m.sender === 'operator' ? 'items-end' : 'items-start'}">
+									{#each acts as a (a.id)}
+										<div
+											class="flex items-center gap-1.5 px-1
+												{a.action === 'completed' ? 'text-status-green' :
+													a.action === 'failed' ? 'text-status-red' :
+														a.action === 'edited' ? 'text-cta' :
+															a.action === 'ran' ? 'text-status-blue' : 'text-muted-foreground'}"
+										>
+											{#if a.action === 'reading'}
+												<BookOpen size={10} />
+											{:else if a.action === 'edited'}
+												<Edit3 size={10} />
+											{:else if a.action === 'ran'}
+												<Terminal size={10} />
+											{:else if a.action === 'thinking'}
+												<Loader2 size={10} class="animate-spin" />
+											{:else if a.action === 'completed'}
+												<CheckCircle2 size={10} />
+											{:else if a.action === 'failed'}
+												<AlertTriangle size={10} />
+											{:else}
+												<span>·</span>
+											{/if}
+											<span class="uppercase tracking-wider opacity-80">{a.action}</span>
+											{#if a.target}
+												<span class="text-foreground/70 truncate max-w-[260px]">{a.target}</span>
+											{/if}
+										</div>
+									{/each}
+									{#if active && (acts.length === 0 || (acts[acts.length - 1].action !== 'completed' && acts[acts.length - 1].action !== 'failed'))}
+										<div class="flex items-center gap-1.5 px-1 text-muted-foreground animate-pulse">
+											<Loader2 size={10} class="animate-spin" />
+											<span class="uppercase tracking-wider">Working...</span>
+										</div>
+									{/if}
+								</div>
+							{/if}
+						{/if}
+					</div>
+				{/each}
+			{/if}
+		</div>
 
 	<!-- Typing Input Area -->
 	<div class="shrink-0 border-t border-border bg-background/95 p-3 flex flex-col gap-2">

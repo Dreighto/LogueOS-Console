@@ -94,7 +94,24 @@ ${historyContext}
 ---
 The operator's latest command is: "${message}"
 
-Please execute the request, make any necessary code/file modifications in your target repository (${targetRepo}), and write your response back to the chat using the 'emit_chat_message' script when completed. If you need approval for commands, run 'wait_for_approval.py'.`;
+Please execute the request, make any necessary code/file modifications in your target repository (${targetRepo}), and write your response back to the chat using the 'emit_chat_message' script when completed. If you need approval for commands, run 'wait_for_approval.py'.
+
+PROGRESS REPORTING — emit fine-grained activity between tool calls so the
+Operator can see what you're doing in the chat live. Call this between each
+distinct step (reading a file, editing, running a command, finishing):
+
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action reading --target src/foo.svelte
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action edited --target src/foo.svelte
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action ran --target "npm test"
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action thinking
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action completed
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "tests red"
+
+action vocab: reading | edited | ran | thinking | completed | failed.
+The script is fast (~30ms) — emit liberally. The chat polls every second
+for activity rows tied to your trace_id and renders each as a thin line
+under the dispatch bubble. Without these emits the operator sees a generic
+"Working..." spinner and nothing else until your final emit_chat_message.`;
 
 			try {
 				const response = await fetchWithTimeout(
