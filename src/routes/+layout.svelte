@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { onNavigate } from '$app/navigation';
-	import { Home, Cpu, Activity, Brain, Send, Settings, DollarSign, AlertOctagon } from 'lucide-svelte';
+	import { Home, Cpu, Activity, Brain, MessageSquare, Settings, DollarSign, AlertOctagon } from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
@@ -19,7 +19,7 @@
 		{ name: 'Team', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Memory', path: '/memory', icon: Brain },
-		{ name: 'Jobs', path: '/ask', icon: Send }
+		{ name: 'Chat', path: '/chat', icon: MessageSquare }
 	] as const;
 
 	// Seed kill-switch state from SSR. Client polls so the header stays in
