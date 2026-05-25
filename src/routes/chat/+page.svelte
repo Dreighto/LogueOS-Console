@@ -319,8 +319,12 @@
 				onkeypress={handleKeyPress}
 				rows="1"
 				placeholder="Message your agents (e.g. '@agy run a check')..."
-				class="w-full rounded-md border border-border bg-surface px-4 py-3 pr-12 font-sans text-sm text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none max-h-32"
-				style="min-height: 44px; interactive-widget: resizes-content;"
+				autocomplete="off"
+				autocorrect="off"
+				autocapitalize="none"
+				spellcheck="false"
+				class="w-full rounded-md border border-border bg-surface px-4 py-3 pr-12 font-sans text-base text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none max-h-32"
+				style="min-height: 44px;"
 			></textarea>
 
 			<button

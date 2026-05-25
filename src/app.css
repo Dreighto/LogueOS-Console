@@ -108,6 +108,24 @@
 		-webkit-user-select: none;
 	}
 
+	/* iOS Safari auto-zooms the viewport when any input/textarea/select with a
+	   computed font-size below 16px receives focus. There is no opt-out via
+	   viewport meta that doesn't also break pinch-zoom accessibility. The fix
+	   is to enforce a 16px minimum on the inputs themselves on mobile-width
+	   screens. !important is required to override per-component Tailwind
+	   classes (text-xs / text-sm / text-[NNpx]) on existing inputs without
+	   touching every component. Desktop layouts keep their dense font sizes.
+
+	   Codified in skill `ios-pwa-input-hygiene`. New components should pick
+	   text-base on inputs from the start; this is the safety net. */
+	@media (max-width: 768px) {
+		input,
+		textarea,
+		select {
+			font-size: 16px !important;
+		}
+	}
+
 	/* Reusable class for zero-latency mobile touch feedback */
 	.active-trigger {
 		transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
