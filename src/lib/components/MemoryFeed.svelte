@@ -3,13 +3,15 @@
 	import { Brain, Tag, Clock, Globe, ShieldCheck, Microscope, Check, Edit, X } from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
+	import { parseDbTimestamp } from '$lib/utils/format';
 
 	let { provisional = [], lessons = [], raw = [] }: { provisional: ProvisionalLesson[], lessons: AdoptedLesson[], raw: Observation[] } = $props();
 
 	let activeTab = $state<'provisional' | 'lessons' | 'raw'>('lessons');
 
 	function formatDate(iso: string) {
-		return new Date(iso).toLocaleString();
+		const d = parseDbTimestamp(iso);
+		return d ? d.toLocaleString() : iso;
 	}
 </script>
 
