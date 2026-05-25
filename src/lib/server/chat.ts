@@ -24,11 +24,12 @@ function parseRow(row: any): ChatMessage {
 		ticket_id: row.ticket_id || null,
 		interactive_action,
 		status: row.status,
-		timestamp: row.timestamp
+		timestamp: row.timestamp,
+		thread_id: row.thread_id || 'default'
 	};
 }
 
-export function getChatMessages(limit = 100): ChatMessage[] {
+export function getChatMessages(limit = 100, threadId = 'default'): ChatMessage[] {
 	if (!fs.existsSync(serverConfig.memoryDbPath)) {
 		return [];
 	}
@@ -36,12 +37,43 @@ export function getChatMessages(limit = 100): ChatMessage[] {
 	const db = getDb();
 	try {
 		const rows = db
-			.prepare('SELECT * FROM chat_messages ORDER BY timestamp ASC LIMIT ?')
-			.all(limit) as any[];
+			.prepare(
+				'SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC LIMIT ?'
+			)
+			.all(threadId, limit) as any[];
 
 		return rows.map(parseRow);
 	} catch (e: unknown) {
 		console.error('getChatMessages error:', e);
+		return [];
+	} finally {
+		db.close();
+	}
+}
+
+/**
+ * List distinct threads in chat_messages with a count + latest activity.
+ * Used by the chat tab's thread switcher.
+ */
+export function listChatThreads(): { thread_id: string; message_count: number; latest_ts: string }[] {
+	if (!fs.existsSync(serverConfig.memoryDbPath)) return [];
+	const db = getDb();
+	try {
+		const rows = db
+			.prepare(
+				`SELECT thread_id, COUNT(*) AS message_count, MAX(timestamp) AS latest_ts
+				 FROM chat_messages
+				 GROUP BY thread_id
+				 ORDER BY latest_ts DESC`
+			)
+			.all() as any[];
+		return rows.map((r) => ({
+			thread_id: r.thread_id || 'default',
+			message_count: r.message_count,
+			latest_ts: r.latest_ts
+		}));
+	} catch (e: unknown) {
+		console.error('listChatThreads error:', e);
 		return [];
 	} finally {
 		db.close();
@@ -54,17 +86,18 @@ export function addChatMessage(
 	traceId: string | null = null,
 	ticketId: string | null = null,
 	interactiveAction: InteractiveAction | null = null,
-	status = 'sent'
+	status = 'sent',
+	threadId = 'default'
 ): ChatMessage {
 	const db = getDb();
 	try {
 		const actionStr = interactiveAction ? JSON.stringify(interactiveAction) : null;
 		const info = db
 			.prepare(
-				`INSERT INTO chat_messages (sender, message, trace_id, ticket_id, interactive_action, status)
-				 VALUES (?, ?, ?, ?, ?, ?)`
+				`INSERT INTO chat_messages (sender, message, trace_id, ticket_id, interactive_action, status, thread_id)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`
 			)
-			.run(sender, message, traceId, ticketId, actionStr, status);
+			.run(sender, message, traceId, ticketId, actionStr, status, threadId);
 
 		const insertedId = info.lastInsertRowid;
 		const row = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(insertedId) as any;

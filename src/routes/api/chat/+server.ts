@@ -23,7 +23,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const limitParam = url.searchParams.get('limit');
 		const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
-		const messages = getChatMessages(limit);
+		const thread = (url.searchParams.get('thread') || 'default').trim() || 'default';
+		const messages = getChatMessages(limit, thread);
 		return json({ messages });
 	} catch (e: unknown) {
 		console.error('GET /api/chat error:', e);
@@ -36,17 +37,29 @@ export const POST: RequestHandler = async ({ request }) => {
 		const body = await request.json();
 		const { sender, message, ticket_id } = body;
 		// Explicit agent selection from the chat UI's pill switcher. Accepted
-		// values: 'auto' | 'claude-code' | 'agy'. When set to anything other
-		// than 'auto', it overrides the @-mention heuristic below.
+		// values: 'auto' | 'claude-code' | 'agy' | 'silent'. When set to anything
+		// other than 'auto', it overrides the @-mention heuristic below.
 		const explicitAgent: string =
 			body && typeof body.agent === 'string' ? body.agent.trim().toLowerCase() : 'auto';
+		// Thread scoping. Operators can have multiple parallel chats; each is
+		// a separate thread_id. Default thread is 'default'.
+		const threadId: string =
+			(body && typeof body.thread === 'string' ? body.thread.trim() : '') || 'default';
 
 		if (!message || !message.trim()) {
 			return json({ error: 'Message content is required.' }, { status: 400 });
 		}
 
 		// 1. Insert the operator's message into SQLite
-		const chatMsg = addChatMessage(sender || 'operator', message.trim(), null, ticket_id || null);
+		const chatMsg = addChatMessage(
+			sender || 'operator',
+			message.trim(),
+			null,
+			ticket_id || null,
+			null,
+			'sent',
+			threadId
+		);
 
 		// 2. Resolve worker selection. Operator's explicit pill wins if set;
 		//    otherwise fall back to @-mention heuristic; otherwise 'auto'.
@@ -123,13 +136,15 @@ Please execute the request, make any necessary code/file modifications in your t
 
 REPLY PROTOCOL — write your final response back to the chat with this EXACT shape:
 
-  python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --message "<your response>"
+  python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --thread "${threadId}" --message "<your response>"
 
 (use --sender agy instead of cc if you are Antigravity / a Gemini-class worker).
 
-The --trace_id flag is REQUIRED. Without it the chat UI cannot match your
-reply to this dispatch and will show "Working..." forever even after you
-finish. Always include it.
+Both --trace_id and --thread are REQUIRED. Without --trace_id the chat UI
+cannot match your reply to this dispatch and will show "Working..." forever.
+Without --thread your reply lands in the default thread instead of the one
+the operator was working in. Always include both — the literal thread name
+for this dispatch is "${threadId}".
 
 If you need approval for commands, run 'wait_for_approval.py'.
 
@@ -205,7 +220,10 @@ waiting.`;
 						'system',
 						`Agent dispatched: **${worker === 'auto' ? 'Role Routing' : worker}** is spinning up to handle this request on **${targetRepo}**. (Trace ID: ${data.trace_id || 'unknown'})`,
 						data.trace_id || null,
-						ticket_id || null
+						ticket_id || null,
+						null,
+						'sent',
+						threadId
 					);
 				} else {
 					// Surface dispatch failures into the chat so the operator
@@ -230,7 +248,10 @@ waiting.`;
 						'system',
 						`⚠️ **Dispatch failed.** ${worker === 'auto' ? 'Role-routed worker' : worker} could not be spawned on **${targetRepo}**. Reason: \`${reason}\`. Check the dispatch_listener logs (\`journalctl -u logueos-dispatch-listener\`) for details, then retry.`,
 						null,
-						ticket_id || null
+						ticket_id || null,
+						null,
+						'sent',
+						threadId
 					);
 				}
 			} catch (err) {
@@ -240,7 +261,10 @@ waiting.`;
 					'system',
 					`⚠️ **Dispatch errored before reaching the listener.** Could not reach the gateway: \`${msg.slice(0, 200)}\`. Check the gateway is running (\`systemctl status logueos-mcp-gateway\`).`,
 					null,
-					ticket_id || null
+					ticket_id || null,
+					null,
+					'sent',
+					threadId
 				);
 			}
 		}

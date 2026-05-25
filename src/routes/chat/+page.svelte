@@ -30,6 +30,18 @@
 
 	let { data }: { data: PageData } = $props();
 
+	// ─────────────────────────────────────────────────────────────────
+	// Multi-thread state
+	// Each conversation has its own thread_id. The default thread is
+	// "default". Operators create new threads via the switcher dropdown.
+	// All messages, dispatches, and history slices are scoped to the
+	// active thread.
+	// ─────────────────────────────────────────────────────────────────
+	type ThreadInfo = { thread_id: string; message_count: number; latest_ts: string };
+	let activeThread = $state<string>(data.activeThread || 'default');
+	let threads = $state<ThreadInfo[]>(data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]);
+	let threadSwitcherOpen = $state(false);
+
 	// Active chat state seeded from SSR to ensure zero flicker on load.
 	let messages = $state<ChatMessage[]>(data.messages || []);
 	let textDraft = $state('');
@@ -146,6 +158,15 @@
 	let unseenCount = $state(0);
 	let lastSeenMessageId = $state<number | null>(null);
 
+	// Optimistic "dispatching..." indicator. Set true the moment the operator
+	// hits send; cleared when the dispatch-side system bubble (or a streaming
+	// bubble, whichever comes first) lands in the messages list. Closes the
+	// 3-5s perception gap between "I sent" and "agent is working" — without
+	// this the chat feels dead during the gateway + listener + worker
+	// cold-start round-trip.
+	let dispatching = $state(false);
+	let dispatchingSinceMsgId = $state<number | null>(null);
+
 	// 1s message poll — the dominant chat-side latency between worker
 	// emit_chat_message landing in the DB and the operator seeing it.
 	// Dropping from 3s shaves up to 2s off every dispatch's perceived
@@ -236,7 +257,7 @@
 	// Poll the API for new messages stateless and snappy
 	async function pollMessages() {
 		try {
-			const resp = await fetch(resolve('/api/chat'));
+			const resp = await fetch(resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`);
 			if (!resp.ok) return;
 			const body = await resp.json();
 			const newMessages: ChatMessage[] = body.messages || [];
@@ -247,6 +268,21 @@
 
 			const prevLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
 			messages = newMessages;
+
+			// Clear the "dispatching..." indicator once the dispatch follow-up
+			// (system "Agent dispatched" bubble OR a real worker reply) has
+			// landed after the operator's most recent send.
+			if (dispatching && dispatchingSinceMsgId !== null) {
+				const settled = newMessages.some(
+					(m) =>
+						m.id > (dispatchingSinceMsgId as number) &&
+						(m.sender === 'system' || (m.sender !== 'operator' && m.trace_id))
+				);
+				if (settled) {
+					dispatching = false;
+					dispatchingSinceMsgId = null;
+				}
+			}
 
 			// Stick-to-bottom: only auto-scroll when the operator was already
 			// reading at the bottom. If they've scrolled up to read history,
@@ -413,7 +449,8 @@
 				body: JSON.stringify({
 					sender: 'operator',
 					message: draft,
-					agent: agentLock
+					agent: agentLock,
+					thread: activeThread
 				})
 			});
 
@@ -430,6 +467,12 @@
 			userAtBottom = true;
 			unseenCount = 0;
 			lastSeenMessageId = body.message?.id ?? lastSeenMessageId;
+			// Show the instant "dispatching agent..." indicator unless the
+			// pill is Silent (in which case no worker fires, so no spinner).
+			if (agentLock !== 'silent') {
+				dispatching = true;
+				dispatchingSinceMsgId = body.message?.id ?? null;
+			}
 			scrollToBottom('smooth');
 
 			// Trigger immediate follow-up poll to fetch any auto-dispatched system notification
@@ -570,7 +613,7 @@
 			const resp = await fetch(resolve('/api/chat/reset'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({})
+				body: JSON.stringify({ thread: activeThread })
 			});
 			if (!resp.ok) {
 				const err = await resp.json().catch(() => ({}));
@@ -590,6 +633,64 @@
 
 	function isResetMarker(m: ChatMessage): boolean {
 		return m.sender === 'system' && m.message.startsWith('--- NEW CONVERSATION ---');
+	}
+
+	// ──────────────────────────────────────────────────────────────
+	// Multi-thread switching
+	// ──────────────────────────────────────────────────────────────
+	async function refreshThreads() {
+		try {
+			const resp = await fetch(resolve('/api/chat/threads'));
+			if (!resp.ok) return;
+			const body = await resp.json();
+			threads = body.threads || threads;
+		} catch {
+			// silent
+		}
+	}
+
+	async function switchThread(threadId: string) {
+		if (threadId === activeThread) {
+			threadSwitcherOpen = false;
+			return;
+		}
+		activeThread = threadId;
+		threadSwitcherOpen = false;
+		messages = [];
+		streamByTrace = {};
+		streamEnded = {};
+		activityByTrace = {};
+		dispatching = false;
+		dispatchingSinceMsgId = null;
+		unseenCount = 0;
+		userAtBottom = true;
+		// Reload messages for the new thread.
+		await pollMessages();
+		await pollActivity();
+		syncStreamSubscriptions();
+		requestAnimationFrame(() => scrollToBottom('auto'));
+	}
+
+	function slugifyThreadName(name: string): string {
+		return name
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9-]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 40) || 'thread';
+	}
+
+	function newThread() {
+		const raw = window.prompt('New thread name (letters, numbers, dashes):');
+		if (!raw) return;
+		const slug = slugifyThreadName(raw);
+		// Add to local list so the switcher shows it instantly; the server
+		// only knows about a thread once a message lands in it, so the
+		// refresh after a first send will reconcile.
+		if (!threads.some((t) => t.thread_id === slug)) {
+			threads = [{ thread_id: slug, message_count: 0, latest_ts: '' }, ...threads];
+		}
+		void switchThread(slug);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -739,23 +840,66 @@
      pushing the composer below the visible area. -->
 <div class="flex flex-col h-full overflow-hidden -m-4">
 	<div class="shrink-0 flex items-start justify-between gap-2 px-2 pt-1">
-		<PageHeader
-			title="Co-Working Chat"
-			subtitle="Converse with CC or Antigravity and approve commands on the go."
-		/>
+		<!-- Thread switcher: replaces the static "Co-Working Chat" title. Shows
+		     the active thread name + chevron; tap opens a dropdown of all
+		     known threads with a "+ New thread" button. Operators can run
+		     multiple parallel conversations and switch between them. -->
+		<div class="relative shrink-0">
+			<button
+				type="button"
+				onclick={() => (threadSwitcherOpen = !threadSwitcherOpen)}
+				class="flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1.5 transition-colors hover:bg-surface/80 active:scale-95"
+				aria-label="Switch chat thread"
+				aria-expanded={threadSwitcherOpen}
+			>
+				<MessageSquare size={12} class="text-muted-foreground" />
+				<span class="font-sans text-sm font-bold text-foreground tracking-tight">
+					{activeThread === 'default' ? 'Default' : activeThread}
+				</span>
+				<span class="text-muted-foreground text-xs" aria-hidden="true">▾</span>
+			</button>
+			{#if threadSwitcherOpen}
+				<div
+					class="absolute left-0 top-full mt-1 z-30 flex flex-col rounded-md border border-border bg-background/95 shadow-lg backdrop-blur-md min-w-[200px] max-h-[60vh] overflow-y-auto custom-scrollbar animate-fade-in"
+				>
+					{#each threads as t (t.thread_id)}
+						<button
+							type="button"
+							onclick={() => switchThread(t.thread_id)}
+							class="flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-surface
+								{t.thread_id === activeThread ? 'bg-surface/60 text-foreground' : 'text-muted-foreground'}"
+						>
+							<span class="font-sans text-sm">
+								{t.thread_id === 'default' ? 'Default' : t.thread_id}
+							</span>
+							<span class="font-mono text-[10px] text-muted-foreground">{t.message_count}</span>
+						</button>
+					{/each}
+					<button
+						type="button"
+						onclick={newThread}
+						class="flex items-center gap-1.5 px-3 py-2 border-t border-border text-cta font-sans text-sm hover:bg-cta/5 transition-colors"
+					>
+						<Plus size={12} />
+						<span>New thread</span>
+					</button>
+				</div>
+			{/if}
+		</div>
+
 		<button
 			type="button"
 			onclick={handleNewConversation}
 			disabled={resetting}
 			class="shrink-0 mt-1 flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground hover:bg-surface/80 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-			title="Start a new conversation. Older messages stay visible but won't be replayed as worker context."
+			title="Drop a 'new conversation' marker inside this thread so old context isn't replayed to workers."
 		>
 			{#if resetting}
 				<Loader2 size={10} class="animate-spin" />
 			{:else}
-				<Plus size={10} />
+				<RefreshCw size={10} />
 			{/if}
-			<span>New conversation</span>
+			<span>Reset context</span>
 		</button>
 	</div>
 
@@ -1053,6 +1197,20 @@
 					{/if}
 				{/if}
 				{/each}
+
+				<!-- Instant dispatch feedback: fills the perception gap between
+				     "operator hit send" and "Agent dispatched" landing from the
+				     server (gateway round-trip + listener spawn ≈ 1-3s). The
+				     pulsing line disappears as soon as the system bubble OR a
+				     streaming bubble takes over. -->
+				{#if dispatching}
+					<div class="flex flex-col gap-1 items-start animate-fade-in">
+						<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground animate-pulse">
+							<Loader2 size={10} class="animate-spin" />
+							<span>dispatching agent...</span>
+						</div>
+					</div>
+				{/if}
 			{/if}
 		</div>
 

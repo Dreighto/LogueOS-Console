@@ -12,16 +12,18 @@ import { addChatMessage } from '$lib/server/chat';
  */
 export const POST: RequestHandler = async ({ request }) => {
 	let reason = '';
+	let threadId = 'default';
 	try {
 		const body = await request.json();
 		reason = (body && typeof body.reason === 'string' ? body.reason : '').trim();
+		threadId = (body && typeof body.thread === 'string' ? body.thread.trim() : '') || 'default';
 	} catch {
-		// no body is fine — reset with no annotation
+		// no body is fine — reset with no annotation, default thread
 	}
 
 	const marker = reason
 		? `--- NEW CONVERSATION --- (${reason.slice(0, 120)})`
 		: '--- NEW CONVERSATION ---';
-	const msg = addChatMessage('system', marker);
+	const msg = addChatMessage('system', marker, null, null, null, 'sent', threadId);
 	return json({ message: msg });
 };

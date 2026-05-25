@@ -15,4 +15,5 @@ export interface ChatMessage {
 	interactive_action: InteractiveAction | null;
 	status: 'sent' | 'pending_approval' | 'approved' | 'denied';
 	timestamp: string;
+	thread_id: string;
 }

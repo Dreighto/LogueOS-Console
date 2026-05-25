@@ -29,13 +29,16 @@ interface ChatMessageRow {
 	message: string;
 	trace_id: string | null;
 	timestamp: string;
+	thread_id: string;
 }
 
 function fetchMessageById(messageId: number): ChatMessageRow | null {
 	const db = new Database(serverConfig.memoryDbPath, { readonly: true });
 	try {
 		const row = db
-			.prepare('SELECT id, sender, message, trace_id, timestamp FROM chat_messages WHERE id = ?')
+			.prepare(
+				'SELECT id, sender, message, trace_id, timestamp, thread_id FROM chat_messages WHERE id = ?'
+			)
 			.get(messageId) as ChatMessageRow | undefined;
 		return row || null;
 	} catch (e) {
@@ -70,11 +73,13 @@ function findOperatorAncestor(sourceId: number): ChatMessageRow | null {
 	}
 }
 
-function buildHistoryContext(): string {
+function buildHistoryContext(threadId = 'default'): string {
 	// Same convention as /api/chat: replay the last 30 messages, sliced at
 	// the most recent "--- NEW CONVERSATION ---" marker. Workers benefit
 	// from the same conversational context their parent dispatches used.
-	const all = getChatMessages(30);
+	// Scoped to the source message's thread so cross-thread context doesn't
+	// leak into the worker's prompt.
+	const all = getChatMessages(30, threadId);
 	let lastResetIdx = -1;
 	for (let i = all.length - 1; i >= 0; i--) {
 		if (
@@ -95,7 +100,7 @@ function buildWorkflowPrompt(
 	targetRepo: string,
 	originalOperatorRequest?: string
 ): { systemAnnouncement: string; workerPrompt: string } {
-	const history = buildHistoryContext();
+	const history = buildHistoryContext(source.thread_id || 'default');
 	const sourceLabel =
 		source.sender === 'operator'
 			? 'the operator'
@@ -115,11 +120,13 @@ ${history}
 
 REPLY PROTOCOL — write your final response back to the chat with this EXACT shape:
 
-  python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --message "<your response>"
+  python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --thread "${source.thread_id || 'default'}" --message "<your response>"
 
 (use --sender agy instead of cc if you are Antigravity / a Gemini-class worker).
 
-The --trace_id flag is REQUIRED. After your final emit_chat_message, ALWAYS emit ONE terminal activity row:
+Both --trace_id and --thread are REQUIRED. The literal thread name for this workflow is "${source.thread_id || 'default'}".
+
+After your final emit_chat_message, ALWAYS emit ONE terminal activity row:
 
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action completed
   # OR if the task ended badly:
@@ -235,8 +242,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 
 		// Insert the announcement bubble FIRST so the operator sees the
-		// action took effect before the dispatch round-trip finishes.
-		addChatMessage('operator', systemAnnouncement);
+		// action took effect before the dispatch round-trip finishes. Thread
+		// scoping inherits from the source message so workflow chains stay
+		// in the thread the operator was working in.
+		const threadId = source.thread_id || 'default';
+		addChatMessage('operator', systemAnnouncement, null, null, null, 'sent', threadId);
 
 		const response = await fetchWithTimeout(
 			`${serverConfig.gatewayUrl}/api/v1/dispatch`,
@@ -261,7 +271,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				'system',
 				`Agent dispatched: **${targetAgent}** is handling this ${action}. (Trace ID: ${data.trace_id || 'unknown'})`,
 				data.trace_id || null,
-				null
+				null,
+				null,
+				'sent',
+				threadId
 			);
 			return json({ ok: true, trace_id: data.trace_id });
 		}
@@ -276,7 +289,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 		addChatMessage(
 			'system',
-			`⚠️ **${action} dispatch failed.** ${targetAgent} on ${targetRepo}. Reason: \`${reason}\`.`
+			`⚠️ **${action} dispatch failed.** ${targetAgent} on ${targetRepo}. Reason: \`${reason}\`.`,
+			null,
+			null,
+			null,
+			'sent',
+			threadId
 		);
 		return json({ error: reason }, { status: 502 });
 	} catch (e: unknown) {
