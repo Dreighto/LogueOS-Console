@@ -2,7 +2,104 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import fs from 'node:fs';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { serverConfig } from '$lib/server/config';
+import { addChatMessage } from '$lib/server/chat';
+
+interface DoneBody {
+	status?: string;
+	cause?: string;
+	ts?: string;
+}
+
+/**
+ * When a worker dies non-cleanly (FAILED, INCONCLUSIVE-with-timeout, etc.),
+ * the operator's chat shows nothing — the streaming bubble just disappears.
+ * They have no idea what happened. This function checks if the trace's
+ * .done marker indicates a death AND no worker reply has landed yet AND
+ * we haven't already reported the death — and if so, drops a ⚠️ system
+ * message into the chat explaining what happened.
+ *
+ * Idempotent: writes a `<trace_id>.death-reported` marker after the chat
+ * message is inserted so SSE reconnects don't duplicate the report.
+ */
+function reportWorkerDeathIfNeeded(
+	traceLogDir: string,
+	traceId: string,
+	memoryDbPath: string,
+	doneBody: DoneBody
+): void {
+	const status = (doneBody.status || '').toUpperCase();
+	// Clean exit — no death to report.
+	if (status === 'CONFIRMED_WORKING' || status === '') return;
+
+	const reportedMarker = path.join(traceLogDir, `${traceId}.death-reported`);
+	if (fs.existsSync(reportedMarker)) return; // already reported
+
+	// Has the worker emitted a real reply? If yes, the death message would be
+	// misleading. Skip.
+	let workerThread = 'default';
+	let workerReplied = false;
+	try {
+		const db = new Database(memoryDbPath, { readonly: true });
+		try {
+			const replyRow = db
+				.prepare(
+					`SELECT id FROM chat_messages
+					 WHERE trace_id = ? AND sender NOT IN ('system','operator')
+					 LIMIT 1`
+				)
+				.get(traceId);
+			workerReplied = !!replyRow;
+			// Find the thread the dispatch lives in so the death message
+			// lands in the right place.
+			const sysRow = db
+				.prepare(
+					`SELECT thread_id FROM chat_messages
+					 WHERE trace_id = ? AND sender = 'system'
+					 ORDER BY id ASC LIMIT 1`
+				)
+				.get(traceId) as { thread_id?: string } | undefined;
+			if (sysRow?.thread_id) workerThread = sysRow.thread_id;
+		} finally {
+			db.close();
+		}
+	} catch (e) {
+		console.error('death-report db lookup failed:', e);
+		return;
+	}
+
+	if (workerReplied) {
+		// Worker did reply — no death message needed. Still write the
+		// reported marker so we don't keep checking.
+		try {
+			fs.writeFileSync(reportedMarker, JSON.stringify({ skipped: 'worker_replied' }));
+		} catch {
+			/* noop */
+		}
+		return;
+	}
+
+	// Construct a clear ⚠️ message based on the cause.
+	const cause = doneBody.cause || 'unknown';
+	let msg = '';
+	if (cause === 'timeout') {
+		msg = `⚠️ **Worker stall-killed.** No heartbeat for 300s — the listener thought it hung and SIGTERM'd it. Worker likely had work in flight but didn't emit a heartbeat / activity row. (Trace: \`${traceId}\`)`;
+	} else if (status === 'FAILED') {
+		msg = `⚠️ **Worker FAILED.** Cause: \`${cause}\`. Check \`journalctl -u logueos-dispatch-listener\` for the trace's exit details. (Trace: \`${traceId}\`)`;
+	} else if (status === 'INCONCLUSIVE') {
+		msg = `⚠️ **Worker exited INCONCLUSIVE.** It finished but didn't emit a clear terminal status. (Trace: \`${traceId}\`)`;
+	} else {
+		msg = `⚠️ **Worker ended unexpectedly.** Status: \`${status}\`. Cause: \`${cause}\`. (Trace: \`${traceId}\`)`;
+	}
+
+	try {
+		addChatMessage('system', msg, traceId, null, null, 'sent', workerThread);
+		fs.writeFileSync(reportedMarker, JSON.stringify({ reported_at: new Date().toISOString() }));
+	} catch (e) {
+		console.error('death-report write failed:', e);
+	}
+}
 
 // trace_ids are emitted by spawn.js with this exact shape:
 //   <worker-prefix>-<8hex>-<8hex>
@@ -210,13 +307,23 @@ export const GET: RequestHandler = async ({ params }) => {
 					);
 					if (fs.existsSync(doneMarker)) {
 						let status = 'TERMINAL';
+						let body: DoneBody = {};
 						try {
-							const body = JSON.parse(fs.readFileSync(doneMarker, 'utf-8'));
+							body = JSON.parse(fs.readFileSync(doneMarker, 'utf-8'));
 							if (body && typeof body.status === 'string') status = body.status;
 						} catch {
 							/* malformed marker — close anyway, status unknown */
 						}
 						tickReadStdout();
+						// If the worker died non-cleanly AND no reply landed,
+						// surface a ⚠️ system message in the chat so the
+						// operator isn't left in the dark.
+						reportWorkerDeathIfNeeded(
+							serverConfig.traceLogDir,
+							traceId,
+							serverConfig.memoryDbPath,
+							body
+						);
 						close(`completed:${status}`);
 						return;
 					}
