@@ -77,40 +77,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			targetRepo = 'LogueOS-Console';
 		}
 
-		// Heuristic 3: Should this message actually fire a worker dispatch?
-		// In Auto mode (no explicit agent locked), we trigger on a generous
-		// set of signals so casual operator phrasing reliably gets a reply
-		// without forcing them to type magic verbs. The rare false-positive
-		// (firing a worker on a non-request comment) is much cheaper than
-		// the silent no-response bug operators kept hitting.
+		// Dispatch policy: in Auto mode, ALWAYS dispatch. The previous
+		// trigger-word heuristic (action verbs, question marks, @-mentions)
+		// kept failing the operator silently when they used phrasings that
+		// didn't match the whitelist. They'd rather pay a few cents per
+		// chitchat than memorize magic incantations.
 		//
-		//   - Any @-mention (@cc, @agy, @gemini)
-		//   - Any '?' anywhere in the message — questions ARE requests
-		//   - Action verb (broadened from the original 6 to ~30)
-		//   - Message starts with a question word (what/where/why/how/...)
-		const ACTION_VERBS = [
-			'run ', 'fix ', 'verify ', 'build ', 'deploy ', 'check ',
-			'do ', 'make ', 'add ', 'remove ', 'delete ', 'update ',
-			'refactor ', 'audit ', 'review ', 'analyze ', 'analyse ',
-			'investigate ', 'explain ', 'find ', 'search ', 'list ',
-			'show ', 'tell ', 'help ', 'test ', 'try ', 'create ',
-			'write ', 'generate ', 'propose ', 'suggest ', 'summarize ',
-			'summarise ', 'compare ', 'triage ', 'figure out ',
-			'look at ', 'look into ',
-			'start ', 'stop ', 'restart ', 'kill ', 'clean ',
-			'pull ', 'push ', 'merge ', 'commit '
-		];
-		const QUESTION_START = /^(what|where|why|how|who|when|which|whose|whom|can|could|should|would|is|are|was|were|does|do|did|will|won't|don't|isn't|aren't|am|has|have|had)\b/i;
-
-		const shouldTrigger =
-			explicitAgent === 'claude-code' ||
-			explicitAgent === 'agy' ||
-			text.includes('@cc') ||
-			text.includes('@agy') ||
-			text.includes('@gemini') ||
-			text.includes('?') ||
-			ACTION_VERBS.some((v) => text.includes(v)) ||
-			QUESTION_START.test(text);
+		// Two ways to suppress dispatch:
+		//   1. agentLock === 'silent' on the client side — the operator wants
+		//      to leave a chat note without spawning a worker.
+		//   2. sender === 'system' — we never re-dispatch system messages.
+		const shouldTrigger = sender !== 'system' && explicitAgent !== 'silent';
 
 		if (shouldTrigger && sender !== 'system') {
 			// Trigger a background dispatch via the gateway!
@@ -266,19 +243,11 @@ waiting.`;
 					ticket_id || null
 				);
 			}
-		} else if (sender !== 'system') {
-			// Auto mode + the operator's message didn't match any trigger and
-			// no agent pill was locked. Almost any natural phrasing should
-			// have triggered (the trigger list is intentionally broad now —
-			// any '?', any action verb, any question-word start, any
-			// @-mention). If we're STILL here, the message was probably a
-			// bare statement like "ok" or "thanks". Surface that explicitly
-			// so the chat never just goes silent.
-			addChatMessage(
-				'system',
-				`💬 No agent dispatched. That message didn't look like a request — Auto fires on questions (\`?\`), action verbs, or @-mentions. Tap the **CC** or **AGY** pill above to lock every send to a specific worker, or end with a \`?\`.`
-			);
 		}
+		// No else-branch: shouldTrigger is now false only when the operator
+		// explicitly picked the Silent pill, in which case the chat message
+		// is logged but no worker spawns. That's the entire intent — no
+		// system "no dispatch" warning needed.
 
 		return json({ message: chatMsg });
 	} catch (e: unknown) {

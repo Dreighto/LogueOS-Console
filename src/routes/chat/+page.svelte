@@ -37,7 +37,13 @@
 	// Agent selector pill state. 'auto' falls back to the @-mention heuristic;
 	// 'claude-code' / 'agy' locks every subsequent send to that worker until
 	// the operator picks something else. Persists for the page-load session.
-	let agentLock = $state<'auto' | 'claude-code' | 'agy'>('auto');
+	// agentLock controls dispatch routing:
+	//   'auto'        — every send fires a worker (gateway role-routes unless @-mentioned)
+	//   'claude-code' — every send goes to CC
+	//   'agy'         — every send goes to AGY
+	//   'silent'      — chat note only, no worker spawns (used to leave notes
+	//                   for yourself or annotate without burning tokens)
+	let agentLock = $state<'auto' | 'claude-code' | 'agy' | 'silent'>('auto');
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -1140,6 +1146,17 @@
 					title="Lock all sends to Antigravity (Gemini-class)."
 				>
 					AGY
+				</button>
+				<button
+					type="button"
+					onclick={() => (agentLock = 'silent')}
+					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+						{agentLock === 'silent'
+							? 'border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground'
+							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+					title="Log this message in the chat without dispatching any worker (chat note)."
+				>
+					Silent
 				</button>
 			</div>
 		</div>
