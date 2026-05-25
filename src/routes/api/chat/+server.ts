@@ -35,6 +35,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
 		const { sender, message, ticket_id } = body;
+		// Explicit agent selection from the chat UI's pill switcher. Accepted
+		// values: 'auto' | 'claude-code' | 'agy'. When set to anything other
+		// than 'auto', it overrides the @-mention heuristic below.
+		const explicitAgent: string =
+			body && typeof body.agent === 'string' ? body.agent.trim().toLowerCase() : 'auto';
 
 		if (!message || !message.trim()) {
 			return json({ error: 'Message content is required.' }, { status: 400 });
@@ -43,17 +48,22 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 1. Insert the operator's message into SQLite
 		const chatMsg = addChatMessage(sender || 'operator', message.trim(), null, ticket_id || null);
 
-		// 2. Scan the message to detect worker & repo dispatch heuristics
+		// 2. Resolve worker selection. Operator's explicit pill wins if set;
+		//    otherwise fall back to @-mention heuristic; otherwise 'auto'.
 		const text = message.toLowerCase();
-		
-		// Heuristic 1: Worker selection
-		let worker = 'auto';
 		let role = 'backend';
-		if (text.includes('@cc') || text.includes('claude') || text.includes('cc')) {
+		let worker = 'auto';
+		if (explicitAgent === 'claude-code' || explicitAgent === 'agy') {
+			worker = explicitAgent;
+		} else if (text.includes('@cc')) {
 			worker = 'claude-code';
-		} else if (text.includes('@agy') || text.includes('antigravity') || text.includes('agy') || text.includes('gemini')) {
+		} else if (text.includes('@agy') || text.includes('@gemini')) {
 			worker = 'agy';
 		}
+		// Note: the previous bare-substring matching ('claude', 'cc', 'gemini')
+		// was removed — it fired on unrelated mentions like "fix the Claude
+		// config" or "the cc_completion_log path". Operators that want a
+		// specific worker either use @cc / @agy explicitly or pick the pill.
 
 		// Heuristic 2: Repository/Project selection
 		let targetRepo = 'LogueOS-Console'; // Default project
@@ -67,16 +77,20 @@ export const POST: RequestHandler = async ({ request }) => {
 			targetRepo = 'LogueOS-Console';
 		}
 
-		// Heuristic 3: Check if the message actually wants to trigger a job
-		// If the operator tags an agent explicitly (e.g. "@agy") or uses terms like "run", "do", "fix", "verify", "audit", "build"
-		const shouldTrigger = 
-			text.includes('@cc') || 
-			text.includes('@agy') || 
-			text.includes('run ') || 
-			text.includes('fix ') || 
-			text.includes('verify ') || 
-			text.includes('build ') || 
-			text.includes('deploy ') || 
+		// Heuristic 3: Should this message actually fire a worker dispatch?
+		// Trigger if: operator explicitly picked an agent via the pill, or
+		// @-mentioned one, or used a verb that smells like a request.
+		const shouldTrigger =
+			explicitAgent === 'claude-code' ||
+			explicitAgent === 'agy' ||
+			text.includes('@cc') ||
+			text.includes('@agy') ||
+			text.includes('@gemini') ||
+			text.includes('run ') ||
+			text.includes('fix ') ||
+			text.includes('verify ') ||
+			text.includes('build ') ||
+			text.includes('deploy ') ||
 			text.includes('check ');
 
 		if (shouldTrigger && sender !== 'system') {

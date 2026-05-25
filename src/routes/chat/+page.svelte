@@ -30,6 +30,10 @@
 	let messages = $state<ChatMessage[]>(data.messages || []);
 	let textDraft = $state('');
 	let sending = $state(false);
+	// Agent selector pill state. 'auto' falls back to the @-mention heuristic;
+	// 'claude-code' / 'agy' locks every subsequent send to that worker until
+	// the operator picks something else. Persists for the page-load session.
+	let agentLock = $state<'auto' | 'claude-code' | 'agy'>('auto');
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
 
@@ -243,7 +247,8 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					sender: 'operator',
-					message: draft
+					message: draft,
+					agent: agentLock
 				})
 			});
 
@@ -657,6 +662,47 @@
 			>
 				@agy theme
 			</button>
+		</div>
+
+		<!-- Agent switcher: explicit override of the @-mention heuristic.
+		     'Auto' = use heuristic; the others lock dispatches to that worker. -->
+		<div class="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground select-none">
+			<span class="shrink-0">Send to:</span>
+			<div class="flex items-center gap-1">
+				<button
+					type="button"
+					onclick={() => (agentLock = 'auto')}
+					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+						{agentLock === 'auto'
+							? 'border-foreground/30 bg-foreground/5 text-foreground'
+							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+					title="Use the @-mention heuristic to decide. Default."
+				>
+					Auto
+				</button>
+				<button
+					type="button"
+					onclick={() => (agentLock = 'claude-code')}
+					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+						{agentLock === 'claude-code'
+							? 'border-orange-400/40 bg-orange-400/10 text-orange-400'
+							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+					title="Lock all sends to Claude Code."
+				>
+					CC
+				</button>
+				<button
+					type="button"
+					onclick={() => (agentLock = 'agy')}
+					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+						{agentLock === 'agy'
+							? 'border-purple-400/40 bg-purple-400/10 text-purple-400'
+							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+					title="Lock all sends to Antigravity (Gemini-class)."
+				>
+					AGY
+				</button>
+			</div>
 		</div>
 
 		<!-- Input field -->
