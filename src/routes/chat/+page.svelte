@@ -163,6 +163,74 @@
 			handleSendMessage();
 		}
 	}
+
+	// Upload state — true while an image is being POSTed. Disables send so the
+	// operator can't accidentally fire off a message with a half-uploaded image.
+	let uploading = $state(false);
+
+	async function uploadImage(file: File): Promise<string | null> {
+		const fd = new FormData();
+		fd.append('file', file);
+		const resp = await fetch(resolve('/api/chat/uploads'), {
+			method: 'POST',
+			body: fd
+		});
+		if (!resp.ok) {
+			const text = await resp.text().catch(() => '');
+			throw new Error(`upload failed: HTTP ${resp.status} ${text.slice(0, 120)}`);
+		}
+		const body = await resp.json();
+		return body.url || null;
+	}
+
+	async function handleImageFiles(files: File[]) {
+		if (files.length === 0) return;
+		uploading = true;
+		try {
+			for (const file of files) {
+				try {
+					const url = await uploadImage(file);
+					if (!url) continue;
+					// Append the markdown image at the end of the current draft.
+					// Wrap with blank lines so multiple pastes stack instead of running together.
+					const tag = `\n\n![${file.name || 'image'}](${url})\n\n`;
+					textDraft = (textDraft + tag).replace(/^\n+/, '');
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : 'upload error';
+					toasts.add(msg, 'error');
+				}
+			}
+		} finally {
+			uploading = false;
+		}
+	}
+
+	function handlePaste(e: ClipboardEvent) {
+		if (!e.clipboardData) return;
+		const files: File[] = [];
+		for (const item of Array.from(e.clipboardData.items)) {
+			if (item.kind === 'file' && item.type.startsWith('image/')) {
+				const f = item.getAsFile();
+				if (f) files.push(f);
+			}
+		}
+		if (files.length > 0) {
+			e.preventDefault();
+			void handleImageFiles(files);
+		}
+	}
+
+	function handleDrop(e: DragEvent) {
+		if (!e.dataTransfer) return;
+		const files: File[] = [];
+		for (const f of Array.from(e.dataTransfer.files)) {
+			if (f.type.startsWith('image/')) files.push(f);
+		}
+		if (files.length > 0) {
+			e.preventDefault();
+			void handleImageFiles(files);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -318,8 +386,11 @@
 			<textarea
 				bind:value={textDraft}
 				onkeypress={handleKeyPress}
+				onpaste={handlePaste}
+				ondrop={handleDrop}
+				ondragover={(e) => e.preventDefault()}
 				rows="1"
-				placeholder="Message your agents (e.g. '@agy run a check')..."
+				placeholder={uploading ? 'Uploading image...' : "Message your agents (paste an image or '@agy run a check')..."}
 				autocomplete="off"
 				autocorrect="off"
 				autocapitalize="none"

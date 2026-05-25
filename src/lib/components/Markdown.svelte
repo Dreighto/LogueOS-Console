@@ -138,9 +138,10 @@
 				'th',
 				'td',
 				'span',
-				'div'
+				'div',
+				'img'
 			],
-			ALLOWED_ATTR: ['href', 'title', 'class', 'target', 'rel'],
+			ALLOWED_ATTR: ['href', 'title', 'class', 'target', 'rel', 'src', 'alt'],
 			ADD_ATTR: ['target'],
 			// Force all links to open in a new tab safely.
 			FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick']
@@ -264,6 +265,16 @@
 		border: 0;
 		border-top: 1px solid rgb(255 255 255 / 0.1);
 		margin: 0.75rem 0;
+	}
+
+	.md-content :global(img) {
+		max-width: 100%;
+		max-height: 60vh;
+		height: auto;
+		border-radius: 0.375rem;
+		border: 1px solid rgb(255 255 255 / 0.08);
+		margin: 0.4rem 0;
+		display: block;
 	}
 
 	.md-content :global(table) {

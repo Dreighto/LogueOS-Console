@@ -76,6 +76,14 @@ export const serverConfig = {
 		'LOGUEOS_MEMORY_DB_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\data\\logueos_memory.db'
 	),
+	// Directory for operator-pasted images in the Chat tab. Files are written
+	// here by POST /api/chat/uploads and streamed back by GET
+	// /api/chat/uploads/[filename]. Lives under the orchestrator data dir so
+	// it shares the same backup-and-mount story as the JSONL chains and DBs.
+	chatUploadsDir: getEnv(
+		'LOGUEOS_CHAT_UPLOADS_DIR',
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/chat_uploads'
+	),
 	adoptedLessonsPath: getEnv(
 		'LOGUEOS_ADOPTED_LESSONS_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\.logueos\\overlays\\adopted-lessons.md'
