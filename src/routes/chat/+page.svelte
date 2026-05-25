@@ -62,14 +62,36 @@
 	const ACTIVITY_POLL_FAST_MS = 1000;
 	const ACTIVITY_POLL_IDLE_MS = 3000;
 
-	// A trace is "active" if it has been mentioned by a system message but
-	// hasn't emitted a terminal action yet (completed/failed). The UI uses
-	// this to decide whether to keep polling activity for it.
+	// A trace is "active" if it was dispatched but hasn't finished yet.
+	// Multiple signals indicate it's done; if ANY fires the trace is inactive:
+	//   1. emit_chat_activity emitted a terminal action (completed | failed)
+	//   2. The worker emitted a chat_messages row from cc / agy / system-reply
+	//      tied to this trace_id (i.e. the final emit_chat_message). This is
+	//      the most reliable signal because workers tend to emit a final
+	//      message even if they skip the activity rows.
+	//   3. The SSE stream closed itself (streamEnded[traceId] is true). The
+	//      stream closes when cc_completion_log.jsonl shows the trace's row.
 	function isTraceActive(traceId: string): boolean {
+		// Signal 3 — SSE stream ended (server saw the completion-log row).
+		if (streamEnded[traceId]) return false;
+
+		// Signal 1 — explicit terminal activity row.
 		const rows = activityByTrace[traceId] || [];
-		if (rows.length === 0) return true; // mentioned but no activity yet
 		const last = rows[rows.length - 1]?.action || '';
-		return !(last === 'completed' || last === 'failed');
+		if (last === 'completed' || last === 'failed') return false;
+
+		// Signal 2 — the worker emitted its final reply into the chat as a
+		// non-system message. The system "Agent dispatched" row uses the same
+		// trace_id but sender='system'; a follow-up from sender='cc' or 'agy'
+		// (or any non-system) with the same trace_id means the worker spoke.
+		for (const m of messages) {
+			if (m.trace_id !== traceId) continue;
+			if (m.sender === 'system' || m.sender === 'operator') continue;
+			// cc / agy / any worker sender = the worker's reply landed.
+			return false;
+		}
+
+		return true;
 	}
 
 	function tracesFromMessages(msgs: ChatMessage[]): string[] {
