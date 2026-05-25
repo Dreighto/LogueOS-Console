@@ -3,6 +3,11 @@ import type { RequestHandler } from './$types';
 import { getChatMessages, addChatMessage } from '$lib/server/chat';
 import { serverConfig } from '$lib/server/config';
 import { callHermes, chatRowsToHermesHistory } from '$lib/server/hermes';
+import {
+	callGeminiChat,
+	chatRowsToGeminiHistory,
+	generateGeminiImage
+} from '$lib/server/gemini';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -46,6 +51,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		// a separate thread_id. Default thread is 'default'.
 		const threadId: string =
 			(body && typeof body.thread === 'string' ? body.thread.trim() : '') || 'default';
+		// Image-generation mode. When true, the operator's message is treated
+		// as an image prompt instead of a chat message. Routes to
+		// gemini-2.5-flash-image via the Gemini API. Independent of the
+		// agent pill — though only AGY (Gemini-class) currently supports it.
+		const imageMode: boolean = body && body.image === true;
 
 		if (!message || !message.trim()) {
 			return json({ error: 'Message content is required.' }, { status: 400 });
@@ -97,14 +107,24 @@ export const POST: RequestHandler = async ({ request }) => {
 		// didn't match the whitelist. They'd rather pay a few cents per
 		// chitchat than memorize magic incantations.
 		//
-		// Three modes that don't fire a remote worker dispatch:
-		//   1. agentLock === 'silent' — chat note only, no agent fires.
-		//   2. agentLock === 'hermes' — handled in the Hermes branch below,
-		//      not the gateway-dispatch branch. Direct call to local Ollama.
-		//   3. sender === 'system' — system messages never re-dispatch.
+		// Modes that don't fire a remote worker dispatch via the gateway:
+		//   1. agentLock === 'silent' — chat note only.
+		//   2. agentLock === 'hermes' — direct call to local Ollama.
+		//   3. agentLock === 'agy' (chat mode default) — direct Gemini API.
+		//      Worker-mode AGY is reachable via the Build/Critique/Verify
+		//      action buttons (handled by /api/chat/workflow) — that path
+		//      still spawns the full Antigravity CLI worker.
+		//   4. imageMode === true — Gemini image generation, treated as a
+		//      worker-style reply.
+		//   5. sender === 'system' — system messages never re-dispatch.
 		const isHermes = explicitAgent === 'hermes';
+		const isAgyChat = explicitAgent === 'agy';
 		const shouldTrigger =
-			sender !== 'system' && explicitAgent !== 'silent' && !isHermes;
+			sender !== 'system' &&
+			explicitAgent !== 'silent' &&
+			!isHermes &&
+			!isAgyChat &&
+			!imageMode;
 
 		// Hermes branch — local Ollama, no worker spawn, ~1-3s round-trip.
 		// Skips the entire gateway/listener pipeline. Hermes has no file
@@ -139,6 +159,69 @@ export const POST: RequestHandler = async ({ request }) => {
 				addChatMessage(
 					'system',
 					`⚠️ **Hermes failed.** Local Ollama call errored: \`${msg.slice(0, 200)}\`. Check Ollama (\`ollama ps\`) and the qwen2.5:7b model.`,
+					null,
+					null,
+					null,
+					'sent',
+					threadId
+				);
+			}
+		}
+
+		// AGY chat branch — direct Gemini API. Skips the whole gateway/worker
+		// pipeline. Same thread slicing as Hermes; reply lands as sender='agy'.
+		// Workflow buttons (Build/Critique/Verify) still dispatch the heavy
+		// worker via /api/chat/workflow when the operator wants real
+		// file/code work.
+		if (isAgyChat && sender !== 'system' && !imageMode) {
+			try {
+				const allHistory = getChatMessages(30, threadId);
+				let lastResetIdx = -1;
+				for (let i = allHistory.length - 1; i >= 0; i--) {
+					if (
+						allHistory[i].sender === 'system' &&
+						allHistory[i].message.startsWith('--- NEW CONVERSATION ---')
+					) {
+						lastResetIdx = i;
+						break;
+					}
+				}
+				const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory).slice(
+					0,
+					-1
+				);
+				const history = chatRowsToGeminiHistory(slice);
+				const { reply } = await callGeminiChat(history, message.trim());
+				addChatMessage('agy', reply, null, null, null, 'sent', threadId);
+			} catch (err) {
+				console.error('Gemini chat call failed:', err);
+				const msg = err instanceof Error ? err.message : 'unknown error';
+				addChatMessage(
+					'system',
+					`⚠️ **AGY (Gemini API) failed.** \`${msg.slice(0, 200)}\`. Check GEMINI_API_KEY + your Google AI Studio quota.`,
+					null,
+					null,
+					null,
+					'sent',
+					threadId
+				);
+			}
+		}
+
+		// Image generation branch — uses gemini-2.5-flash-image regardless
+		// of which pill the operator has set. The composer's image-mode
+		// toggle is what flips this.
+		if (imageMode && sender !== 'system') {
+			try {
+				const { url } = await generateGeminiImage(message.trim());
+				const md = `![${message.trim().slice(0, 80) || 'generated image'}](${url})`;
+				addChatMessage('agy', md, null, null, null, 'sent', threadId);
+			} catch (err) {
+				console.error('Gemini image gen failed:', err);
+				const msg = err instanceof Error ? err.message : 'unknown error';
+				addChatMessage(
+					'system',
+					`⚠️ **Image generation failed.** \`${msg.slice(0, 300)}\`. Check GEMINI_API_KEY + that the gemini-2.5-flash-image model is available on your Google AI account.`,
 					null,
 					null,
 					null,

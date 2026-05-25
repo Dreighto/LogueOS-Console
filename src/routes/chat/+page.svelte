@@ -57,6 +57,11 @@
 	//                   free + fast (~1-3s), no file-system access, sounding board
 	//   'silent'      — chat note only, no worker spawns (notes / annotations)
 	let agentLock = $state<'auto' | 'claude-code' | 'agy' | 'hermes' | 'silent'>('auto');
+	// Image-generation mode. Toggle is a button next to the paperclip; when
+	// ON, the next send is treated as a Gemini image-gen prompt instead of
+	// a chat message. Stays sticky until the operator turns it off, so
+	// back-to-back image work doesn't need re-toggling.
+	let imageMode = $state(false);
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -451,7 +456,8 @@
 					sender: 'operator',
 					message: draft,
 					agent: agentLock,
-					thread: activeThread
+					thread: activeThread,
+					image: imageMode
 				})
 			});
 
@@ -1307,7 +1313,7 @@
 						{agentLock === 'agy'
 							? 'border-purple-400/40 bg-purple-400/10 text-purple-400'
 							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-					title="Lock all sends to Antigravity (Gemini-class)."
+					title="Talk to AGY (Gemini API) — fast chat-mode, no worker spawn. Use Build / Critique on a reply when you want the heavy worker."
 				>
 					AGY
 				</button>
@@ -1365,6 +1371,25 @@
 					<Paperclip size={16} />
 				{/if}
 			</button>
+			<!-- Image-generation toggle. When active, the next send is treated
+			     as a Gemini image prompt (gemini-2.5-flash-image). Sticky —
+			     stays on for back-to-back image work until the operator
+			     turns it off. Indicator: filled green background when ON. -->
+			<button
+				type="button"
+				onclick={() => (imageMode = !imageMode)}
+				aria-pressed={imageMode}
+				aria-label="Toggle image generation mode"
+				title={imageMode
+					? 'Image mode ON — next send generates an image via Gemini. Tap to turn off.'
+					: 'Turn on image generation. Next send becomes an image prompt (Gemini).'}
+				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border transition-colors active:scale-90
+					{imageMode
+						? 'border-status-green/40 bg-status-green/15 text-status-green'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-foreground/30'}"
+			>
+				<Sparkles size={16} />
+			</button>
 			<textarea
 				bind:value={textDraft}
 				bind:this={textareaEl}
@@ -1373,7 +1398,11 @@
 				ondrop={handleDrop}
 				ondragover={(e) => e.preventDefault()}
 				rows="1"
-				placeholder={uploading ? 'Uploading image...' : "Message your agents..."}
+				placeholder={uploading
+					? 'Uploading image...'
+					: imageMode
+						? 'Describe the image to generate...'
+						: 'Message your agents...'}
 				autocomplete="off"
 				autocapitalize="none"
 				spellcheck="false"
