@@ -89,6 +89,15 @@
 	let streamEnded = $state<Record<string, boolean>>({});
 	const streamSources = new Map<string, EventSource>();
 
+	// Stick-to-bottom scroll: chat threads should behave like iMessage/Slack —
+	// land at the bottom on first paint, auto-scroll on new messages ONLY if
+	// the operator is already near the bottom. If they've scrolled up to read
+	// history, show a "X new ↓" pill instead of yanking the viewport.
+	const SCROLL_NEAR_BOTTOM_PX = 80; // tolerance for "user is at bottom"
+	let userAtBottom = $state(true);
+	let unseenCount = $state(0);
+	let lastSeenMessageId = $state<number | null>(null);
+
 	// 1s message poll — the dominant chat-side latency between worker
 	// emit_chat_message landing in the DB and the operator seeing it.
 	// Dropping from 3s shaves up to 2s off every dispatch's perceived
@@ -141,15 +150,39 @@
 		return Array.from(set);
 	}
 
-	// Scroll the chat container to the absolute bottom.
+	// Scroll the chat container to the absolute bottom. Wraps in
+	// requestAnimationFrame so the call lands after layout/paint — on first
+	// mount, calling scrollTo before the messages render does nothing.
 	async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
 		await tick();
-		if (feedContainer) {
-			feedContainer.scrollTo({
-				top: feedContainer.scrollHeight,
-				behavior
-			});
+		if (!feedContainer) return;
+		const el = feedContainer;
+		requestAnimationFrame(() => {
+			el.scrollTo({ top: el.scrollHeight, behavior });
+		});
+	}
+
+	function recomputeAtBottom() {
+		if (!feedContainer) return;
+		const remaining = feedContainer.scrollHeight - feedContainer.scrollTop - feedContainer.clientHeight;
+		userAtBottom = remaining <= SCROLL_NEAR_BOTTOM_PX;
+		if (userAtBottom) {
+			unseenCount = 0;
+			if (messages.length > 0) {
+				lastSeenMessageId = messages[messages.length - 1].id;
+			}
 		}
+	}
+
+	function handleFeedScroll() {
+		recomputeAtBottom();
+	}
+
+	async function jumpToLatest() {
+		userAtBottom = true;
+		unseenCount = 0;
+		if (messages.length > 0) lastSeenMessageId = messages[messages.length - 1].id;
+		await scrollToBottom('smooth');
 	}
 
 	// Poll the API for new messages stateless and snappy
@@ -160,10 +193,25 @@
 			const body = await resp.json();
 			const newMessages: ChatMessage[] = body.messages || [];
 
-			// Only update state and scroll if there is a real difference in counts or content
-			if (newMessages.length !== messages.length || JSON.stringify(newMessages) !== JSON.stringify(messages)) {
-				messages = newMessages;
+			if (newMessages.length === messages.length && JSON.stringify(newMessages) === JSON.stringify(messages)) {
+				return;
+			}
+
+			const prevLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
+			messages = newMessages;
+
+			// Stick-to-bottom: only auto-scroll when the operator was already
+			// reading at the bottom. If they've scrolled up to read history,
+			// count new arrivals and let the "X new ↓" pill bring them back
+			// when they want.
+			if (userAtBottom) {
 				scrollToBottom('smooth');
+				if (newMessages.length > 0) {
+					lastSeenMessageId = newMessages[newMessages.length - 1].id;
+				}
+			} else {
+				const added = newMessages.filter((m) => prevLastId === null || m.id > prevLastId).length;
+				if (added > 0) unseenCount += added;
 			}
 		} catch {
 			// silent fallback
@@ -250,7 +298,16 @@
 	}
 
 	onMount(() => {
-		scrollToBottom('auto');
+		// First paint may not have measured the feed yet — defer to the next
+		// frame so scrollHeight reflects the rendered messages, then jump
+		// without animation. Snap-to-bottom feel like iMessage.
+		requestAnimationFrame(() => {
+			scrollToBottom('auto');
+			recomputeAtBottom();
+			if (messages.length > 0) {
+				lastSeenMessageId = messages[messages.length - 1].id;
+			}
+		});
 		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
 
 		// Activity ticker — separate cadence than messages so a running worker
@@ -319,10 +376,15 @@
 			}
 
 			const body = await resp.json();
-			// Snappy local append
+			// Snappy local append. The operator just sent — always pin them
+			// to the bottom so they see their own message + the incoming
+			// "Agent dispatched" follow-up.
 			messages = [...messages, body.message];
+			userAtBottom = true;
+			unseenCount = 0;
+			lastSeenMessageId = body.message?.id ?? lastSeenMessageId;
 			scrollToBottom('smooth');
-			
+
 			// Trigger immediate follow-up poll to fetch any auto-dispatched system notification
 			setTimeout(pollMessages, 500);
 		} catch (e: unknown) {
@@ -624,7 +686,11 @@
 	<title>Co-Working Chat — LogueOS</title>
 </svelte:head>
 
-<div class="flex flex-col h-[calc(100dvh-100px)] max-w-5xl mx-auto overflow-hidden">
+<!-- h-full flexes inside the parent <main flex-1>, which is the canonical
+     pattern (per mobile-chat-ux skill). Magic-number heights like
+     calc(100dvh-100px) break when iOS shrinks 100dvh on keyboard appearance,
+     pushing the composer below the visible area. -->
+<div class="flex flex-col h-full overflow-hidden -m-4">
 	<div class="shrink-0 flex items-start justify-between gap-2 px-2 pt-1">
 		<PageHeader
 			title="Co-Working Chat"
@@ -649,7 +715,8 @@
 	<!-- Main Chat Area (Scrollable Feed) -->
 	<div
 		bind:this={feedContainer}
-		class="flex-1 overflow-y-auto px-2 py-4 flex flex-col gap-4 custom-scrollbar"
+		onscroll={handleFeedScroll}
+		class="relative flex-1 overflow-y-auto px-2 py-4 flex flex-col gap-4 custom-scrollbar"
 	>
 		{#if messages.length === 0}
 			<div class="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded-lg bg-surface/10">
@@ -937,6 +1004,21 @@
 				{/each}
 			{/if}
 		</div>
+
+	<!-- "X new ↓" pill: appears when new messages arrive while the operator is
+	     scrolled up reading history. Tap to scroll to the bottom. Anchored
+	     above the composer; hidden when at bottom or no unseen messages. -->
+	{#if !userAtBottom && unseenCount > 0}
+		<button
+			type="button"
+			onclick={jumpToLatest}
+			class="self-center -mb-1 mt-0 flex items-center gap-1.5 rounded-full border border-cta/40 bg-cta/15 px-3 py-1 font-sans text-xs font-bold text-cta backdrop-blur-md shadow-lg transition-all duration-150 active:scale-95 hover:bg-cta/25 animate-fade-in"
+			aria-label="Jump to latest messages"
+		>
+			<span>{unseenCount} new</span>
+			<span aria-hidden="true">↓</span>
+		</button>
+	{/if}
 
 	<!-- Composer: single-row pill cluster + auto-grow textarea with inline
 	     attach + send icons + examples drawer. Replaces the old 3-row stack
