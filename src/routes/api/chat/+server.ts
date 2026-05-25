@@ -81,8 +81,23 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (shouldTrigger && sender !== 'system') {
 			// Trigger a background dispatch via the gateway!
-			// We format the prompt to include the last 10 messages of chat history so the worker has context.
-			const history = getChatMessages(10);
+			// Pull the last 30 messages, then trim to anything AFTER the most
+			// recent "--- NEW CONVERSATION ---" system marker so operator-initiated
+			// resets actually clear worker context (instead of leaking older
+			// threads into the new one).
+			const allHistory = getChatMessages(30);
+			const lastResetIdx = (() => {
+				for (let i = allHistory.length - 1; i >= 0; i--) {
+					if (
+						allHistory[i].sender === 'system' &&
+						allHistory[i].message.startsWith('--- NEW CONVERSATION ---')
+					) {
+						return i;
+					}
+				}
+				return -1;
+			})();
+			const history = lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory;
 			const historyContext = history
 				.map((m) => `[${m.sender} - ${m.timestamp}]: ${m.message}`)
 				.join('\n');

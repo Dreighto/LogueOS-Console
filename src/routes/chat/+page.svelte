@@ -17,7 +17,8 @@
 		HelpCircle,
 		BookOpen,
 		Edit3,
-		CheckCircle2
+		CheckCircle2,
+		Plus
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -382,6 +383,39 @@
 			void handleImageFiles(files);
 		}
 	}
+
+	// Drop a "--- NEW CONVERSATION ---" marker so future worker dispatches
+	// don't replay older context into a fresh thread. The server slices
+	// history after the most recent such marker before building prompts.
+	let resetting = $state(false);
+	async function handleNewConversation() {
+		if (resetting) return;
+		resetting = true;
+		try {
+			const resp = await fetch(resolve('/api/chat/reset'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({})
+			});
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${resp.status}`);
+			}
+			const body = await resp.json();
+			messages = [...messages, body.message];
+			scrollToBottom('smooth');
+			toasts.add('Started a new conversation. Older context cleared from worker dispatches.', 'success');
+		} catch (e: unknown) {
+			const msg = e instanceof Error ? e.message : 'Unknown error';
+			toasts.add(`Reset failed: ${msg}`, 'error');
+		} finally {
+			resetting = false;
+		}
+	}
+
+	function isResetMarker(m: ChatMessage): boolean {
+		return m.sender === 'system' && m.message.startsWith('--- NEW CONVERSATION ---');
+	}
 </script>
 
 <svelte:head>
@@ -389,11 +423,25 @@
 </svelte:head>
 
 <div class="flex flex-col h-[calc(100dvh-100px)] max-w-5xl mx-auto overflow-hidden">
-	<div class="shrink-0 px-2 pt-1">
+	<div class="shrink-0 flex items-start justify-between gap-2 px-2 pt-1">
 		<PageHeader
 			title="Co-Working Chat"
 			subtitle="Converse with CC or Antigravity and approve commands on the go."
 		/>
+		<button
+			type="button"
+			onclick={handleNewConversation}
+			disabled={resetting}
+			class="shrink-0 mt-1 flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground hover:bg-surface/80 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+			title="Start a new conversation. Older messages stay visible but won't be replayed as worker context."
+		>
+			{#if resetting}
+				<Loader2 size={10} class="animate-spin" />
+			{:else}
+				<Plus size={10} />
+			{/if}
+			<span>New conversation</span>
+		</button>
 	</div>
 
 	<!-- Main Chat Area (Scrollable Feed) -->
@@ -411,6 +459,18 @@
 			</div>
 		{:else}
 			{#each messages as m (m.id)}
+				{#if isResetMarker(m)}
+					<!-- Conversation boundary — dispatched workers after this point
+					     see no context from before. -->
+					<div class="flex items-center gap-2 my-1 animate-fade-in" aria-label="New conversation">
+						<div class="h-px flex-1 bg-border"></div>
+						<div class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+							<Plus size={10} />
+							<span>New conversation · {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+						</div>
+						<div class="h-px flex-1 bg-border"></div>
+					</div>
+				{:else}
 				<!-- Message Container -->
 				<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'} animate-fade-in">
 					
@@ -566,6 +626,7 @@
 							{/if}
 						{/if}
 					</div>
+				{/if}
 				{/each}
 			{/if}
 		</div>
