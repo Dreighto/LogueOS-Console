@@ -1034,11 +1034,15 @@
 									<span>streaming</span>
 								</span>
 							</div>
+							<!-- Plain pre-wrap text during streaming. The Markdown
+							     component re-parses + re-highlights on every state
+							     change; doing that for each rAF tick during a fast
+							     stream made the worker's reply feel choppy. The
+							     formatted version lands when the real chat_messages
+							     reply supersedes this synthetic bubble. -->
 							<div
-								class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed select-text text-foreground"
-							>
-								<Markdown content={buf} />
-							</div>
+								class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed select-text text-foreground whitespace-pre-wrap break-words"
+							>{buf}</div>
 						</div>
 					{/if}
 				{/if}
