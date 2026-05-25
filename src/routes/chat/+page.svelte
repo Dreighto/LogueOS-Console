@@ -2,7 +2,7 @@
 	import type { PageData } from './$types';
 	import type { ChatMessage } from '$lib/types/chat';
 	import { onMount, tick } from 'svelte';
-	import { resolve } from '$app/paths';
+	import { resolve, base } from '$app/paths';
 	import {
 		Send,
 		Terminal,
@@ -88,6 +88,48 @@
 	let streamByTrace = $state<Record<string, string>>({});
 	let streamEnded = $state<Record<string, boolean>>({});
 	const streamSources = new Map<string, EventSource>();
+
+	// requestAnimationFrame batching for streaming chunks. SSE chunks land
+	// 5-30× per second; rendering each one triggers a full marked.parse +
+	// DOMPurify pass on the entire accumulated buffer, plus a DOM diff for
+	// the streaming bubble. That CPU spike per chunk made the output feel
+	// choppy ("the worker is replying back during build mode is clunky").
+	//
+	// Fix: accumulate incoming chunks in a Map, schedule a single state
+	// update per animation frame (~16 ms = 60 fps). The Markdown component
+	// then re-renders at most once per frame regardless of chunk arrival
+	// rate, which matches what ChatGPT / Claude.ai do for streaming feel.
+	const pendingStreamChunks = new Map<string, string>();
+	let streamFlushScheduled = false;
+	function scheduleStreamFlush() {
+		if (streamFlushScheduled) return;
+		streamFlushScheduled = true;
+		requestAnimationFrame(() => {
+			streamFlushScheduled = false;
+			if (pendingStreamChunks.size === 0) return;
+			const updates: Record<string, string> = { ...streamByTrace };
+			for (const [traceId, chunk] of pendingStreamChunks) {
+				let next = (updates[traceId] || '');
+				next = next + (next.endsWith('\n') || next.length === 0 ? '' : '\n') + chunk;
+				if (next.length > STREAM_BUFFER_MAX) {
+					next = '...[truncated]...\n' + next.slice(next.length - STREAM_BUFFER_MAX);
+				}
+				updates[traceId] = next;
+			}
+			pendingStreamChunks.clear();
+			streamByTrace = updates;
+
+			// Auto-scroll the feed during streaming when the operator was
+			// already at the bottom. Without this the streaming bubble grows
+			// downward but the viewport stays put — you watch the text fall
+			// below the fold. Using 'auto' (instant) not 'smooth' because
+			// each frame already changes the content; a 200ms smooth animation
+			// per frame would visibly stutter and fight itself.
+			if (userAtBottom && feedContainer) {
+				feedContainer.scrollTop = feedContainer.scrollHeight;
+			}
+		});
+	}
 
 	// Stick-to-bottom scroll: chat threads should behave like iMessage/Slack —
 	// land at the bottom on first paint, auto-scroll on new messages ONLY if
@@ -259,18 +301,17 @@
 		for (const traceId of active) {
 			if (streamSources.has(traceId)) continue;
 			try {
-				const url = resolve('/api/chat/stream/' + encodeURIComponent(traceId));
+				const url = base + '/api/chat/stream/' + encodeURIComponent(traceId);
 				const es = new EventSource(url);
 				es.addEventListener('chunk', (ev) => {
 					const data = (ev as MessageEvent).data as string;
 					// Server formatted as one data: line per source line; the
-					// EventSource API rejoins them with \n. Append + clamp.
-					const prev = streamByTrace[traceId] || '';
-					let next = prev + (prev.endsWith('\n') || prev.length === 0 ? '' : '\n') + data;
-					if (next.length > STREAM_BUFFER_MAX) {
-						next = '...[truncated]...\n' + next.slice(next.length - STREAM_BUFFER_MAX);
-					}
-					streamByTrace = { ...streamByTrace, [traceId]: next };
+					// EventSource API rejoins them with \n. Queue into the
+					// per-trace pending bucket and schedule a single rAF flush.
+					const prev = pendingStreamChunks.get(traceId) || '';
+					const next = prev + (prev.endsWith('\n') || prev.length === 0 ? '' : '\n') + data;
+					pendingStreamChunks.set(traceId, next);
+					scheduleStreamFlush();
 				});
 				es.addEventListener('end', () => {
 					streamEnded = { ...streamEnded, [traceId]: true };
@@ -1138,7 +1179,6 @@
 				rows="1"
 				placeholder={uploading ? 'Uploading image...' : "Message your agents..."}
 				autocomplete="off"
-				autocorrect="off"
 				autocapitalize="none"
 				spellcheck="false"
 				class="flex-1 rounded-md border border-border bg-surface px-3 py-2 font-sans text-base text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none overflow-y-auto custom-scrollbar"
