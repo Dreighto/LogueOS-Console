@@ -21,6 +21,7 @@
 		Plus
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
+	import { formatShortTime } from '$lib/utils/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
 
@@ -535,7 +536,7 @@
 						<div class="h-px flex-1 bg-border"></div>
 						<div class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
 							<Plus size={10} />
-							<span>New conversation · {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+							<span>New conversation · {formatShortTime(m.timestamp)}</span>
 						</div>
 						<div class="h-px flex-1 bg-border"></div>
 					</div>
@@ -555,7 +556,7 @@
 							<span class={m.sender === 'agy' ? 'text-purple-400' : 'text-orange-400'}>{m.sender}</span>
 						{/if}
 						<span>·</span>
-						<span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+						<span>{formatShortTime(m.timestamp)}</span>
 					</div>
 
 					<!-- Speech Bubble -->

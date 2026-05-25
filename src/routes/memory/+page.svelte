@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import { Brain, Clock, Globe, ShieldCheck, Microscope, Info, Terminal } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { parseDbTimestamp } from '$lib/utils/format';
 
 	let { data }: PageProps = $props();
 
@@ -46,15 +47,14 @@
 
 	function formatDate(iso: string) {
 		if (!iso) return 'Unknown';
-		try {
-			return new Date(iso).toLocaleString();
-		} catch {
-			return iso;
-		}
+		const d = parseDbTimestamp(iso);
+		return d ? d.toLocaleString() : iso;
 	}
 
 	function formatRelativeTime(ts: string): string {
-		const diffMs = Date.now() - new Date(ts).getTime();
+		const parsed = parseDbTimestamp(ts);
+		if (!parsed) return '';
+		const diffMs = Date.now() - parsed.getTime();
 		const diffSec = Math.floor(diffMs / 1000);
 		const diffMin = Math.floor(diffSec / 60);
 		const diffHr = Math.floor(diffMin / 60);
@@ -63,7 +63,7 @@
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffHr < 24) return `${diffHr}h ago`;
 		if (diffDay === 1) {
-			const time = new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			const time = parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 			return `yesterday at ${time}`;
 		}
 		return `${diffDay} days ago`;

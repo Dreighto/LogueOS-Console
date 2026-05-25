@@ -198,11 +198,36 @@ export const GET: RequestHandler = async ({ params }) => {
 					return;
 				}
 
-				// Canonical completion signal: the worker's row in
-				// cc_completion_log.jsonl. Workers write this row right before
-				// they exit, so seeing it here means the trace is definitively
-				// done. Drain any final bytes, then close with the actual
-				// terminal status (CONFIRMED_WORKING etc.).
+				// Canonical completion signal #1: the per-trace ".done" marker
+				// file the dispatch_listener writes on worker_terminal (see
+				// spawn.js writeTraceDoneMarker). Fires for every dispatch
+				// regardless of ticket_id, so chat-dispatched workers (which
+				// don't write cc_completion_log rows) still surface as done.
+				try {
+					const doneMarker = path.join(
+						serverConfig.traceLogDir,
+						`${traceId}.done`
+					);
+					if (fs.existsSync(doneMarker)) {
+						let status = 'TERMINAL';
+						try {
+							const body = JSON.parse(fs.readFileSync(doneMarker, 'utf-8'));
+							if (body && typeof body.status === 'string') status = body.status;
+						} catch {
+							/* malformed marker — close anyway, status unknown */
+						}
+						tickReadStdout();
+						close(`completed:${status}`);
+						return;
+					}
+				} catch {
+					// stat/read error — fall through to other signals
+				}
+
+				// Canonical completion signal #2: the worker's row in
+				// cc_completion_log.jsonl. Used by ticket-tied dispatches that
+				// emit_completion themselves. Slower-path check (tail-scan of
+				// a larger file) so we keep it after the .done marker check.
 				const completionStatus = isTraceCompleted(
 					serverConfig.completionLogPath,
 					traceId

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ActivityEvent } from '$lib/types/activity';
-	import { formatFullDate } from '$lib/utils/format';
+	import { formatFullDate, parseDbTimestamp } from '$lib/utils/format';
 	import { resolveWorker } from '$lib/config/workers';
 	import {
 		Clock,
@@ -66,7 +66,8 @@
 
 	// Grouping logic
 	function getGroupLabel(ts: string): string {
-		const date = new Date(ts);
+		const date = parseDbTimestamp(ts);
+		if (!date) return 'Earlier';
 		const now = new Date();
 		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 		const yesterday = new Date(today);
@@ -120,7 +121,9 @@
 	}
 
 	function formatEventTime(ts: string): string {
-		const diffMs = Date.now() - new Date(ts).getTime();
+		const parsed = parseDbTimestamp(ts);
+		if (!parsed) return '';
+		const diffMs = Date.now() - parsed.getTime();
 		const diffSec = Math.floor(diffMs / 1000);
 		const diffMin = Math.floor(diffSec / 60);
 		const diffHr = Math.floor(diffMin / 60);
@@ -130,7 +133,7 @@
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffHr < 24) return `${diffHr}h ago`;
 		if (diffDay === 1) {
-			const time = new Date(ts).toLocaleTimeString('en-US', {
+			const time = parsed.toLocaleTimeString('en-US', {
 				hour: 'numeric',
 				minute: '2-digit',
 				hour12: true

@@ -123,7 +123,19 @@ ${historyContext}
 ---
 The operator's latest command is: "${message}"
 
-Please execute the request, make any necessary code/file modifications in your target repository (${targetRepo}), and write your response back to the chat using the 'emit_chat_message' script when completed. If you need approval for commands, run 'wait_for_approval.py'.
+Please execute the request, make any necessary code/file modifications in your target repository (${targetRepo}).
+
+REPLY PROTOCOL — write your final response back to the chat with this EXACT shape:
+
+  python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --message "<your response>"
+
+(use --sender agy instead of cc if you are Antigravity / a Gemini-class worker).
+
+The --trace_id flag is REQUIRED. Without it the chat UI cannot match your
+reply to this dispatch and will show "Working..." forever even after you
+finish. Always include it.
+
+If you need approval for commands, run 'wait_for_approval.py'.
 
 PROGRESS REPORTING — emit fine-grained activity between tool calls so the
 Operator can see what you're doing in the chat live. Call this between each
@@ -133,14 +145,18 @@ distinct step (reading a file, editing, running a command, finishing):
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action edited --target src/foo.svelte
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action ran --target "npm test"
   python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action thinking
-  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action completed
-  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "tests red"
 
-action vocab: reading | edited | ran | thinking | completed | failed.
-The script is fast (~30ms) — emit liberally. The chat polls every second
-for activity rows tied to your trace_id and renders each as a thin line
-under the dispatch bubble. Without these emits the operator sees a generic
-"Working..." spinner and nothing else until your final emit_chat_message.`;
+action vocab during work: reading | edited | ran | thinking.
+
+CLOSING PROTOCOL — REQUIRED. After your final emit_chat_message above, ALWAYS
+emit ONE terminal activity row so the chat tab knows you're done:
+
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action completed
+  # OR if the task ended badly:
+  python tools/emit_chat_activity.py --trace-id "$LOGUEOS_TRACE_ID" --action failed --target "<brief reason>"
+
+Without this terminal emit the streaming bubble never closes. Treat it as
+non-optional. The script is fast (~30ms).`;
 
 			try {
 				const response = await fetchWithTimeout(

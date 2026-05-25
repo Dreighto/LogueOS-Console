@@ -1,5 +1,29 @@
 import { resolveWorkerFromTrace } from '$lib/config/workers';
 
+// Parse a timestamp string from the kernel data sources (SQLite, JSONL logs).
+//
+// SQLite's CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" in UTC, with no
+// timezone marker. JavaScript's `new Date(str)` parses ISO-formatted strings
+// in local time when no zone is given, so "2026-05-25 18:37:09" coming out
+// of SQLite gets interpreted as 6:37 PM local — but it's really 6:37 PM UTC
+// (= 11:37 AM Pacific). Result: every chat / activity / memory timestamp
+// renders 7-8 hours off for any operator outside UTC.
+//
+// Fix: detect the SQLite shape (no T, no Z, no offset) and append 'Z' so
+// JS parses it as UTC. Then toLocaleString / toLocaleTimeString uses the
+// operator's actual locale to render. JSONL chains and ISO strings already
+// carry a zone marker so they pass through untouched.
+export function parseDbTimestamp(timestamp: string | null | undefined): Date | null {
+	if (!timestamp) return null;
+	const s = String(timestamp).trim();
+	// Shape detection: ISO date present, but no zone marker means SQLite-UTC.
+	const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(s);
+	const looksDatey = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s);
+	const normalized = looksDatey && !hasZone ? s.replace(' ', 'T') + 'Z' : s;
+	const d = new Date(normalized);
+	return isNaN(d.getTime()) ? null : d;
+}
+
 export function formatDuration(ms: number | null | undefined): string {
 	if (ms === null || ms === undefined) return '';
 	if (ms < 1000) return `${ms}ms`;
@@ -10,9 +34,8 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 export function formatRelativeTime(timestamp: string): string {
-	if (!timestamp) return '—';
-	const date = new Date(timestamp);
-	if (isNaN(date.getTime())) return '—';
+	const date = parseDbTimestamp(timestamp);
+	if (!date) return '—';
 
 	const now = new Date();
 	const diffMs = now.getTime() - date.getTime();
@@ -45,9 +68,8 @@ export function deriveWorkerFromTraceId(traceId: string | null | undefined): str
 }
 
 export function formatFullDate(timestamp: string): string {
-	if (!timestamp) return '—';
-	const date = new Date(timestamp);
-	if (isNaN(date.getTime())) return 'Invalid Date';
+	const date = parseDbTimestamp(timestamp);
+	if (!date) return '—';
 	return date.toLocaleString('en-US', {
 		year: 'numeric',
 		month: 'short',
@@ -57,4 +79,11 @@ export function formatFullDate(timestamp: string): string {
 		second: '2-digit',
 		timeZoneName: 'short'
 	});
+}
+
+// Short HH:MM time, locale-aware. Used in chat bubbles + activity rows.
+export function formatShortTime(timestamp: string): string {
+	const date = parseDbTimestamp(timestamp);
+	if (!date) return '';
+	return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
