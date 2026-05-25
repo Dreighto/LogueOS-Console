@@ -171,10 +171,40 @@ under the dispatch bubble. Without these emits the operator sees a generic
 						ticket_id || null
 					);
 				} else {
-					console.error('Dispatch failed in chat POST:', await response.text());
+					// Surface dispatch failures into the chat so the operator
+					// isn't waiting on a worker that never started. The console
+					// log keeps the full payload; the chat gets a one-line
+					// summary with the status code + a sanitized reason.
+					const text = await response.text();
+					console.error('Dispatch failed in chat POST:', text);
+					let reason = `HTTP ${response.status}`;
+					try {
+						const parsed = JSON.parse(text);
+						const inner = parsed?.error;
+						if (typeof inner === 'string') {
+							reason = inner;
+						} else if (inner && typeof inner === 'object') {
+							reason = inner.error || JSON.stringify(inner);
+						}
+					} catch {
+						// keep the HTTP-status fallback
+					}
+					addChatMessage(
+						'system',
+						`⚠️ **Dispatch failed.** ${worker === 'auto' ? 'Role-routed worker' : worker} could not be spawned on **${targetRepo}**. Reason: \`${reason}\`. Check the dispatch_listener logs (\`journalctl -u logueos-dispatch-listener\`) for details, then retry.`,
+						null,
+						ticket_id || null
+					);
 				}
 			} catch (err) {
 				console.error('Auto-dispatch error in chat:', err);
+				const msg = err instanceof Error ? err.message : String(err);
+				addChatMessage(
+					'system',
+					`⚠️ **Dispatch errored before reaching the listener.** Could not reach the gateway: \`${msg.slice(0, 200)}\`. Check the gateway is running (\`systemctl status logueos-mcp-gateway\`).`,
+					null,
+					ticket_id || null
+				);
 			}
 		}
 
