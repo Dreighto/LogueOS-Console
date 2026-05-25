@@ -118,6 +118,21 @@ ${history}
 
 	const replyProtocolFooter = `
 
+LEARNING — if you discover a non-obvious pattern, constraint, gotcha,
+or repeatable lesson, emit an observation BEFORE your final message:
+
+  python tools/emit_chat_observation.py \\
+    --project-id ${targetRepo} \\
+    --kind what-worked \\
+    --text "<1-3 sentence statement of action + outcome>" \\
+    --task-shape '["streaming","layout"]'
+
+--kind values: what-worked | what-didnt-work | surprise | routing-correction
+(aliases: lesson → what-worked, failure → what-didnt-work).
+
+Not for trivial work. Only when the next worker doing similar work would
+benefit. Keep observations concise — 1-3 sentences, action-oriented.
+
 REPLY PROTOCOL — write your final response back to the chat with this EXACT shape:
 
   python tools/emit_chat_message.py --sender cc --trace_id "$LOGUEOS_TRACE_ID" --thread "${source.thread_id || 'default'}" --message "<your response>"
