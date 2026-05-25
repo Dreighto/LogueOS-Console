@@ -43,6 +43,14 @@
 	};
 	let activityByTrace = $state<Record<string, Activity[]>>({});
 
+	// Live worker stdout stream (per-trace). EventSource subscribers append
+	// chunks here; the UI renders a tailing pane under each active worker
+	// bubble. Capped client-side at ~64 KB to keep DOM nodes manageable.
+	const STREAM_BUFFER_MAX = 64 * 1024;
+	let streamByTrace = $state<Record<string, string>>({});
+	let streamEnded = $state<Record<string, boolean>>({});
+	const streamSources = new Map<string, EventSource>();
+
 	const POLL_INTERVAL_MS = 3000;
 	// Faster cadence while at least one trace is in flight (worker is doing
 	// something we want to render quickly). Falls back to baseline when idle.
@@ -126,6 +134,55 @@
 		return tracesFromMessages(messages).some(isTraceActive);
 	}
 
+	// Open an EventSource for each active trace; close any whose trace has
+	// completed/failed since last tick. Idempotent — safe to call from the
+	// poll loop. The browser's EventSource auto-reconnects on transient drop.
+	function syncStreamSubscriptions() {
+		const traces = tracesFromMessages(messages);
+		const active = new Set(traces.filter(isTraceActive));
+
+		// Open for newly-active traces.
+		for (const traceId of active) {
+			if (streamSources.has(traceId)) continue;
+			try {
+				const url = resolve('/api/chat/stream/' + encodeURIComponent(traceId));
+				const es = new EventSource(url);
+				es.addEventListener('chunk', (ev) => {
+					const data = (ev as MessageEvent).data as string;
+					// Server formatted as one data: line per source line; the
+					// EventSource API rejoins them with \n. Append + clamp.
+					const prev = streamByTrace[traceId] || '';
+					let next = prev + (prev.endsWith('\n') || prev.length === 0 ? '' : '\n') + data;
+					if (next.length > STREAM_BUFFER_MAX) {
+						next = '...[truncated]...\n' + next.slice(next.length - STREAM_BUFFER_MAX);
+					}
+					streamByTrace = { ...streamByTrace, [traceId]: next };
+				});
+				es.addEventListener('end', () => {
+					streamEnded = { ...streamEnded, [traceId]: true };
+					es.close();
+					streamSources.delete(traceId);
+				});
+				es.addEventListener('error', () => {
+					// EventSource will auto-retry on transient errors. If the
+					// connection ultimately closes, the 'end' handler does the
+					// cleanup. Nothing to do here for transient drops.
+				});
+				streamSources.set(traceId, es);
+			} catch (e) {
+				console.error('failed to open stream for', traceId, e);
+			}
+		}
+
+		// Close streams for traces no longer active.
+		for (const [traceId, es] of streamSources.entries()) {
+			if (!active.has(traceId)) {
+				es.close();
+				streamSources.delete(traceId);
+			}
+		}
+	}
+
 	onMount(() => {
 		scrollToBottom('auto');
 		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
@@ -133,24 +190,29 @@
 		// Activity ticker — separate cadence than messages so a running worker
 		// can paint progress without forcing the heavier message poll to speed
 		// up too. setTimeout chain lets us adapt cadence based on whether any
-		// trace is currently active.
+		// trace is currently active. Each tick also re-syncs stream subscriptions.
 		let activityTimer: ReturnType<typeof setTimeout> | null = null;
 		const scheduleActivity = () => {
 			if (activityTimer !== null) clearTimeout(activityTimer);
 			const next = anyTraceActive() ? ACTIVITY_POLL_FAST_MS : ACTIVITY_POLL_IDLE_MS;
 			activityTimer = setTimeout(async () => {
 				await pollActivity();
+				syncStreamSubscriptions();
 				scheduleActivity();
 			}, next);
 		};
 		// Kick off the first activity fetch immediately, then schedule.
-		void pollActivity().then(scheduleActivity);
+		void pollActivity().then(() => {
+			syncStreamSubscriptions();
+			scheduleActivity();
+		});
 
 		// Re-fetch instantly when screen returns to focus
 		const onVisibility = () => {
 			if (document.visibilityState === 'visible') {
 				pollMessages();
 				void pollActivity();
+				syncStreamSubscriptions();
 			}
 		};
 		document.addEventListener('visibilitychange', onVisibility);
@@ -159,6 +221,11 @@
 			clearInterval(interval);
 			if (activityTimer !== null) clearTimeout(activityTimer);
 			document.removeEventListener('visibilitychange', onVisibility);
+			// Close every open SSE on unmount.
+			for (const es of streamSources.values()) {
+				try { es.close(); } catch { /* noop */ }
+			}
+			streamSources.clear();
 		};
 	});
 
@@ -478,6 +545,24 @@
 										</div>
 									{/if}
 								</div>
+							{/if}
+
+							<!-- Live worker stdout — collapsed by default; expand to see what
+							     the worker is actually saying as it works. -->
+							{#if streamByTrace[m.trace_id]}
+								{@const buf = streamByTrace[m.trace_id]}
+								{@const ended = streamEnded[m.trace_id]}
+								<details class="mt-1 w-full max-w-[85%] {m.sender === 'operator' ? 'self-end' : 'self-start'}">
+									<summary
+										class="cursor-pointer select-none font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+									>
+										<Terminal size={10} />
+										<span>Worker output ({buf.length.toLocaleString()} chars{ended ? ', ended' : ', live'})</span>
+									</summary>
+									<pre
+										class="mt-1 max-h-48 overflow-y-auto overflow-x-auto rounded border border-border/60 bg-background/70 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-all custom-scrollbar"
+									>{buf}</pre>
+								</details>
 							{/if}
 						{/if}
 					</div>

@@ -84,6 +84,14 @@ export const serverConfig = {
 		'LOGUEOS_CHAT_UPLOADS_DIR',
 		'/home/dreighto/dev/LogueOS-Orchestrator/data/chat_uploads'
 	),
+	// dispatch_listener writes worker stdout/stderr to
+	// <traceLogDir>/<trace_id>.stdout.log and .stderr.log (spawn.js:691). The
+	// chat tab tails these via SSE so the operator sees in-flight worker
+	// output as it lands, not just the final emit_chat_message.
+	traceLogDir: getEnv(
+		'LOGUEOS_TRACE_LOG_DIR',
+		'/home/dreighto/dev/LogueOS-Orchestrator/logs/dispatch_listener_traces'
+	),
 	adoptedLessonsPath: getEnv(
 		'LOGUEOS_ADOPTED_LESSONS_PATH',
 		'D:\\dev\\LogueOS-Orchestrator\\.logueos\\overlays\\adopted-lessons.md'
