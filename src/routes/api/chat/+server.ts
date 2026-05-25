@@ -78,20 +78,39 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Heuristic 3: Should this message actually fire a worker dispatch?
-		// Trigger if: operator explicitly picked an agent via the pill, or
-		// @-mentioned one, or used a verb that smells like a request.
+		// In Auto mode (no explicit agent locked), we trigger on a generous
+		// set of signals so casual operator phrasing reliably gets a reply
+		// without forcing them to type magic verbs. The rare false-positive
+		// (firing a worker on a non-request comment) is much cheaper than
+		// the silent no-response bug operators kept hitting.
+		//
+		//   - Any @-mention (@cc, @agy, @gemini)
+		//   - Any '?' anywhere in the message — questions ARE requests
+		//   - Action verb (broadened from the original 6 to ~30)
+		//   - Message starts with a question word (what/where/why/how/...)
+		const ACTION_VERBS = [
+			'run ', 'fix ', 'verify ', 'build ', 'deploy ', 'check ',
+			'do ', 'make ', 'add ', 'remove ', 'delete ', 'update ',
+			'refactor ', 'audit ', 'review ', 'analyze ', 'analyse ',
+			'investigate ', 'explain ', 'find ', 'search ', 'list ',
+			'show ', 'tell ', 'help ', 'test ', 'try ', 'create ',
+			'write ', 'generate ', 'propose ', 'suggest ', 'summarize ',
+			'summarise ', 'compare ', 'triage ', 'figure out ',
+			'look at ', 'look into ',
+			'start ', 'stop ', 'restart ', 'kill ', 'clean ',
+			'pull ', 'push ', 'merge ', 'commit '
+		];
+		const QUESTION_START = /^(what|where|why|how|who|when|which|whose|whom|can|could|should|would|is|are|was|were|does|do|did|will|won't|don't|isn't|aren't|am|has|have|had)\b/i;
+
 		const shouldTrigger =
 			explicitAgent === 'claude-code' ||
 			explicitAgent === 'agy' ||
 			text.includes('@cc') ||
 			text.includes('@agy') ||
 			text.includes('@gemini') ||
-			text.includes('run ') ||
-			text.includes('fix ') ||
-			text.includes('verify ') ||
-			text.includes('build ') ||
-			text.includes('deploy ') ||
-			text.includes('check ');
+			text.includes('?') ||
+			ACTION_VERBS.some((v) => text.includes(v)) ||
+			QUESTION_START.test(text);
 
 		if (shouldTrigger && sender !== 'system') {
 			// Trigger a background dispatch via the gateway!
@@ -228,13 +247,16 @@ non-optional. The script is fast (~30ms).`;
 				);
 			}
 		} else if (sender !== 'system') {
-			// Auto mode + the operator's message didn't match any trigger word
-			// and no agent pill was locked. Give them immediate feedback so the
-			// chat doesn't just sit there silently — otherwise it looks like
-			// "Auto takes forever" when actually nothing's running.
+			// Auto mode + the operator's message didn't match any trigger and
+			// no agent pill was locked. Almost any natural phrasing should
+			// have triggered (the trigger list is intentionally broad now —
+			// any '?', any action verb, any question-word start, any
+			// @-mention). If we're STILL here, the message was probably a
+			// bare statement like "ok" or "thanks". Surface that explicitly
+			// so the chat never just goes silent.
 			addChatMessage(
 				'system',
-				`💬 No agent dispatched. Auto mode needs an @-mention (\`@cc\`, \`@agy\`) or an action verb (\`fix\`, \`run\`, \`check\`, \`build\`, \`deploy\`, \`verify\`). Pick the **CC** or **AGY** pill above to send every message to a specific worker instead.`
+				`💬 No agent dispatched. That message didn't look like a request — Auto fires on questions (\`?\`), action verbs, or @-mentions. Tap the **CC** or **AGY** pill above to lock every send to a specific worker, or end with a \`?\`.`
 			);
 		}
 
