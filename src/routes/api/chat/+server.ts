@@ -227,6 +227,15 @@ non-optional. The script is fast (~30ms).`;
 					ticket_id || null
 				);
 			}
+		} else if (sender !== 'system') {
+			// Auto mode + the operator's message didn't match any trigger word
+			// and no agent pill was locked. Give them immediate feedback so the
+			// chat doesn't just sit there silently — otherwise it looks like
+			// "Auto takes forever" when actually nothing's running.
+			addChatMessage(
+				'system',
+				`💬 No agent dispatched. Auto mode needs an @-mention (\`@cc\`, \`@agy\`) or an action verb (\`fix\`, \`run\`, \`check\`, \`build\`, \`deploy\`, \`verify\`). Pick the **CC** or **AGY** pill above to send every message to a specific worker instead.`
+			);
 		}
 
 		return json({ message: chatMsg });
