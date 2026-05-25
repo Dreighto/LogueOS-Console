@@ -18,7 +18,18 @@ const GEMINI_API_KEY =
 	process.env.GOOGLE_API_KEY ||
 	'';
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_CHAT_MODEL = process.env.LOGUEOS_GEMINI_CHAT_MODEL || 'gemini-2.5-flash';
+// Chat-mode default = flash-lite (cheapest + fastest Gemini variant).
+// Operator chose this explicitly: chat-style brainstorming should burn
+// near-zero tokens; heavy reasoning escalates via the Build / Critique /
+// Verify action buttons which dispatch the full worker (different
+// billing path). Override via LOGUEOS_GEMINI_CHAT_MODEL if a specific
+// conversation genuinely needs flash or pro.
+//
+// Approximate pricing (per 1M tokens, Google AI Studio, 2026):
+//   flash-lite  $0.10 in / $0.40 out  ← current default
+//   flash       $0.30 in / $2.50 out
+//   pro         $1.25 in / $10.00 out
+const GEMINI_CHAT_MODEL = process.env.LOGUEOS_GEMINI_CHAT_MODEL || 'gemini-2.5-flash-lite';
 const GEMINI_IMAGE_MODEL =
 	process.env.LOGUEOS_GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 
