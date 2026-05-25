@@ -13,7 +13,8 @@
 		User,
 		Zap,
 		ShieldAlert,
-		AlertTriangle
+		AlertTriangle,
+		Search
 	} from 'lucide-svelte';
 	import { slide } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
@@ -27,6 +28,7 @@
 
 	// Filter state
 	let currentFilter = $state<'all' | 'needs-attention' | 'finished'>('all');
+	let searchQuery = $state('');
 
 	// Expanded events tracking
 	let expandedEvents = $state(new Set<string>());
@@ -43,14 +45,23 @@
 
 	// Filter logic
 	const filteredEvents = $derived(() => {
-		if (currentFilter === 'all') return events;
+		let result = events;
 		if (currentFilter === 'needs-attention') {
-			return events.filter((e) => e.level === 'error' || e.level === 'warning');
+			result = result.filter((e) => e.level === 'error' || e.level === 'warning');
+		} else if (currentFilter === 'finished') {
+			result = result.filter((e) => e.msg === 'worker_exit' && e.level === 'success');
 		}
-		if (currentFilter === 'finished') {
-			return events.filter((e) => e.msg === 'worker_exit' && e.level === 'success');
+
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			result = result.filter((e) => 
+				(e.worker?.toLowerCase() || '').includes(query) ||
+				(e.ticket_id?.toLowerCase() || '').includes(query) ||
+				(e.trace_id?.toLowerCase() || '').includes(query) ||
+				(e.summary?.toLowerCase() || '').includes(query)
+			);
 		}
-		return events;
+		return result;
 	});
 
 	// Grouping logic
@@ -131,8 +142,9 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	<!-- Filter Chips -->
-	<div class="flex w-fit gap-2 rounded-lg border border-border bg-background p-1">
+	<!-- Filter Chips & Search -->
+	<div class="flex flex-wrap items-center justify-between gap-3">
+		<div class="flex w-fit gap-2 rounded-lg border border-border bg-background p-1">
 		<button
 			class="active-trigger rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter === 'all'
 				? 'border border-border bg-muted text-foreground'
@@ -159,6 +171,17 @@
 		>
 			Finished
 		</button>
+		</div>
+
+		<div class="flex w-full sm:max-w-xs items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 focus-within:border-status-blue/50 focus-within:ring-1 focus-within:ring-status-blue/50 transition-all">
+			<Search size={14} class="text-muted-foreground" />
+			<input 
+				type="text" 
+				placeholder="Filter trace, ticket, or worker..." 
+				class="w-full bg-transparent text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none"
+				bind:value={searchQuery}
+			/>
+		</div>
 	</div>
 
 	<div class="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">

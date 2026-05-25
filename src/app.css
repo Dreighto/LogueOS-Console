@@ -4,8 +4,8 @@
 	--font-sans: 'Mona Sans', ui-sans-serif, system-ui, sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-	--color-background: #0d1117;
-	--color-surface: #161b22;
+	--color-background: #050505;
+	--color-surface: #111111;
 	--color-cta: #a3e635;
 
 	--color-status-green: #22c55e;
@@ -25,20 +25,20 @@
 	--color-primary: #a3e635;
 	--color-primary-foreground: #0d1117;
 
-	--color-secondary: #21262d;
+	--color-secondary: #18181b;
 	--color-secondary-foreground: #ffffff;
 
-	--color-muted: #21262d;
+	--color-muted: #18181b;
 	--color-muted-foreground: #8b949e;
 
-	--color-accent: #21262d;
+	--color-accent: #18181b;
 	--color-accent-foreground: #ffffff;
 
 	--color-destructive: #f85149;
 	--color-destructive-foreground: #ffffff;
 
-	--color-border: #30363d;
-	--color-input: #30363d;
+	--color-border: #27272a;
+	--color-input: #27272a;
 	--color-ring: #a3e635;
 
 	/* Tailwind 4 utility-class tokens — these must live in @theme (not just
@@ -47,32 +47,32 @@
      kept for any components that read CSS vars directly; these @theme
      entries are what generates the actual utility classes. */
 	--color-foreground: #ffffff;
-	--color-card: #161b22;
+	--color-card: #111111;
 	--color-card-foreground: #ffffff;
-	--color-popover: #161b22;
+	--color-popover: #111111;
 	--color-popover-foreground: #ffffff;
 }
 
 @layer base {
 	:root {
-		--background: #0d1117;
+		--background: #050505;
 		--foreground: #ffffff;
-		--card: #161b22;
+		--card: #111111;
 		--card-foreground: #ffffff;
-		--popover: #161b22;
+		--popover: #111111;
 		--popover-foreground: #ffffff;
 		--primary: #a3e635;
-		--primary-foreground: #0d1117;
-		--secondary: #21262d;
+		--primary-foreground: #050505;
+		--secondary: #18181b;
 		--secondary-foreground: #ffffff;
-		--muted: #21262d;
+		--muted: #18181b;
 		--muted-foreground: #8b949e;
-		--accent: #21262d;
+		--accent: #18181b;
 		--accent-foreground: #ffffff;
 		--destructive: #f85149;
 		--destructive-foreground: #ffffff;
-		--border: #30363d;
-		--input: #30363d;
+		--border: #27272a;
+		--input: #27272a;
 		--ring: #a3e635;
 		--radius: 0.5rem;
 	}
@@ -87,7 +87,8 @@
 		-webkit-tap-highlight-color: transparent;
 	}
 	body {
-		@apply bg-background font-sans text-foreground;
+		@apply bg-background font-sans text-foreground antialiased;
+		letter-spacing: -0.01em;
 		font-feature-settings:
 			'rlig' 1,
 			'calt' 1;

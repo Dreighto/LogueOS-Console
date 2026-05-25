@@ -1,0 +1,373 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+	import type { ChatMessage } from '$lib/types/chat';
+	import { onMount, tick } from 'svelte';
+	import { resolve } from '$app/paths';
+	import {
+		Send,
+		Terminal,
+		User,
+		Cpu,
+		AlertTriangle,
+		Check,
+		X,
+		Loader2,
+		MessageSquare,
+		Play,
+		HelpCircle
+	} from 'lucide-svelte';
+	import { toasts } from '$lib/utils/toasts';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	// Active chat state seeded from SSR to ensure zero flicker on load.
+	let messages = $state<ChatMessage[]>(data.messages || []);
+	let textDraft = $state('');
+	let sending = $state(false);
+	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
+	let feedContainer = $state<HTMLDivElement | null>(null);
+
+	const POLL_INTERVAL_MS = 3000;
+
+	// Scroll the chat container to the absolute bottom.
+	async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+		await tick();
+		if (feedContainer) {
+			feedContainer.scrollTo({
+				top: feedContainer.scrollHeight,
+				behavior
+			});
+		}
+	}
+
+	// Poll the API for new messages stateless and snappy
+	async function pollMessages() {
+		try {
+			const resp = await fetch(resolve('/api/chat'));
+			if (!resp.ok) return;
+			const body = await resp.json();
+			const newMessages: ChatMessage[] = body.messages || [];
+
+			// Only update state and scroll if there is a real difference in counts or content
+			if (newMessages.length !== messages.length || JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+				messages = newMessages;
+				scrollToBottom('smooth');
+			}
+		} catch {
+			// silent fallback
+		}
+	}
+
+	onMount(() => {
+		scrollToBottom('auto');
+		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
+
+		// Re-fetch instantly when screen returns to focus
+		const onVisibility = () => {
+			if (document.visibilityState === 'visible') {
+				pollMessages();
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibility);
+
+		return () => {
+			clearInterval(interval);
+			document.removeEventListener('visibilitychange', onVisibility);
+		};
+	});
+
+	// Submit a new operator message
+	async function handleSendMessage() {
+		if (!textDraft.trim() || sending) return;
+		const draft = textDraft.trim();
+		textDraft = '';
+		sending = true;
+
+		try {
+			const resp = await fetch(resolve('/api/chat'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					sender: 'operator',
+					message: draft
+				})
+			});
+
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${resp.status}`);
+			}
+
+			const body = await resp.json();
+			// Snappy local append
+			messages = [...messages, body.message];
+			scrollToBottom('smooth');
+			
+			// Trigger immediate follow-up poll to fetch any auto-dispatched system notification
+			setTimeout(pollMessages, 500);
+		} catch (e: unknown) {
+			const msg = e instanceof Error ? e.message : 'Unknown error';
+			toasts.add(`Failed to send: ${msg}`, 'error');
+			textDraft = draft; // restore draft on error
+		} finally {
+			sending = false;
+		}
+	}
+
+	// Operator approves or denies a terminal command card
+	async function handleAction(messageId: number, status: 'approved' | 'denied') {
+		if (actionSubmitting !== null) return;
+		actionSubmitting = messageId;
+
+		try {
+			const resp = await fetch(resolve('/api/chat/approve'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					message_id: messageId,
+					status
+				})
+			});
+
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				throw new Error(err.error || `HTTP ${resp.status}`);
+			}
+
+			toasts.add(`Command ${status === 'approved' ? 'approved' : 'denied'} successfully.`, 'success');
+			
+			// Snappy local update
+			messages = messages.map((m) => {
+				if (m.id === messageId) {
+					const updatedAction = m.interactive_action ? { ...m.interactive_action, status } : null;
+					return { ...m, status, interactive_action: updatedAction };
+				}
+				return m;
+			});
+
+			// Instantly poll to fetch the resulting system message logging the decision
+			setTimeout(pollMessages, 400);
+		} catch (e: unknown) {
+			const msg = e instanceof Error ? e.message : 'Unknown error';
+			toasts.add(`Action failed: ${msg}`, 'error');
+		} finally {
+			actionSubmitting = null;
+		}
+	}
+
+	function handleKeyPress(e: KeyboardEvent) {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			handleSendMessage();
+		}
+	}
+</script>
+
+<svelte:head>
+	<title>Co-Working Chat — LogueOS</title>
+</svelte:head>
+
+<div class="flex flex-col h-[calc(100dvh-100px)] max-w-5xl mx-auto overflow-hidden">
+	<div class="shrink-0 px-2 pt-1">
+		<PageHeader
+			title="Co-Working Chat"
+			subtitle="Converse with CC or Antigravity and approve commands on the go."
+		/>
+	</div>
+
+	<!-- Main Chat Area (Scrollable Feed) -->
+	<div
+		bind:this={feedContainer}
+		class="flex-1 overflow-y-auto px-2 py-4 flex flex-col gap-4 custom-scrollbar"
+	>
+		{#if messages.length === 0}
+			<div class="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded-lg bg-surface/10">
+				<MessageSquare size={36} class="text-muted-foreground mb-3 opacity-60" />
+				<h3 class="font-sans text-sm font-bold text-foreground">No Chat History</h3>
+				<p class="font-sans text-xs text-muted-foreground max-w-xs mt-1">
+					Type your first request below to ping GMI or CC. Mentions like <code class="text-cta">@agy</code> or <code class="text-cta">@cc</code> will automatically boot them up!
+				</p>
+			</div>
+		{:else}
+			{#each messages as m (m.id)}
+				<!-- Message Container -->
+				<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'} animate-fade-in">
+					
+					<!-- Metadata strip -->
+					<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase text-muted-foreground">
+						{#if m.sender === 'operator'}
+							<span>Operator</span>
+							<User size={10} />
+						{:else if m.sender === 'system'}
+							<span class="text-status-blue">System</span>
+						{:else}
+							<Cpu size={10} class={m.sender === 'agy' ? 'text-purple-400' : 'text-orange-400'} />
+							<span class={m.sender === 'agy' ? 'text-purple-400' : 'text-orange-400'}>{m.sender}</span>
+						{/if}
+						<span>·</span>
+						<span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+					</div>
+
+					<!-- Speech Bubble -->
+					<div
+						class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed whitespace-pre-wrap select-text
+							{m.sender === 'operator' 
+								? 'bg-cta/15 border border-cta/30 text-white rounded-tr-none' 
+								: m.sender === 'system' 
+									? 'bg-surface/50 border border-border/50 text-muted-foreground w-full max-w-none text-center font-mono text-xs py-1.5' 
+									: 'bg-surface border border-border text-foreground rounded-tl-none'}"
+					>
+						{m.message}
+
+						<!-- Render interactive action cards if present -->
+						{#if m.interactive_action}
+							<div class="mt-3 rounded border border-border/80 bg-background/80 p-3 flex flex-col gap-2 font-mono text-xs">
+								<div class="flex items-center gap-1.5 text-status-amber border-b border-border/50 pb-1.5 uppercase font-bold text-[10px] tracking-wider">
+									<Terminal size={12} />
+									<span>Interactive Command Request</span>
+								</div>
+
+								<div class="text-[11px] text-muted-foreground">
+									Reason: <span class="text-foreground italic">{m.interactive_action.reason}</span>
+								</div>
+
+								<div class="bg-surface/60 border border-border/40 p-2 rounded text-[11px] text-green-400 break-all select-all font-mono leading-tight">
+									$ {m.interactive_action.command}
+								</div>
+
+								<!-- Card Actions -->
+								<div class="flex items-center gap-2 mt-2 w-full">
+									{#if m.interactive_action.status === 'pending'}
+										<button
+											type="button"
+											onclick={() => handleAction(m.id, 'denied')}
+											disabled={actionSubmitting !== null}
+											class="flex-1 flex items-center justify-center gap-1.5 rounded border border-status-red/40 bg-status-red/10 py-1.5 font-sans font-bold uppercase tracking-wider text-status-red text-[11px] transition-all duration-200 active:scale-95 hover:bg-status-red/20 focus:outline-none"
+										>
+											{#if actionSubmitting === m.id}
+												<Loader2 size={12} class="animate-spin" />
+											{:else}
+												<X size={12} />
+												<span>Deny</span>
+											{/if}
+										</button>
+										<button
+											type="button"
+											onclick={() => handleAction(m.id, 'approved')}
+											disabled={actionSubmitting !== null}
+											class="flex-1 flex items-center justify-center gap-1.5 rounded border border-status-green/40 bg-status-green/10 py-1.5 font-sans font-bold uppercase tracking-wider text-status-green text-[11px] transition-all duration-200 active:scale-95 hover:bg-status-green/20 focus:outline-none shadow-[0_0_10px_rgba(34,197,94,0.05)]"
+										>
+											{#if actionSubmitting === m.id}
+												<Loader2 size={12} class="animate-spin" />
+											{:else}
+												<Check size={12} />
+												<span>Approve</span>
+											{/if}
+										</button>
+									{:else}
+										<div
+											class="w-full text-center py-1.5 rounded text-[10px] uppercase font-bold tracking-widest border font-sans
+												{m.interactive_action.status === 'approved' 
+													? 'border-status-green/30 bg-status-green/5 text-status-green' 
+													: 'border-status-red/30 bg-status-red/5 text-status-red'}"
+										>
+											{m.interactive_action.status === 'approved' ? '✓ Command Approved' : '✗ Command Denied'}
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</div>
+
+	<!-- Typing Input Area -->
+	<div class="shrink-0 border-t border-border bg-background/95 p-3 flex flex-col gap-2">
+		
+		<!-- Quick Suggestion Pill strip -->
+		<div class="flex items-center gap-1.5 overflow-x-auto py-0.5 select-none custom-scrollbar">
+			<button
+				type="button"
+				onclick={() => { textDraft = '@agy audit our code config'; }}
+				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
+			>
+				@agy audit
+			</button>
+			<button
+				type="button"
+				onclick={() => { textDraft = '@cc run vitest'; }}
+				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
+			>
+				@cc run vitest
+			</button>
+			<button
+				type="button"
+				onclick={() => { textDraft = '@agy check theme vars'; }}
+				class="shrink-0 px-2.5 py-1 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-white transition-colors active:scale-95"
+			>
+				@agy theme
+			</button>
+		</div>
+
+		<!-- Input field -->
+		<div class="relative flex items-center">
+			<textarea
+				bind:value={textDraft}
+				onkeypress={handleKeyPress}
+				rows="1"
+				placeholder="Message your agents (e.g. '@agy run a check')..."
+				class="w-full rounded-md border border-border bg-surface px-4 py-3 pr-12 font-sans text-sm text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none max-h-32"
+				style="min-height: 44px; interactive-widget: resizes-content;"
+			></textarea>
+
+			<button
+				type="button"
+				onclick={handleSendMessage}
+				disabled={!textDraft.trim() || sending}
+				aria-label="Send message"
+				class="absolute right-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-md border border-cta/20 bg-cta/10 text-cta transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:pointer-events-none hover:bg-cta/20"
+			>
+				{#if sending}
+					<Loader2 size={16} class="animate-spin" />
+				{:else}
+					<Send size={16} />
+				{/if}
+			</button>
+		</div>
+	</div>
+</div>
+
+<style>
+	.custom-scrollbar::-webkit-scrollbar {
+		width: 4px;
+		height: 4px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb {
+		background: #30363d;
+		border-radius: 10px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+		background: #484f58;
+	}
+
+	.animate-fade-in {
+		animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+</style>
