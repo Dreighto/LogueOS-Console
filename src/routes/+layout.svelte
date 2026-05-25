@@ -81,7 +81,7 @@
 
 <div
 	data-sveltekit-preload-data="hover"
-	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl"
+	class="mx-auto flex h-[100dvh] max-w-[480px] sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl"
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
 	<!-- Top Bar -->
