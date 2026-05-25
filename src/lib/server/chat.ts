@@ -52,6 +52,45 @@ export function getChatMessages(limit = 100, threadId = 'default'): ChatMessage[
 }
 
 /**
+ * Single-operator chat UI state — survives page reloads + device switches.
+ * The chat_user_state table has one row keyed 'operator'; we just store
+ * which thread the operator was last viewing so that leaving the app and
+ * coming back (or switching phone↔desktop) lands them in the right thread
+ * instead of defaulting to 'default'.
+ */
+export function getActiveThread(): string {
+	if (!fs.existsSync(serverConfig.memoryDbPath)) return 'default';
+	const db = getDb();
+	try {
+		const row = db
+			.prepare("SELECT last_thread FROM chat_user_state WHERE user_id = 'operator'")
+			.get() as { last_thread?: string } | undefined;
+		return row?.last_thread || 'default';
+	} catch (e: unknown) {
+		console.error('getActiveThread error:', e);
+		return 'default';
+	} finally {
+		db.close();
+	}
+}
+
+export function setActiveThread(threadId: string): void {
+	const t = (threadId || '').trim() || 'default';
+	const db = new Database(serverConfig.memoryDbPath);
+	try {
+		db.prepare(
+			`INSERT INTO chat_user_state (user_id, last_thread, updated_at)
+			 VALUES ('operator', ?, CURRENT_TIMESTAMP)
+			 ON CONFLICT(user_id) DO UPDATE SET last_thread = excluded.last_thread, updated_at = CURRENT_TIMESTAMP`
+		).run(t);
+	} catch (e: unknown) {
+		console.error('setActiveThread error:', e);
+	} finally {
+		db.close();
+	}
+}
+
+/**
  * List distinct threads in chat_messages with a count + latest activity.
  * Used by the chat tab's thread switcher.
  */

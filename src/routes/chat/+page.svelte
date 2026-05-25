@@ -671,6 +671,16 @@
 		dispatchingSinceMsgId = null;
 		unseenCount = 0;
 		userAtBottom = true;
+		// Persist the choice so a fresh page load (phone or desktop) lands
+		// here instead of the default thread. Fire-and-forget; never blocks
+		// the visual switch.
+		void fetch(resolve('/api/chat/state'), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ thread: threadId })
+		}).catch(() => {
+			/* silent — local switch already happened, persistence is best-effort */
+		});
 		// Reload messages for the new thread.
 		await pollMessages();
 		await pollActivity();
