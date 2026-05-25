@@ -215,7 +215,7 @@
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-blue/10 rounded p-3">
 										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
-											{getPlainEnglish(lesson.text, lesson.title)}
+											{lesson.plain_english_summary || getPlainEnglish(lesson.text, lesson.title)}
 										</p>
 									</div>
 
@@ -306,7 +306,7 @@
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-amber/10 rounded p-3">
 										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
-											{getPlainEnglish(lesson.lesson_text)}
+											{lesson.plain_english_summary || getPlainEnglish(lesson.lesson_text)}
 										</p>
 									</div>
 
@@ -390,7 +390,7 @@
 									<!-- Part 1: Plain English Summary -->
 									<div class="bg-background border border-status-green/10 rounded p-2.5">
 										<p class="text-xs text-foreground leading-relaxed font-sans font-medium">
-											{getPlainEnglish(obs.text)}
+											{obs.plain_english_summary || getPlainEnglish(obs.text)}
 										</p>
 									</div>
 

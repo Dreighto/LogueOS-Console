@@ -15,6 +15,8 @@
 		ShieldAlert,
 		AlertTriangle
 	} from 'lucide-svelte';
+	import { slide } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	interface Props {
 		events: ActivityEvent[];
@@ -132,27 +134,27 @@
 	<!-- Filter Chips -->
 	<div class="flex w-fit gap-2 rounded-lg border border-border bg-background p-1">
 		<button
-			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter === 'all'
+			class="active-trigger rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter === 'all'
 				? 'border border-border bg-muted text-foreground'
-				: 'text-muted-foreground hover:text-foreground'}"
+				: 'text-muted-foreground hover:bg-surface/50 hover:text-foreground'}"
 			onclick={() => (currentFilter = 'all')}
 		>
 			All
 		</button>
 		<button
-			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
+			class="active-trigger rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
 			'needs-attention'
 				? 'border border-border bg-muted text-foreground'
-				: 'text-muted-foreground hover:text-foreground'}"
+				: 'text-muted-foreground hover:bg-surface/50 hover:text-foreground'}"
 			onclick={() => (currentFilter = 'needs-attention')}
 		>
 			Needs Attention
 		</button>
 		<button
-			class="rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
+			class="active-trigger rounded-md px-3 py-1 text-xs font-medium transition-colors {currentFilter ===
 			'finished'
 				? 'border border-border bg-muted text-foreground'
-				: 'text-muted-foreground hover:text-foreground'}"
+				: 'text-muted-foreground hover:bg-surface/50 hover:text-foreground'}"
 			onclick={() => (currentFilter = 'finished')}
 		>
 			Finished
@@ -181,11 +183,11 @@
 						{@const levelColor = getLevelColor(event.level)}
 						{@const isExpanded = expandedEvents.has(event.id)}
 
-						<div class="group relative transition-colors hover:bg-surface">
+						<div animate:flip={{ duration: 300 }} in:slide={{ duration: 300 }} class="group relative transition-colors hover:bg-surface/50">
 							<div class="flex items-stretch">
 								<button
 									type="button"
-									class="flex flex-1 items-start gap-3 p-3 text-left focus:bg-surface focus:outline-none"
+									class="active-trigger flex flex-1 items-start gap-3 p-3 text-left focus:bg-surface focus:outline-none"
 									onclick={() => onEventClick?.(event)}
 								>
 									<!-- Avatar-like Icon -->

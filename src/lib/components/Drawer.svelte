@@ -52,7 +52,7 @@
 			<button 
 				type="button" 
 				onclick={close}
-				class="rounded-full bg-surface p-2 text-muted-foreground hover:text-foreground"
+				class="active-trigger rounded-full bg-surface p-2 text-muted-foreground hover:text-foreground hover:bg-surface/50"
 			>
 				<X size={20} />
 			</button>
