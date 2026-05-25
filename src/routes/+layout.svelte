@@ -172,7 +172,7 @@
 					class:text-muted-foreground={page.url.pathname !== tab.path}
 				>
 					<tab.icon
-						size={20}
+						size={22}
 						class="transition-all duration-300 {page.url.pathname === tab.path
 							? 'scale-110'
 							: 'scale-100 group-hover:scale-110 group-active:scale-95'}"
