@@ -1,4 +1,5 @@
 {
+	"id": "/console/",
 	"name": "LogueOS Console",
 	"short_name": "LogueOS",
 	"description": "Operator-facing dashboard for the LogueOS dispatch loop. Mobile-first, real-time worker status.",
@@ -8,6 +9,7 @@
 	"orientation": "portrait",
 	"background_color": "#0d1117",
 	"theme_color": "#0d1117",
+	"prefer_related_applications": false,
 	"icons": [
 		{
 			"src": "/console/apple-touch-icon.png",

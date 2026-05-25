@@ -47,3 +47,4 @@ logs/
 
 # Sandbox scratch dir for end-to-end smoke tests (kill switch tmpfs, etc.).
 .tmp-*/
+.venv-tools/
