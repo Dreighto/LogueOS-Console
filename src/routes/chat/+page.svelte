@@ -53,9 +53,10 @@
 	//   'auto'        — every send fires a worker (gateway role-routes unless @-mentioned)
 	//   'claude-code' — every send goes to CC
 	//   'agy'         — every send goes to AGY
-	//   'silent'      — chat note only, no worker spawns (used to leave notes
-	//                   for yourself or annotate without burning tokens)
-	let agentLock = $state<'auto' | 'claude-code' | 'agy' | 'silent'>('auto');
+	//   'hermes'      — every send goes to local Hermes (Qwen via Ollama),
+	//                   free + fast (~1-3s), no file-system access, sounding board
+	//   'silent'      — chat note only, no worker spawns (notes / annotations)
+	let agentLock = $state<'auto' | 'claude-code' | 'agy' | 'hermes' | 'silent'>('auto');
 	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
 	let feedContainer = $state<HTMLDivElement | null>(null);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
@@ -942,8 +943,13 @@
 						{:else if m.sender === 'system'}
 							<span class="text-status-blue">System</span>
 						{:else}
-							<Cpu size={10} class={m.sender === 'agy' ? 'text-purple-400' : 'text-orange-400'} />
-							<span class={m.sender === 'agy' ? 'text-purple-400' : 'text-orange-400'}>{m.sender}</span>
+							{@const senderClass = m.sender === 'agy'
+								? 'text-purple-400'
+								: m.sender === 'hermes'
+									? 'text-status-green'
+									: 'text-orange-400'}
+							<Cpu size={10} class={senderClass} />
+							<span class={senderClass}>{m.sender}</span>
 						{/if}
 						<span>·</span>
 						<span>{formatShortTime(m.timestamp)}</span>
@@ -1304,6 +1310,17 @@
 					title="Lock all sends to Antigravity (Gemini-class)."
 				>
 					AGY
+				</button>
+				<button
+					type="button"
+					onclick={() => (agentLock = 'hermes')}
+					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+						{agentLock === 'hermes'
+							? 'border-status-green/40 bg-status-green/10 text-status-green'
+							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+					title="Local Hermes (Qwen via Ollama). Free, fast, no file access — sounding board only."
+				>
+					Hermes
 				</button>
 				<button
 					type="button"

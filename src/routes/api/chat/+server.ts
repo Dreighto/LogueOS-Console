@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getChatMessages, addChatMessage } from '$lib/server/chat';
 import { serverConfig } from '$lib/server/config';
+import { callHermes, chatRowsToHermesHistory } from '$lib/server/hermes';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -96,11 +97,56 @@ export const POST: RequestHandler = async ({ request }) => {
 		// didn't match the whitelist. They'd rather pay a few cents per
 		// chitchat than memorize magic incantations.
 		//
-		// Two ways to suppress dispatch:
-		//   1. agentLock === 'silent' on the client side — the operator wants
-		//      to leave a chat note without spawning a worker.
-		//   2. sender === 'system' — we never re-dispatch system messages.
-		const shouldTrigger = sender !== 'system' && explicitAgent !== 'silent';
+		// Three modes that don't fire a remote worker dispatch:
+		//   1. agentLock === 'silent' — chat note only, no agent fires.
+		//   2. agentLock === 'hermes' — handled in the Hermes branch below,
+		//      not the gateway-dispatch branch. Direct call to local Ollama.
+		//   3. sender === 'system' — system messages never re-dispatch.
+		const isHermes = explicitAgent === 'hermes';
+		const shouldTrigger =
+			sender !== 'system' && explicitAgent !== 'silent' && !isHermes;
+
+		// Hermes branch — local Ollama, no worker spawn, ~1-3s round-trip.
+		// Skips the entire gateway/listener pipeline. Hermes has no file
+		// access; it's a conversational sounding board with the operator
+		// profile loaded as its system prompt.
+		if (isHermes && sender !== 'system') {
+			try {
+				const allHistory = getChatMessages(30, threadId);
+				// Slice at the most recent NEW CONVERSATION marker, same as the
+				// gateway-worker prompt builder. Hermes deserves the same fresh-
+				// thread semantics.
+				let lastResetIdx = -1;
+				for (let i = allHistory.length - 1; i >= 0; i--) {
+					if (
+						allHistory[i].sender === 'system' &&
+						allHistory[i].message.startsWith('--- NEW CONVERSATION ---')
+					) {
+						lastResetIdx = i;
+						break;
+					}
+				}
+				// Exclude the operator message we JUST inserted (it's the
+				// userMessage we pass separately to callHermes).
+				const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory)
+					.slice(0, -1);
+				const history = chatRowsToHermesHistory(slice);
+				const reply = await callHermes(history, message.trim());
+				addChatMessage('hermes', reply, null, null, null, 'sent', threadId);
+			} catch (err) {
+				console.error('Hermes call failed:', err);
+				const msg = err instanceof Error ? err.message : 'unknown error';
+				addChatMessage(
+					'system',
+					`⚠️ **Hermes failed.** Local Ollama call errored: \`${msg.slice(0, 200)}\`. Check Ollama (\`ollama ps\`) and the qwen2.5:7b model.`,
+					null,
+					null,
+					null,
+					'sent',
+					threadId
+				);
+			}
+		}
 
 		if (shouldTrigger && sender !== 'system') {
 			// Trigger a background dispatch via the gateway!
