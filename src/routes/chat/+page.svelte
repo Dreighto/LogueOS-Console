@@ -56,9 +56,15 @@
 	let streamEnded = $state<Record<string, boolean>>({});
 	const streamSources = new Map<string, EventSource>();
 
-	const POLL_INTERVAL_MS = 3000;
-	// Faster cadence while at least one trace is in flight (worker is doing
-	// something we want to render quickly). Falls back to baseline when idle.
+	// 1s message poll — the dominant chat-side latency between worker
+	// emit_chat_message landing in the DB and the operator seeing it.
+	// Dropping from 3s shaves up to 2s off every dispatch's perceived
+	// completion time. The query is a single SELECT against a tiny indexed
+	// table; cost is negligible.
+	const POLL_INTERVAL_MS = 1000;
+	// Activity ticker pulls one row per active trace per tick. 1s while
+	// something is running, 3s when idle. Idle rate intentionally stays at
+	// 3s so we don't hammer the DB when no traces are active.
 	const ACTIVITY_POLL_FAST_MS = 1000;
 	const ACTIVITY_POLL_IDLE_MS = 3000;
 
@@ -443,6 +449,42 @@
 	function isResetMarker(m: ChatMessage): boolean {
 		return m.sender === 'system' && m.message.startsWith('--- NEW CONVERSATION ---');
 	}
+
+	// Inline-streaming helpers. For each system "Agent dispatched" bubble with
+	// an active trace, we render a SYNTHETIC worker bubble that grows with
+	// the SSE stream while the worker is in flight. When the real worker
+	// reply lands (a non-system non-operator chat_messages row with the same
+	// trace_id), the synthetic bubble is hidden — the real bubble takes over
+	// and is persisted via chat_messages for SSR + history.
+	function hasRealWorkerReply(traceId: string): boolean {
+		for (const m of messages) {
+			if (m.trace_id !== traceId) continue;
+			if (m.sender === 'system' || m.sender === 'operator') continue;
+			return true;
+		}
+		return false;
+	}
+
+	// Infer sender from trace_id prefix so the synthetic bubble styles itself
+	// correctly (orange for cc, purple for agy/gemini). Defaults to 'cc' if
+	// the prefix is unrecognized.
+	function senderFromTrace(traceId: string): 'cc' | 'agy' {
+		const prefix = traceId.split('-')[0]?.toLowerCase() || '';
+		if (prefix === 'agy' || prefix === 'gemini') return 'agy';
+		return 'cc';
+	}
+
+	function shouldRenderStreamingBubble(m: ChatMessage): boolean {
+		if (!m.trace_id) return false;
+		if (m.sender !== 'system') return false;
+		// Only attach a streaming bubble to the dispatch announcement, not
+		// to other system messages that happen to carry a trace_id.
+		if (!m.message.startsWith('Agent dispatched:')) return false;
+		const buf = streamByTrace[m.trace_id] || '';
+		if (buf.length === 0) return false;
+		if (hasRealWorkerReply(m.trace_id)) return false;
+		return true;
+	}
 </script>
 
 <svelte:head>
@@ -653,6 +695,31 @@
 							{/if}
 						{/if}
 					</div>
+
+					<!-- Synthetic streaming bubble: appears below the "Agent dispatched"
+					     system message while the worker is in flight, grows with SSE
+					     stream chunks, and disappears once the real worker reply
+					     lands in chat_messages. -->
+					{#if shouldRenderStreamingBubble(m)}
+						{@const senderLabel = senderFromTrace(m.trace_id || '')}
+						{@const buf = streamByTrace[m.trace_id || ''] || ''}
+						<div class="flex flex-col gap-1 items-start animate-fade-in">
+							<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase text-muted-foreground">
+								<Cpu size={10} class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'} />
+								<span class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}>{senderLabel}</span>
+								<span>·</span>
+								<span class="flex items-center gap-1">
+									<Loader2 size={10} class="animate-spin" />
+									<span>streaming</span>
+								</span>
+							</div>
+							<div
+								class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed select-text text-foreground"
+							>
+								<Markdown content={buf} />
+							</div>
+						</div>
+					{/if}
 				{/if}
 				{/each}
 			{/if}

@@ -155,7 +155,12 @@ under the dispatch bubble. Without these emits the operator sees a generic
 							target_repo: targetRepo,
 							ticket_id: ticket_id || null,
 							prompt: workerPrompt,
-							thinking_level: 'none'
+							thinking_level: 'none',
+							// Sonnet by default for chat dispatches — 3-5x faster
+							// first-token + tool-call latency than Opus with no
+							// meaningful quality drop for casual chat work. Heavy
+							// tasks can override via a future model-pill toggle.
+							model: 'claude-sonnet-4-6'
 						})
 					},
 					GATEWAY_TIMEOUT_MS
