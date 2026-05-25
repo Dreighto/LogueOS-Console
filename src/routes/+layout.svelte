@@ -175,13 +175,12 @@
 		{/key}
 	</main>
 
-	<!-- Bottom Navigation. Hard-reset to 44px fixed height.
-	     Removes all vertical padding and relies on flex-centering. -->
+	<!-- Bottom Navigation. Compact 32px height for PWA — maximises content area. -->
 	<nav
 		class="z-20 w-full border-t border-border bg-background/95 backdrop-blur-xl"
 		style="padding-bottom: env(safe-area-inset-bottom, 0px);"
 	>
-		<div class="flex h-11 items-center justify-around overflow-hidden">
+		<div class="flex h-8 items-center justify-around overflow-hidden">
 			{#each tabs as tab (tab.path)}
 				<a
 					href={resolve(tab.path)}
@@ -191,7 +190,7 @@
 					class:text-muted-foreground={page.url.pathname !== tab.path}
 				>
 					<tab.icon
-						size={20}
+						size={16}
 						class="transition-all duration-300 {page.url.pathname === tab.path
 							? 'scale-110'
 							: 'scale-100 group-hover:scale-110 group-active:scale-95'}"
@@ -200,7 +199,7 @@
 					{#if page.url.pathname === tab.path}
 						<div
 							in:fly={{ y: 4, duration: 150 }}
-							class="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_10px_rgba(163,230,53,1)]"
+							class="absolute bottom-0 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_8px_rgba(163,230,53,1)]"
 						></div>
 					{/if}
 				</a>
