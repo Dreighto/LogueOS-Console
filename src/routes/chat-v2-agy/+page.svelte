@@ -149,16 +149,20 @@
 		}, 400);
 	});
 
-	// Auto-grow the composer textarea with the draft. Default rows=3 sets the
-	// resting height; this effect expands it up to the inline max-height (240px)
-	// then lets the textarea scroll internally. Without this the textarea is
-	// stuck at a single-line snippet on long messages.
+	// Auto-grow the composer textarea with the draft. Resting state is rows=5
+	// (~140px — a real writing surface, not a snippet). Expands up to roughly
+	// half the viewport (capped 480px) then scrolls internally.
+	function composerMaxHeight(): number {
+		if (typeof window === 'undefined') return 360;
+		return Math.min(Math.round(window.innerHeight * 0.5), 480);
+	}
 	$effect(() => {
 		const _ = textDraft; // dep — re-run whenever the draft changes
 		void _;
 		if (!textareaEl) return;
 		textareaEl.style.height = 'auto';
-		const target = Math.min(Math.max(textareaEl.scrollHeight, 64), 240);
+		const max = composerMaxHeight();
+		const target = Math.min(Math.max(textareaEl.scrollHeight, 140), max);
 		textareaEl.style.height = `${target}px`;
 	});
 
@@ -1629,7 +1633,7 @@
 						     bubbles render through the Markdown component for
 						     code-block highlighting, inline code, lists, etc. -->
 						<div
-							class="max-w-[85%] rounded-2xl px-4 py-2.5 font-sans text-[15px] leading-relaxed selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
+							class="max-w-[85%] rounded-2xl px-3.5 py-2 font-sans text-[13.5px] leading-snug tracking-[-0.005em] antialiased selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
 								{m.sender === 'operator'
 								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
 								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
@@ -1871,7 +1875,7 @@
 				<!-- Text input area + icons. items-end so buttons sit at the bottom
 				     as the textarea grows; min-h on the wrapper preserves the
 				     hero-pill height even when the textarea collapses to 1 row. -->
-				<div class="flex min-h-[64px] items-end gap-2">
+				<div class="flex min-h-[140px] items-end gap-2">
 					<!-- Attach File -->
 					<button
 						type="button"
@@ -1892,7 +1896,7 @@
 						onkeypress={handleKey}
 						onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
 						onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-						rows="3"
+						rows="5"
 						placeholder={composerMode === 'recording'
 							? 'Listening dictation… press stop when done.'
 							: composerMode === 'talkback'
@@ -1904,8 +1908,8 @@
 						autocapitalize="sentences"
 						spellcheck="false"
 						disabled={composerMode === 'recording' || composerMode === 'talkback'}
-						class="flex-1 resize-none self-stretch bg-transparent px-1 py-2 font-sans text-[15px] leading-relaxed text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-						style="min-height: 64px; max-height: 240px;"
+						class="flex-1 resize-none self-stretch bg-transparent px-1 py-2 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
+						style="min-height: 140px; max-height: 480px;"
 					></textarea>
 
 					<!-- Sparkles Image Toggle -->

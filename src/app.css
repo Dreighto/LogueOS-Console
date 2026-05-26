@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
-	--font-sans: 'Mona Sans', ui-sans-serif, system-ui, sans-serif;
+	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
 	--color-background: #050505;
@@ -133,5 +133,23 @@
 	.active-trigger:active {
 		transform: scale(0.96);
 		opacity: 0.85;
+	}
+
+	/* Global Inter typography polish. cv11 disambiguates l/I (single-storey g
+	   stays default), ss01/ss03 are Inter's stylistic sets that flatten the
+	   one-storey a and tilt the open-quote — together they read closer to
+	   the proportions of Geist / SF. Antialiasing + optical sizing keep small
+	   sizes crisp on phone screens. */
+	body {
+		font-feature-settings:
+			'cv11' 1,
+			'ss01' 1,
+			'ss03' 1,
+			'tnum' 1,
+			'kern' 1;
+		font-optical-sizing: auto;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		text-rendering: optimizeLegibility;
 	}
 }
