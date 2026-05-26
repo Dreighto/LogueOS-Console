@@ -3,7 +3,20 @@
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
 	import { onNavigate } from '$app/navigation';
-	import { Home, Cpu, Activity, Brain, MessageSquare, Settings, DollarSign, AlertOctagon, Pause, RefreshCw, Power, RotateCcw } from 'lucide-svelte';
+	import {
+		Home,
+		Cpu,
+		Activity,
+		Brain,
+		MessageSquare,
+		Settings,
+		DollarSign,
+		AlertOctagon,
+		Pause,
+		RefreshCw,
+		Power,
+		RotateCcw
+	} from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import { toasts } from '$lib/utils/toasts';
@@ -30,7 +43,9 @@
 	// Console's own toggle UI. Poll interval is fixed at 5s to keep the
 	// header responsive without piling load; the per-page polling stays on
 	// its own (longer) cadence.
-	function getInitialKS() { return data.killSwitch; }
+	function getInitialKS() {
+		return data.killSwitch;
+	}
 	let killSwitch = $state<KillSwitchState>(getInitialKS());
 	const HEADER_POLL_MS = 5000;
 
@@ -67,7 +82,13 @@
 	// ── Compact header (chat-only, §2B) ─────────────────────────────────────
 	const headerStyle = $derived(page.url.pathname === '/chat' ? 'compact' : 'full');
 
-	type ActivityRow = { id: number; trace_id: string; action: string; target: string | null; timestamp: string };
+	type ActivityRow = {
+		id: number;
+		trace_id: string;
+		action: string;
+		target: string | null;
+		timestamp: string;
+	};
 	let compactActivity = $state<ActivityRow[]>([]);
 	let compactResetting = $state(false);
 	let compactActiveThread = $state('default');
@@ -96,7 +117,9 @@
 			if (!resp.ok) return;
 			const body = await resp.json();
 			compactActivity = (body.activity || []) as ActivityRow[];
-		} catch { /* silent — offline or unavailable */ }
+		} catch {
+			/* silent — offline or unavailable */
+		}
 	}
 
 	async function refreshCompactThread() {
@@ -105,7 +128,9 @@
 			if (!resp.ok) return;
 			const body = await resp.json();
 			if (body.active_thread) compactActiveThread = body.active_thread as string;
-		} catch { /* silent */ }
+		} catch {
+			/* silent */
+		}
 	}
 
 	async function handleCompactReset() {
@@ -121,7 +146,9 @@
 			if (resp.ok) {
 				toasts.add('Context reset. Workers start fresh from this point.', 'success');
 			}
-		} catch { /* silent */ } finally {
+		} catch {
+			/* silent */
+		} finally {
 			compactResetting = false;
 		}
 	}
@@ -158,7 +185,7 @@
 
 <div
 	data-sveltekit-preload-data="hover"
-	class="mx-auto flex h-[100dvh] max-w-[480px] sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl"
+	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
 	{#if headerStyle === 'compact'}
@@ -166,7 +193,9 @@
 		     + command bar. Logo anchors identity; thread label is a read-only
 		     indicator (full thread switching lives in the chat page's own header
 		     per PR 7 scope); reset icon fires the same /api/chat/reset call. -->
-		<header class="z-30 flex h-8 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-md">
+		<header
+			class="z-30 flex h-8 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-md"
+		>
 			<img src="{base}/favicon.png" alt="LogueOS" width="28" height="28" class="h-7 w-7 shrink-0" />
 
 			<span class="flex items-center gap-1 font-sans text-xs font-semibold text-muted-foreground">
@@ -267,19 +296,29 @@
 		</header>
 
 		<!-- Global Command Bar -->
-		<div class="z-20 flex items-center gap-2 border-b border-border bg-surface/50 px-4 py-1.5 backdrop-blur-sm">
-			<span class="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">System</span>
+		<div
+			class="z-20 flex items-center gap-2 border-b border-border bg-surface/50 px-4 py-1.5 backdrop-blur-sm"
+		>
+			<span class="font-mono text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+				>System</span
+			>
 			<div class="h-3 w-px bg-border"></div>
-			<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground transition-colors hover:bg-white/5">
+			<button
+				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
+			>
 				<Pause size={10} />
 				Pause
 			</button>
-			<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-foreground transition-colors hover:bg-white/5">
+			<button
+				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
+			>
 				<RefreshCw size={10} />
 				Sync
 			</button>
 			<div class="flex-1"></div>
-			<button class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-status-amber transition-colors hover:bg-status-amber/10">
+			<button
+				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-status-amber uppercase transition-colors hover:bg-status-amber/10"
+			>
 				<Power size={10} />
 				Restart
 			</button>
@@ -290,11 +329,9 @@
 	     Optimized for PWA: The container is now the scroll parent, and the nav
 	     is part of the flex flow, ensuring it sits at the true bottom.
 	     Page transitions: fly in from the right/left or simple fade. -->
-	<main class="relative flex-1 overflow-x-hidden overflow-y-auto custom-scrollbar">
+	<main class="custom-scrollbar relative flex-1 overflow-x-hidden overflow-y-auto">
 		{#key page.url.pathname}
-			<div
-				class="h-full p-4"
-			>
+			<div class="h-full p-4">
 				{@render children()}
 			</div>
 		{/key}
