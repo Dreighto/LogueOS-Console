@@ -24,7 +24,9 @@
 		RefreshCw,
 		ChevronDown,
 		Mic,
-		Volume2
+		Volume2,
+		Headphones,
+		Square
 	} from 'lucide-svelte';
 	import type { Workspace } from './+page.server';
 	import { toasts } from '$lib/utils/toasts';
@@ -437,6 +439,403 @@
 		}
 	}
 
+	// ─────────────────────────────────────────────────────────────────
+	// Talkback mode (PR 5) — walkie-talkie hands-free loop
+	// §2D.3 + §2D.4: A→Capture B→Transcribe C→Dispatch D→Speak E→Loop
+	// ─────────────────────────────────────────────────────────────────
+	let talkbackActive = $state(false);
+	type TalkbackPhase = 'capture' | 'transcribe' | 'dispatch' | 'speak' | 'loop';
+	let talkbackPhase = $state<TalkbackPhase | null>(null);
+
+	let talkbackStream: MediaStream | null = null;
+	let talkbackAudioCtx: AudioContext | null = null;
+	let talkbackProcessor: ScriptProcessorNode | null = null;
+	let talkbackWakeLock: WakeLockSentinel | null = null;
+	let talkbackWs: WebSocket | null = null;
+	let talkbackTranscriptBuffer = '';
+	let talkbackTtsAbortController: AbortController | null = null;
+	let talkbackDispatchMsgId: number | null = null;
+	let talkbackConsecutiveFailures = 0;
+	// Accumulated silence in ms (resets on speech). Auto-stop at 3 min.
+	let continuousSilenceMs = 0;
+	const TALKBACK_SILENCE_AUTOSTOP_MS = 3 * 60 * 1000;
+	// RMS threshold below which audio is considered silence
+	const TALKBACK_SILENCE_THRESHOLD = 0.01;
+	// Silence duration in ms that ends a capture round (speech gap)
+	const TALKBACK_SILENCE_GATE_MS = 2500;
+	// Max capture duration per round (ms)
+	const TALKBACK_MAX_CAPTURE_MS = 30_000;
+
+	function pSleep(ms: number): Promise<void> {
+		return new Promise((r) => setTimeout(r, ms));
+	}
+
+	function playChime(): Promise<void> {
+		return new Promise((resolve) => {
+			try {
+				const ctx = new AudioContext();
+				const osc = ctx.createOscillator();
+				const gain = ctx.createGain();
+				osc.connect(gain);
+				gain.connect(ctx.destination);
+				osc.type = 'sine';
+				osc.frequency.value = 880;
+				gain.gain.setValueAtTime(0.2, ctx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+				osc.start(ctx.currentTime);
+				osc.stop(ctx.currentTime + 0.25);
+				osc.onended = () => {
+					ctx.close().catch(() => {});
+					resolve();
+				};
+			} catch {
+				resolve();
+			}
+		});
+	}
+
+	function talkbackStopCapture() {
+		talkbackStream?.getTracks().forEach((t) => t.stop());
+		talkbackStream = null;
+		talkbackProcessor?.disconnect();
+		talkbackProcessor = null;
+		talkbackAudioCtx?.close().catch(() => {});
+		talkbackAudioCtx = null;
+		if (talkbackWs && talkbackWs.readyState === WebSocket.OPEN) {
+			try {
+				talkbackWs.send(JSON.stringify({ terminate_session: true }));
+			} catch {}
+			talkbackWs.close();
+		}
+		talkbackWs = null;
+	}
+
+	async function stopTalkback(reason?: string) {
+		talkbackActive = false;
+		talkbackPhase = null;
+		talkbackDispatchMsgId = null;
+		talkbackStopCapture();
+		talkbackTtsAbortController?.abort();
+		talkbackTtsAbortController = null;
+		if (persistentAudio && !persistentAudio.paused) {
+			persistentAudio.pause();
+			persistentAudio.currentTime = 0;
+		}
+		if (talkbackWakeLock) {
+			await talkbackWakeLock.release().catch(() => {});
+			talkbackWakeLock = null;
+		}
+		if (reason) toasts.add(reason, 'info');
+	}
+
+	async function emergencyStop() {
+		await stopTalkback('Talkback stopped');
+	}
+
+	async function toggleTalkback() {
+		if (talkbackActive) {
+			await stopTalkback('Talkback off');
+			return;
+		}
+		// Unlock audio element via user gesture (iOS requirement)
+		unlockAudio();
+		// Request screen wake lock — keeps phone screen on during loop (iOS 16.4+)
+		try {
+			if ('wakeLock' in navigator) {
+				talkbackWakeLock = await (navigator as Navigator & { wakeLock: { request(type: string): Promise<WakeLockSentinel> } }).wakeLock.request('screen');
+			}
+		} catch {
+			// Wake lock not available; talkback continues without it
+		}
+		talkbackActive = true;
+		talkbackConsecutiveFailures = 0;
+		continuousSilenceMs = 0;
+		toasts.add('Talkback ON — earbuds recommended for best results', 'info');
+		void beginTalkbackCapture();
+	}
+
+	async function beginTalkbackCapture() {
+		if (!talkbackActive) return;
+		talkbackPhase = 'capture';
+		talkbackTranscriptBuffer = '';
+
+		try {
+			// Step A: open mic with echo + noise cancellation (§2D.4)
+			talkbackStream = await navigator.mediaDevices.getUserMedia({
+				audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+			});
+
+			// Guard: permission revoke mid-session (getUserMedia track ended)
+			talkbackStream.getTracks().forEach((track) => {
+				track.onended = () => {
+					if (talkbackActive) {
+						void stopTalkback('Microphone disconnected — Talkback stopped');
+					}
+				};
+			});
+
+			// Step B: get AssemblyAI realtime token (§2D.3)
+			talkbackPhase = 'transcribe';
+			const tokenResp = await fetch(resolve('/api/chat/transcribe/stream'));
+			if (!tokenResp.ok) {
+				if (tokenResp.status === 429) {
+					await stopTalkback('STT daily cap reached — Talkback stopped');
+					return;
+				}
+				throw new Error(`Token fetch ${tokenResp.status}`);
+			}
+			const { ws_url } = (await tokenResp.json()) as { token: string; ws_url: string };
+
+			// Audio context at 16 kHz (matches AssemblyAI realtime sample rate)
+			talkbackAudioCtx = new AudioContext({ sampleRate: 16000 });
+			const source = talkbackAudioCtx.createMediaStreamSource(talkbackStream);
+
+			// ScriptProcessorNode for raw PCM capture (deprecated but universally
+			// supported incl. iOS Safari; AudioWorklet requires a separate file URL)
+			const bufferSize = 4096;
+			talkbackProcessor = talkbackAudioCtx.createScriptProcessor(bufferSize, 1, 1);
+			source.connect(talkbackProcessor);
+			// Connect to destination to keep the audio graph alive (required)
+			talkbackProcessor.connect(talkbackAudioCtx.destination);
+
+			// Open WebSocket to AssemblyAI using the temporary token
+			talkbackWs = new WebSocket(ws_url);
+			talkbackWs.binaryType = 'arraybuffer';
+
+			// State for capture loop resolution
+			let captureEndResolve: (() => void) | null = null;
+			const capturePromise = new Promise<void>((res) => {
+				captureEndResolve = res;
+			});
+			let captureTimeout: ReturnType<typeof setTimeout> | null = null;
+			let localSilenceStart: number | null = null;
+			let wsReady = false;
+
+			talkbackWs.onopen = () => {
+				wsReady = true;
+				captureTimeout = setTimeout(() => {
+					captureEndResolve?.();
+				}, TALKBACK_MAX_CAPTURE_MS);
+			};
+
+			talkbackWs.onmessage = (event) => {
+				try {
+					const msg = JSON.parse(event.data as string) as {
+						message_type: string;
+						text?: string;
+					};
+					if (msg.message_type === 'FinalTranscript' && msg.text?.trim()) {
+						talkbackTranscriptBuffer +=
+							(talkbackTranscriptBuffer ? ' ' : '') + msg.text.trim();
+						// Keyword stop detection (bonus, lightweight string match)
+						const lower = msg.text.toLowerCase();
+						if (lower.includes('stop talkback') || lower.includes('cancel talkback')) {
+							void stopTalkback('Stop word detected — Talkback stopped');
+							captureEndResolve?.();
+						}
+					}
+				} catch {}
+			};
+
+			talkbackWs.onerror = () => captureEndResolve?.();
+			talkbackWs.onclose = () => captureEndResolve?.();
+
+			// PCM capture + silence detection in onaudioprocess
+			talkbackProcessor.onaudioprocess = (e) => {
+				if (!talkbackActive) return;
+				const inputData = e.inputBuffer.getChannelData(0);
+
+				// RMS energy for silence detection
+				let sum = 0;
+				for (let i = 0; i < inputData.length; i++) {
+					sum += inputData[i] * inputData[i];
+				}
+				const rms = Math.sqrt(sum / inputData.length);
+				const now = Date.now();
+
+				if (rms < TALKBACK_SILENCE_THRESHOLD) {
+					if (localSilenceStart === null) localSilenceStart = now;
+					const silenceDur = now - localSilenceStart;
+					continuousSilenceMs += (inputData.length / 16000) * 1000;
+
+					// 3-minute continuous silence → auto-disable talkback
+					if (continuousSilenceMs >= TALKBACK_SILENCE_AUTOSTOP_MS) {
+						void stopTalkback('3 minutes of silence — Talkback auto-stopped');
+						captureEndResolve?.();
+						return;
+					}
+					// Silence gate: end this capture round if speech was detected
+					if (silenceDur >= TALKBACK_SILENCE_GATE_MS && talkbackTranscriptBuffer.trim()) {
+						captureEndResolve?.();
+					}
+				} else {
+					localSilenceStart = null;
+					continuousSilenceMs = 0; // reset on any speech
+				}
+
+				// Forward PCM to AssemblyAI as Int16
+				if (wsReady && talkbackWs?.readyState === WebSocket.OPEN) {
+					const pcm16 = new Int16Array(inputData.length);
+					for (let i = 0; i < inputData.length; i++) {
+						pcm16[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
+					}
+					talkbackWs.send(pcm16.buffer);
+				}
+			};
+
+			await capturePromise;
+			if (captureTimeout) clearTimeout(captureTimeout);
+
+			talkbackStopCapture();
+			if (!talkbackActive) return;
+
+			const text = talkbackTranscriptBuffer.trim();
+			if (!text) {
+				// Empty round (pure silence) — re-arm without counting as failure
+				void beginTalkbackCapture();
+				return;
+			}
+
+			// Step C: dispatch text to /api/chat, model hard-locked to Flash-lite
+			await dispatchTalkback(text);
+		} catch (e) {
+			console.error('Talkback capture error:', e);
+			talkbackStopCapture();
+			talkbackConsecutiveFailures++;
+			if (talkbackConsecutiveFailures >= 3) {
+				await stopTalkback('3 consecutive errors — Talkback stopped');
+				return;
+			}
+			toasts.add('Talkback error — retrying', 'error');
+			if (talkbackActive) await pSleep(500).then(() => beginTalkbackCapture());
+		}
+	}
+
+	async function dispatchTalkback(text: string) {
+		if (!talkbackActive) return;
+		talkbackPhase = 'dispatch';
+
+		try {
+			const resp = await fetch(resolve('/api/chat'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					sender: 'operator',
+					message: text,
+					agent: 'agy',   // Gemini OAuth path
+					thread: activeThread,
+					talkback: true  // server enforces Flash-lite tier (§2D.3 Step C)
+				})
+			});
+			if (!resp.ok) throw new Error(`Dispatch ${resp.status}`);
+
+			const body = await resp.json();
+			if (body.current_tier) currentTier = body.current_tier as Tier;
+			const sentMsg = body.message;
+			messages = [...messages, sentMsg];
+			userAtBottom = true;
+			talkbackDispatchMsgId = sentMsg?.id ?? null;
+
+			// Step D: wait for assistant reply, then speak it
+			talkbackPhase = 'speak';
+			await waitForTalkbackReply();
+		} catch (e) {
+			console.error('Talkback dispatch error:', e);
+			talkbackConsecutiveFailures++;
+			if (talkbackConsecutiveFailures >= 3) {
+				await stopTalkback('3 consecutive errors — Talkback stopped');
+				return;
+			}
+			toasts.add('Talkback dispatch failed — retrying', 'error');
+			if (talkbackActive) void beginTalkbackCapture();
+		}
+	}
+
+	async function waitForTalkbackReply() {
+		if (!talkbackActive || talkbackDispatchMsgId === null) return;
+		const dispatchId = talkbackDispatchMsgId;
+		const deadline = Date.now() + 90_000; // 90s reply timeout
+
+		while (Date.now() < deadline && talkbackActive) {
+			await pollMessages();
+			const reply = messages.find(
+				(m) => m.id > dispatchId && m.sender !== 'operator' && m.sender !== 'system'
+			);
+			if (reply?.message) {
+				talkbackDispatchMsgId = null;
+				talkbackConsecutiveFailures = 0;
+				await speakTalkbackReply(reply.message);
+				return;
+			}
+			await pSleep(1200);
+		}
+
+		talkbackDispatchMsgId = null;
+		if (!talkbackActive) return;
+		talkbackConsecutiveFailures++;
+		if (talkbackConsecutiveFailures >= 3) {
+			await stopTalkback('3 consecutive errors — Talkback stopped');
+			return;
+		}
+		void beginTalkbackCapture();
+	}
+
+	async function speakTalkbackReply(text: string) {
+		if (!talkbackActive || !persistentAudio) return;
+		talkbackTtsAbortController = new AbortController();
+
+		try {
+			const resp = await fetch(resolve('/api/chat/speak'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ text }),
+				signal: talkbackTtsAbortController.signal
+			});
+			if (resp.status === 429) {
+				await stopTalkback('TTS cap hit — Talkback stopped');
+				return;
+			}
+			if (!resp.ok) throw new Error(`TTS ${resp.status}`);
+
+			const audioBlob = await resp.blob();
+			const url = URL.createObjectURL(audioBlob);
+			persistentAudio.src = url;
+
+			// Step E: after playback ends, play chime + re-arm mic
+			persistentAudio.onended = () => {
+				URL.revokeObjectURL(url);
+				if (talkbackActive) {
+					talkbackPhase = 'loop';
+					void playChime().then(() => {
+						if (talkbackActive) void beginTalkbackCapture();
+					});
+				}
+			};
+
+			await persistentAudio.play();
+		} catch (e) {
+			if ((e as Error).name === 'AbortError') return;
+			console.error('Talkback speak error:', e);
+			talkbackTtsAbortController = null;
+			talkbackConsecutiveFailures++;
+			if (talkbackConsecutiveFailures >= 3) {
+				await stopTalkback('3 consecutive errors — Talkback stopped');
+				return;
+			}
+			if (talkbackActive) void beginTalkbackCapture();
+		} finally {
+			talkbackTtsAbortController = null;
+		}
+	}
+
+	// Talkback phase label shown in the LISTENING banner
+	const TALKBACK_PHASE_LABELS: Record<TalkbackPhase, string> = {
+		capture: '🔴 LISTENING',
+		transcribe: '🔄 TRANSCRIBING...',
+		dispatch: '📤 SENDING...',
+		speak: '🔈 SPEAKING...',
+		loop: '↩ RE-ARMING...'
+	};
 
 	// Optimistic "dispatching..." indicator. Set true the moment the operator
 	// hits send; cleared when the dispatch-side system bubble (or a streaming
@@ -1334,6 +1733,27 @@
 		</button>
 	</div>
 
+	<!-- Talkback status bar: always visible while talkback is active (§2D.3 §2D.4).
+	     Left: phase indicator. Right: large emergency STOP button (top-right of feed). -->
+	{#if talkbackActive}
+		<div
+			class="animate-fade-in flex shrink-0 items-center justify-between gap-2 border-b border-status-red/20 bg-status-red/10 px-3 py-1.5"
+		>
+			<span class="font-mono text-xs font-bold tracking-wider text-status-red uppercase">
+				{talkbackPhase ? TALKBACK_PHASE_LABELS[talkbackPhase] : '🔴 LISTENING'}
+			</span>
+			<button
+				type="button"
+				onclick={emergencyStop}
+				class="flex items-center gap-1.5 rounded border border-status-red/50 bg-status-red/20 px-2.5 py-1 font-mono text-[11px] font-bold tracking-wider text-status-red uppercase transition-colors hover:bg-status-red/30 active:scale-95"
+				aria-label="Emergency stop talkback"
+			>
+				<Square size={10} fill="currentColor" />
+				<span>STOP</span>
+			</button>
+		</div>
+	{/if}
+
 	<!-- Main Chat Area (Scrollable Feed) -->
 	<div
 		bind:this={feedContainer}
@@ -1984,8 +2404,10 @@
 			></span>
 		</div>
 
-		<!-- Input field: attach + textarea + send in one flex row -->
-		<div class="flex items-end gap-1.5">
+		<!-- Input field: attach + textarea + send in one flex row.
+		     Pulsing green border signals Talkback loop is active (§2D.4). -->
+		<div class="flex items-end gap-1.5 rounded-lg transition-all duration-300
+			{talkbackActive ? 'outline outline-2 outline-status-green/40 outline-offset-1' : ''}">
 			<input
 				type="file"
 				accept="image/*"
@@ -2032,6 +2454,23 @@
 			>
 				<Sparkles size={16} />
 			</button>
+			<!-- Talkback (walkie-talkie) toggle. When ON: pulsing green border on
+			     the input row + LISTENING banner above feed (§2D.3 + §2D.4). -->
+			<button
+				type="button"
+				onclick={toggleTalkback}
+				aria-pressed={talkbackActive}
+				aria-label={talkbackActive ? 'Turn off Talkback' : 'Turn on Talkback mode'}
+				title={talkbackActive
+					? 'Talkback ON — tap to stop walkie-talkie loop'
+					: 'Talkback: hands-free voice loop (AssemblyAI + ElevenLabs Emma)'}
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90
+					{talkbackActive
+					? 'border-status-green/50 bg-status-green/15 text-status-green animate-pulse'
+					: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
+			>
+				<Headphones size={16} />
+			</button>
 			<textarea
 				bind:value={textDraft}
 				bind:this={textareaEl}
@@ -2042,9 +2481,11 @@
 				rows="1"
 				placeholder={uploading
 					? 'Uploading image...'
-					: imageMode
-						? 'Describe the image to generate...'
-						: 'Message your agents...'}
+					: talkbackActive
+						? 'Talkback active — speak your message...'
+						: imageMode
+							? 'Describe the image to generate...'
+							: 'Message your agents...'}
 				autocomplete="off"
 				autocapitalize="none"
 				spellcheck="false"
