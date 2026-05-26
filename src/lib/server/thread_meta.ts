@@ -192,9 +192,11 @@ export function touchLastActivity(threadId: string): void {
 /**
  * Delete a thread and all its associated data. Only allowed when the thread
  * is already archived — returns false if the thread is active.
- * Cascade: chat_messages + chat_drafts + chat_thread_state + chat_thread_meta.
+ * Protected: 'default' thread cannot be deleted.
+ * Cascade: chat_messages + chat_drafts + chat_thread_state + chat_thread_meta + observations.
  */
 export function deleteThread(threadId: string): { ok: boolean; reason?: string } {
+	if (threadId === 'default') return { ok: false, reason: 'protected_thread' };
 	if (!dbExists()) return { ok: false, reason: 'db_not_found' };
 	const db = getDb();
 	try {
@@ -203,17 +205,30 @@ export function deleteThread(threadId: string): { ok: boolean; reason?: string }
 			.prepare('SELECT archived FROM chat_thread_meta WHERE thread_id = ?')
 			.get(threadId) as { archived: number } | undefined;
 
-		if (!meta) return { ok: false, reason: 'thread_not_found' };
-		if (!meta.archived) return { ok: false, reason: 'not_archived' };
+		// If it exists in meta, it MUST be archived to delete.
+		if (meta && !meta.archived) {
+			return { ok: false, reason: 'not_archived' };
+		}
+
+		// If it doesn't exist in meta, but has messages, we still check if it's
+		// effectively "active". But if the user is calling DELETE, we should
+		// probably allow it if it's not the default thread and not explicitly
+		// marked as active in meta.
+		// For now, if it's not in meta, we allow deletion (it's a "ghost" thread).
 
 		db.transaction(() => {
 			db.prepare('DELETE FROM chat_messages WHERE thread_id = ?').run(threadId);
 			db.prepare('DELETE FROM chat_drafts WHERE thread_id = ?').run(threadId);
-			// chat_thread_state may not exist yet — ignore errors.
+			// These tables might not exist or might not have entries — run and ignore.
 			try {
 				db.prepare('DELETE FROM chat_thread_state WHERE thread_id = ?').run(threadId);
 			} catch {
-				/* table may not exist in older DBs */
+				/* table might not exist */
+			}
+			try {
+				db.prepare('DELETE FROM observations WHERE chat_thread_id = ?').run(threadId);
+			} catch {
+				/* table might not exist */
 			}
 			db.prepare('DELETE FROM chat_thread_meta WHERE thread_id = ?').run(threadId);
 		})();
