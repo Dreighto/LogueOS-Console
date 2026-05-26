@@ -132,26 +132,54 @@ export const POST: RequestHandler = async ({ request }) => {
 			targetRepo = 'LogueOS-Console';
 		}
 
-		// Dispatch policy: in Auto mode, ALWAYS dispatch. The previous
-		// trigger-word heuristic (action verbs, question marks, @-mentions)
-		// kept failing the operator silently when they used phrasings that
-		// didn't match the whitelist. They'd rather pay a few cents per
-		// chitchat than memorize magic incantations.
+		// Dispatch policy (revised 2026-05-26): default to CONVERSATIONAL reply
+		// via the LLM router. Worker dispatch fires ONLY when the operator
+		// signals explicit intent. Previous default (auto-dispatch every
+		// message) was killing planning conversations with system-bubble noise
+		// + worker-tone replies. Operator feedback: "it still reads like the
+		// system is the one I am talking to when it should be a planning
+		// partner... we are engaging in a conversation that will lead to a plan."
 		//
-		// Modes that don't fire a remote worker dispatch via the gateway:
-		//   1. agentLock === 'silent' — chat note only.
-		//   2. agentLock === 'hermes' — direct call to local Ollama.
-		//   3. agentLock === 'agy' (chat mode default) — direct Gemini API.
-		//      Worker-mode AGY is reachable via the Build/Critique/Verify
-		//      action buttons (handled by /api/chat/workflow) — that path
-		//      still spawns the full Antigravity CLI worker.
-		//   4. imageMode === true — Gemini image generation, treated as a
-		//      worker-style reply.
-		//   5. sender === 'system' — system messages never re-dispatch.
+		// Explicit dispatch signals:
+		//   - explicitAgent === 'claude-code'  (operator picked CC in the pill)
+		//   - @cc / @agy / @gemini in the message text (operator named a worker)
+		//
+		// Implicit conversational signals (default → llm_router, NO dispatch):
+		//   - explicitAgent === 'auto' (default pill, no @-mention)
+		//   - explicitAgent === 'agy'  (AGY chat mode — was already routing via llm_router)
+		//
+		// Workflow buttons (Critique/Build/Verify/Retry) still spawn workers
+		// via /api/chat/workflow — that path is intentional and unchanged.
+		//
+		// Modes that don't fire a remote worker dispatch regardless:
+		//   1. explicitAgent === 'silent' — chat note only.
+		//   2. explicitAgent === 'hermes' — direct call to local Ollama.
+		//   3. imageMode === true        — Gemini image generation.
+		//   4. sender === 'system'       — system messages never re-dispatch.
 		const isHermes = explicitAgent === 'hermes';
 		const isAgyChat = explicitAgent === 'agy';
-		const shouldTrigger =
-			sender !== 'system' && explicitAgent !== 'silent' && !isHermes && !isAgyChat && !imageMode;
+		const hasExplicitDispatchIntent =
+			explicitAgent === 'claude-code' ||
+			text.includes('@cc') ||
+			text.includes('@agy') ||
+			text.includes('@gemini');
+		const shouldDispatch =
+			hasExplicitDispatchIntent &&
+			sender !== 'system' &&
+			explicitAgent !== 'silent' &&
+			!isHermes &&
+			!imageMode;
+		// Conversational path: everything that's not a dispatch, not Hermes,
+		// not image-gen, not silent. Covers explicit 'agy' pill AND the new
+		// default 'auto' chat behavior. Both route through llm_router.
+		const shouldRouteChat =
+			!shouldDispatch &&
+			sender !== 'system' &&
+			explicitAgent !== 'silent' &&
+			!isHermes &&
+			!imageMode;
+		// Back-compat alias for the existing dispatch block below.
+		const shouldTrigger = shouldDispatch;
 
 		// Hermes branch — local Ollama, no worker spawn, ~1-3s round-trip.
 		// Skips the entire gateway/listener pipeline. Hermes has no file
@@ -197,12 +225,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 
-		// AGY / LLM-router chat branch. Routes through the tier-aware llm_router
-		// (Gemini OAuth primary, Anthropic fallback) instead of calling Gemini
-		// directly. Falls forward on provider outage; tracks token usage.
-		// Workflow buttons (Build/Critique/Verify) still dispatch the heavy
-		// worker via /api/chat/workflow when the operator wants real file/code work.
-		if (isAgyChat && sender !== 'system' && !imageMode) {
+		// Conversational chat branch — the DEFAULT path for any operator
+		// message without explicit dispatch intent. Routes through the
+		// tier-aware llm_router (Gemini OAuth primary, Anthropic fallback)
+		// for a planning-partner-style reply. No worker spawn, no system
+		// bubble. Workflow buttons (Build/Critique/Verify) still dispatch
+		// the heavy worker via /api/chat/workflow when the operator wants
+		// real file/code work — that path is unchanged.
+		if (shouldRouteChat) {
 			try {
 				const allHistory = getChatMessages(30, threadId);
 				let lastResetIdx = -1;
