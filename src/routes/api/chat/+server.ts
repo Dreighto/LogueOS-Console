@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getChatMessages, addChatMessage } from '$lib/server/chat';
+import { getChatMessages, addChatMessage, deleteChatMessage } from '$lib/server/chat';
 import { serverConfig } from '$lib/server/config';
 import { callHermes, chatRowsToHermesHistory } from '$lib/server/hermes';
 import { generateGeminiImage } from '$lib/server/gemini';
@@ -67,6 +67,24 @@ export const GET: RequestHandler = async ({ url }) => {
 		return json({ messages });
 	} catch (e: unknown) {
 		console.error('GET /api/chat error:', e);
+		return json({ error: 'internal_server_error' }, { status: 500 });
+	}
+};
+
+// DELETE /api/chat?id=<n>  — drop a single chat message by id. Used by the
+// regenerate flow to remove the old assistant reply before re-streaming a
+// new one. Operator-only (gated by the auth hook on /api/chat/*).
+export const DELETE: RequestHandler = async ({ url }) => {
+	try {
+		const idStr = url.searchParams.get('id');
+		const id = idStr ? Number.parseInt(idStr, 10) : NaN;
+		if (!Number.isFinite(id) || id <= 0) {
+			return json({ error: 'invalid id' }, { status: 400 });
+		}
+		const deleted = deleteChatMessage(id);
+		return json({ deleted });
+	} catch (e: unknown) {
+		console.error('DELETE /api/chat error:', e);
 		return json({ error: 'internal_server_error' }, { status: 500 });
 	}
 };
