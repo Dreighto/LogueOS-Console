@@ -116,7 +116,23 @@ export const serverConfig = {
 	// so this URL must reach the gateway from a trusted network position.
 	gatewayUrl: getEnv('LOGUEOS_GATEWAY_URL', 'http://127.0.0.1:18766'),
 	pollIntervalMs: parsePositiveInt(getEnv('LOGUEOS_RUN_POLL_MS', '5000'), 'LOGUEOS_RUN_POLL_MS'),
-	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT')
+	feedLimit: parsePositiveInt(getEnv('LOGUEOS_RUN_FEED_LIMIT', '50'), 'LOGUEOS_RUN_FEED_LIMIT'),
+	// Per-provider daily token caps for the LLM router (PR 1c).
+	// Claude Max sub is generous — 1M cap is a safety valve, not a hard budget.
+	// GEMINI_API_KEY is reserved for image gen, so the Gemini OAuth chat quota
+	// is tracked separately but uses the same cap env var.
+	anthropicDailyTokenCap: parsePositiveInt(
+		getEnv('ANTHROPIC_DAILY_TOKEN_CAP', '1000000'),
+		'ANTHROPIC_DAILY_TOKEN_CAP'
+	),
+	openaiDailyTokenCap: parsePositiveInt(
+		getEnv('OPENAI_DAILY_TOKEN_CAP', '200000'),
+		'OPENAI_DAILY_TOKEN_CAP'
+	),
+	geminiDailyTokenCap: parsePositiveInt(
+		getEnv('GEMINI_DAILY_TOKEN_CAP', '2000000'),
+		'GEMINI_DAILY_TOKEN_CAP'
+	)
 };
 
 // Subset of serverConfig that's safe to expose to the client via load().

@@ -3,11 +3,11 @@ import type { RequestHandler } from './$types';
 import { getChatMessages, addChatMessage } from '$lib/server/chat';
 import { serverConfig } from '$lib/server/config';
 import { callHermes, chatRowsToHermesHistory } from '$lib/server/hermes';
-import {
-	callGeminiChat,
-	chatRowsToGeminiHistory,
-	generateGeminiImage
-} from '$lib/server/gemini';
+import { generateGeminiImage } from '$lib/server/gemini';
+import { classifyTier } from '$lib/server/phase_classifier';
+import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
+import { routeChat } from '$lib/server/llm_router';
+import type { RouterMessage } from '$lib/server/llm_router';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -71,6 +71,22 @@ export const POST: RequestHandler = async ({ request }) => {
 			'sent',
 			threadId
 		);
+
+		// Classify conversation tier and persist. Runs on every message regardless
+		// of which branch handles the response (gateway dispatch, LLM router, etc.)
+		// so the status badge always reflects the current conversation phase.
+		const threadState = getThreadState(threadId);
+		const allForClassify = getChatMessages(30, threadId);
+		// Exclude the just-inserted operator message — depth signal reads assistant turns.
+		const recentForClassify = allForClassify.slice(0, -1);
+		const currentTier = classifyTier({
+			userMessage: message.trim(),
+			recentMessages: recentForClassify,
+			currentTier: threadState.current_tier,
+			operatorOverride: threadState.operator_override
+		});
+		upsertThreadTier(threadId, currentTier, null);
+		let routerMeta: { provider_used: string; model_used: string } | null = null;
 
 		// 2. Resolve worker selection. Operator's explicit pill wins if set;
 		//    otherwise fall back to @-mention heuristic; otherwise 'auto'.
@@ -168,11 +184,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 
-		// AGY chat branch — direct Gemini API. Skips the whole gateway/worker
-		// pipeline. Same thread slicing as Hermes; reply lands as sender='agy'.
+		// AGY / LLM-router chat branch. Routes through the tier-aware llm_router
+		// (Gemini OAuth primary, Anthropic fallback) instead of calling Gemini
+		// directly. Falls forward on provider outage; tracks token usage.
 		// Workflow buttons (Build/Critique/Verify) still dispatch the heavy
-		// worker via /api/chat/workflow when the operator wants real
-		// file/code work.
+		// worker via /api/chat/workflow when the operator wants real file/code work.
 		if (isAgyChat && sender !== 'system' && !imageMode) {
 			try {
 				const allHistory = getChatMessages(30, threadId);
@@ -190,20 +206,35 @@ export const POST: RequestHandler = async ({ request }) => {
 					0,
 					-1
 				);
-				const history = chatRowsToGeminiHistory(slice);
-				const { reply } = await callGeminiChat(history, message.trim());
-				addChatMessage('agy', reply, null, null, null, 'sent', threadId);
+				const routerMessages: RouterMessage[] = [
+					...slice
+						.filter((r) => r.sender !== 'system')
+						.map((r) => ({
+							role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
+							content: r.message
+						})),
+					{ role: 'user' as const, content: message.trim() }
+				].slice(-20);
+
+				const result = await routeChat(currentTier, routerMessages, 'gemini');
+				addChatMessage('agy', result.reply, null, null, null, 'sent', threadId);
+				upsertThreadTier(threadId, currentTier, result.model_used);
+				routerMeta = { provider_used: result.provider_used, model_used: result.model_used };
+
+				if (result.fell_forward) {
+					addChatMessage(
+						'system',
+						`ℹ️ Primary provider unavailable — reply served by **${result.provider_used}** (${result.model_used}).`,
+						null, null, null, 'sent', threadId
+					);
+				}
 			} catch (err) {
-				console.error('Gemini chat call failed:', err);
+				console.error('LLM router chat call failed:', err);
 				const msg = err instanceof Error ? err.message : 'unknown error';
 				addChatMessage(
 					'system',
-					`⚠️ **AGY (Gemini API) failed.** \`${msg.slice(0, 200)}\`. Check GEMINI_API_KEY + your Google AI Studio quota.`,
-					null,
-					null,
-					null,
-					'sent',
-					threadId
+					`⚠️ **LLM router failed.** \`${msg.slice(0, 200)}\`. Check provider keys and daily caps.`,
+					null, null, null, 'sent', threadId
 				);
 			}
 		}
@@ -417,7 +448,11 @@ waiting.`;
 		// is logged but no worker spawns. That's the entire intent — no
 		// system "no dispatch" warning needed.
 
-		return json({ message: chatMsg });
+		return json({
+			message: chatMsg,
+			current_tier: currentTier,
+			...(routerMeta ? { provider_used: routerMeta.provider_used, model_used: routerMeta.model_used } : {})
+		});
 	} catch (e: unknown) {
 		console.error('POST /api/chat error:', e);
 		return json({ error: 'internal_server_error' }, { status: 500 });

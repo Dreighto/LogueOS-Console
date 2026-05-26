@@ -39,6 +39,15 @@
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
 
+	// LLM spend data (PR 1c). Seeded from SSR; refreshed on poll cadence.
+	type SpendEntry = { provider: string; tokens_used: number; cap: number; pct: number };
+	let spendData = $state<SpendEntry[]>(data.spendProviders ?? []);
+	let spendError = $state<string | null>(null);
+
+	$effect(() => {
+		spendData = data.spendProviders ?? [];
+	});
+
 	async function refresh() {
 		// Kill switch
 		try {
@@ -67,6 +76,18 @@
 		} catch (e: unknown) {
 			servicesError = e instanceof Error ? e.message : 'Unknown error';
 			console.error('connection-status poll error:', e);
+		}
+
+		// LLM spend data
+		try {
+			const resp = await fetch(resolve('/api/chat/usage'));
+			if (resp.ok) {
+				const body = await resp.json();
+				spendData = Array.isArray(body.providers) ? body.providers : [];
+				spendError = null;
+			}
+		} catch (e: unknown) {
+			spendError = e instanceof Error ? e.message : 'Unknown error';
 		}
 	}
 
@@ -254,6 +275,43 @@
 			</div>
 		{/if}
 	</section>
+
+	<!-- LLM Spend banner (PR 1c). Today's token usage per provider vs cap. -->
+	{#if spendData.length > 0}
+		<section class="flex flex-col gap-3" aria-labelledby="spend-heading">
+			<div class="flex items-center gap-2 px-1">
+				<span class="text-muted-foreground text-sm">🪙</span>
+				<h2
+					id="spend-heading"
+					class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+				>
+					LLM Spend Today
+				</h2>
+			</div>
+			<div class="flex flex-col gap-2">
+				{#each spendData as p (p.provider)}
+					<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+						<div class="flex items-center justify-between">
+							<span class="font-mono text-xs uppercase tracking-wider text-foreground">{p.provider}</span>
+							<span class="font-mono text-xs text-muted-foreground">
+								{p.tokens_used.toLocaleString()} / {p.cap.toLocaleString()} tok · {p.pct}%
+							</span>
+						</div>
+						<div class="h-1 w-full rounded bg-border overflow-hidden">
+							<div
+								class="h-full rounded transition-all duration-300
+									{p.pct >= 90 ? 'bg-status-red' : p.pct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
+								style="width: {p.pct}%"
+							></div>
+						</div>
+					</div>
+				{/each}
+			</div>
+			{#if spendError}
+				<p class="font-mono text-xs text-status-amber">Spend refresh failed: {spendError}</p>
+			{/if}
+		</section>
+	{/if}
 
 	<!-- Build identity (LOS-73). Lets the operator know which build is
 	     running when triaging Console issues. Values are inlined at build
