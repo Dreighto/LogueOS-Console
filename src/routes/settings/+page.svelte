@@ -2,7 +2,7 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle } from 'lucide-svelte';
+	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle, Bell, BellOff, BellRing } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -55,6 +55,117 @@
 	$effect(() => {
 		voiceStatus = data.voiceStatus ?? null;
 	});
+
+	// Web Push state (PR 6).
+	type DeadSub = { device_id: string; endpoint: string; detected_at: string };
+	let pushDeadSubs = $state<DeadSub[]>(data.pushDeadSubs ?? []);
+	let pushSubCount = $state<number>(data.pushSubCount ?? 0);
+	let pushEnabled = $state(false);        // reflects PushManager subscription state
+	let pushWorking = $state(false);        // true while subscribe/unsubscribe is in flight
+	let pushError = $state<string | null>(null);
+	let pushDeviceId = $state<string>('');  // persisted in localStorage
+
+	$effect(() => {
+		pushDeadSubs = data.pushDeadSubs ?? [];
+		pushSubCount = data.pushSubCount ?? 0;
+	});
+
+	// On mount: read/generate device_id from localStorage, then probe PushManager state.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!data.enableWebPush) return;
+
+		let id = localStorage.getItem('logueos_push_device_id');
+		if (!id) {
+			id = crypto.randomUUID();
+			localStorage.setItem('logueos_push_device_id', id);
+		}
+		pushDeviceId = id;
+
+		if ('serviceWorker' in navigator && 'PushManager' in window) {
+			navigator.serviceWorker.ready.then(async (reg) => {
+				const sub = await reg.pushManager.getSubscription();
+				pushEnabled = sub !== null;
+			}).catch(() => {});
+		}
+	});
+
+	async function togglePush() {
+		if (pushWorking) return;
+		pushWorking = true;
+		pushError = null;
+		try {
+			if (pushEnabled) {
+				await disablePush();
+			} else {
+				await enablePush();
+			}
+		} catch (e: unknown) {
+			pushError = e instanceof Error ? e.message : 'Push toggle failed.';
+		} finally {
+			pushWorking = false;
+		}
+	}
+
+	async function enablePush() {
+		if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+			throw new Error('Web Push is not supported in this browser.');
+		}
+
+		const permission = await Notification.requestPermission();
+		if (permission !== 'granted') {
+			throw new Error('Notification permission denied.');
+		}
+
+		const reg = await navigator.serviceWorker.ready;
+		const sub = await reg.pushManager.subscribe({
+			userVisibleOnly: true,
+			applicationServerKey: urlBase64ToUint8Array(data.vapidPublicKey)
+		});
+
+		const resp = await fetch('/api/chat/push/subscribe', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ device_id: pushDeviceId, subscription: sub.toJSON() })
+		});
+		if (!resp.ok) {
+			const err = await resp.json().catch(() => ({}));
+			throw new Error((err as Record<string, string>).message ?? `HTTP ${resp.status}`);
+		}
+
+		pushEnabled = true;
+		pushSubCount += 1;
+	}
+
+	async function disablePush() {
+		const reg = await navigator.serviceWorker.ready;
+		const sub = await reg.pushManager.getSubscription();
+		if (sub) await sub.unsubscribe();
+
+		await fetch('/api/chat/push/unsubscribe', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ device_id: pushDeviceId })
+		});
+
+		pushEnabled = false;
+		pushSubCount = Math.max(0, pushSubCount - 1);
+	}
+
+	async function dismissDeadSub(deviceId: string) {
+		// Optimistic remove from banner; server-side re_prompted_at update
+		// happens via unsubscribe (which cleans the row anyway).
+		pushDeadSubs = pushDeadSubs.filter((d) => d.device_id !== deviceId);
+	}
+
+	// Converts a URL-safe base64 VAPID public key to Uint8Array as required by
+	// PushManager.subscribe(applicationServerKey).
+	function urlBase64ToUint8Array(base64String: string): Uint8Array {
+		const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+		const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+		const raw = atob(base64);
+		return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+	}
 
 	async function refresh() {
 		// Kill switch
@@ -376,6 +487,109 @@
 						></div>
 					</div>
 				</div>
+			</div>
+		</section>
+	{/if}
+
+	<!-- Web Push Notifications section (PR 6). -->
+	{#if data.enableWebPush}
+		<section class="flex flex-col gap-3" aria-labelledby="push-heading">
+			<div class="flex items-center gap-2 px-1">
+				<Bell size={16} class="text-muted-foreground" />
+				<h2
+					id="push-heading"
+					class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+				>
+					Push Notifications
+				</h2>
+			</div>
+
+			<!-- Dead-sub re-subscribe banner -->
+			{#each pushDeadSubs as dead (dead.device_id)}
+				<div
+					class="flex items-start gap-2 rounded-md border border-status-amber/30 bg-status-amber/5 p-3 font-mono text-xs text-status-amber"
+				>
+					<BellRing size={14} class="mt-0.5 shrink-0" />
+					<div class="flex flex-1 flex-col gap-1">
+						<span class="font-bold">Dead Subscription Detected — Re-subscribe</span>
+						<span class="text-status-amber/80">
+							Your push subscription expired or was revoked. Disable and re-enable
+							notifications below to restore push delivery.
+						</span>
+					</div>
+					<button
+						type="button"
+						onclick={() => dismissDeadSub(dead.device_id)}
+						class="shrink-0 rounded p-0.5 text-status-amber/60 hover:text-status-amber"
+						aria-label="Dismiss"
+					>
+						<X size={12} />
+					</button>
+				</div>
+			{/each}
+
+			<div
+				class="rounded-lg border p-4 {pushEnabled
+					? 'border-status-green/30 bg-status-green/5'
+					: 'border-border bg-surface/30'}"
+			>
+				<div class="flex items-center justify-between gap-3">
+					<div class="flex flex-col gap-0.5">
+						<span class="font-sans text-sm font-semibold text-foreground">
+							{pushEnabled ? 'Notifications enabled' : 'Enable Push Notifications'}
+						</span>
+						{#if pushSubCount > 0}
+							<span class="font-mono text-xs text-muted-foreground">
+								{pushSubCount} device{pushSubCount !== 1 ? 's' : ''} subscribed
+							</span>
+						{/if}
+					</div>
+					<button
+						type="button"
+						onclick={togglePush}
+						disabled={pushWorking || !data.vapidPublicKey}
+						class="flex items-center gap-2 rounded-md border px-3 py-2 font-sans text-xs font-bold uppercase tracking-wider transition-colors focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50
+							{pushEnabled
+							? 'border-status-red/30 bg-status-red/10 text-status-red hover:bg-status-red/20 focus:ring-status-red/40'
+							: 'border-status-green/30 bg-status-green/10 text-status-green hover:bg-status-green/20 focus:ring-status-green/40'}"
+					>
+						{#if pushEnabled}
+							<BellOff size={13} />
+							{pushWorking ? 'Working…' : 'Disable'}
+						{:else}
+							<Bell size={13} />
+							{pushWorking ? 'Working…' : 'Enable'}
+						{/if}
+					</button>
+				</div>
+
+				{#if !data.vapidPublicKey}
+					<div
+						class="mt-3 flex items-start gap-2 rounded-md border border-status-amber/20 bg-status-amber/5 p-2 font-mono text-xs text-status-amber"
+					>
+						<AlertCircle size={13} class="mt-0.5 shrink-0" />
+						<span>
+							VAPID keys not configured. Run <code>node tools/generate_vapid_keys.js</code> and
+							add the output to <code>.env</code>.
+						</span>
+					</div>
+				{/if}
+
+				{#if pushError}
+					<div
+						class="mt-3 flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-xs text-status-red"
+					>
+						<AlertCircle size={13} class="mt-0.5 shrink-0" />
+						<span>{pushError}</span>
+					</div>
+				{/if}
+
+				<!-- iOS-specific inline quirks note -->
+				<p class="mt-3 font-mono text-xs text-muted-foreground leading-relaxed">
+					Apple Web Push requires the PWA to be home-screen-installed AND launched at least once
+					since reboot. On iOS, tap the Share button → "Add to Home Screen", then open the app
+					from the home screen before enabling notifications.
+				</p>
 			</div>
 		</section>
 	{/if}

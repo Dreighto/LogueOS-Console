@@ -1,4 +1,5 @@
 /// <reference types="@sveltejs/kit" />
+/// <reference lib="webworker" />
 import { build, files, version } from '$service-worker';
 
 const CACHE_NAME = `cache-${version}`;
@@ -29,6 +30,38 @@ self.addEventListener('activate', (event: any) => {
 	// Claim immediate control to enable offline shell booting on first visit
 	self.clients.claim();
 	event.waitUntil(deleteOldCaches());
+});
+
+// Push notification handler (PR 6 — iOS 2026 hardenings).
+//
+// event.waitUntil wrapping is NON-NEGOTIABLE: iOS Safari kills the push
+// subscription after 3 consecutive silent pushes if showNotification is not
+// wrapped in waitUntil. Verified per Decision Log entry 10.
+//
+// iOS 18.4+ Declarative Web Push: Apple displays notifications directly from
+// the payload (title/body/icon at root level) without invoking this handler.
+// This handler remains as the fallback for older iOS, Chrome, and Firefox.
+self.addEventListener('push', (event: any) => {
+	event.waitUntil(
+		(async () => {
+			const data = event.data?.json() ?? {};
+			await (self as any).registration.showNotification(data.title || 'LogueOS', {
+				body: data.body || '',
+				icon: '/console/favicon.png',
+				vibrate: [100, 50, 100],
+				data: { url: data.data?.url || data.url || '/console' }
+			});
+		})()
+	);
+});
+
+self.addEventListener('notificationclick', (event: any) => {
+	event.notification.close();
+	event.waitUntil(
+		(self as any).clients.openWindow(
+			event.notification.data?.url || '/console'
+		)
+	);
 });
 
 self.addEventListener('fetch', (event: any) => {

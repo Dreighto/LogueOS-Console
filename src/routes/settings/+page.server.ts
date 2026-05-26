@@ -9,6 +9,7 @@
 import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
 import { readKillSwitchStateSafe } from '$lib/server/kill-switch';
+import { getPendingDeadSubs, getSubscriptionCount } from '$lib/server/web_push';
 
 export const load: PageServerLoad = async ({ fetch }) => {
 	let services: Array<{ id: string; name: string; status: 'online' | 'offline' }> = [];
@@ -50,11 +51,23 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.error('Settings: /api/chat/speak/status load failed', e);
 	}
 
+	// Web Push status (PR 6). Dead subs surface as a re-subscribe banner.
+	let pushDeadSubs: Array<{ device_id: string; endpoint: string; detected_at: string }> = [];
+	let pushSubCount = 0;
+	try {
+		pushDeadSubs = getPendingDeadSubs();
+		pushSubCount = getSubscriptionCount();
+	} catch (e) {
+		console.error('Settings: push status load failed', e);
+	}
+
 	return {
 		...clientSafeConfig,
 		killSwitch: await readKillSwitchStateSafe(),
 		services,
 		spendProviders,
-		voiceStatus
+		voiceStatus,
+		pushDeadSubs,
+		pushSubCount
 	};
 };

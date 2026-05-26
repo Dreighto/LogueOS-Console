@@ -15,6 +15,11 @@
 // Future PRs can add session tokens or HMAC-signed requests for multi-user.
 
 import type { Handle } from '@sveltejs/kit';
+import { startCompletionPoller } from '$lib/server/completion_poller';
+
+// Start the Web Push completion poller once at server boot (PR 6).
+// Tails cc_completion_log.jsonl and fires push on new chat-dispatched completions.
+startCompletionPoller();
 
 // Routes that require tailnet-direct access. Funnel requests to these
 // paths return 401 with a JSON error body.
