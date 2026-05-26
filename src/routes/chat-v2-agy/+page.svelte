@@ -29,7 +29,13 @@
 		MessageSquare,
 		Check,
 		Copy,
-		RefreshCw
+		RefreshCw,
+		MoreVertical,
+		Edit3,
+		Archive,
+		ArchiveRestore,
+		Trash2,
+		Eraser
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import Markdown from '$lib/components/Markdown.svelte';
@@ -1105,9 +1111,130 @@
 		if (!raw) return;
 		const slug = slugifyThreadName(raw);
 		if (!threads.some((t) => t.thread_id === slug)) {
-			threads = [{ thread_id: slug, message_count: 0, latest_ts: '' }, ...threads];
+			threads = [
+				{
+					thread_id: slug,
+					title: raw.trim() || slug,
+					archived: false,
+					pinned: false,
+					message_count: 0,
+					latest_ts: ''
+				},
+				...threads
+			];
 		}
 		void switchThread(slug);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Thread management — rename / archive / delete / clear-all. Backend is
+	// /api/chat/threads/[id] PATCH (title/archived) + DELETE (archived only).
+	// ─────────────────────────────────────────────────────────────────────
+	let threadMenuOpenFor = $state<string | null>(null);
+	let renamingFor = $state<string | null>(null);
+	let renameDraft = $state('');
+	let showArchived = $state(false);
+
+	function openRename(t: { thread_id: string; title: string }) {
+		threadMenuOpenFor = null;
+		renamingFor = t.thread_id;
+		renameDraft = t.title || t.thread_id;
+	}
+	async function commitRename(threadId: string) {
+		const title = renameDraft.trim();
+		renamingFor = null;
+		if (!title) return;
+		// Optimistic update.
+		threads = threads.map((t) => (t.thread_id === threadId ? { ...t, title } : t));
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title })
+			});
+		} catch {
+			toasts.add('Rename failed — try again', 'error');
+		}
+	}
+	function cancelRename() {
+		renamingFor = null;
+		renameDraft = '';
+	}
+
+	async function toggleArchive(t: { thread_id: string; archived: boolean }) {
+		threadMenuOpenFor = null;
+		const archived = !t.archived;
+		threads = threads.map((x) => (x.thread_id === t.thread_id ? { ...x, archived } : x));
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ archived })
+			});
+			toasts.add(archived ? `Archived "${t.thread_id}"` : `Restored "${t.thread_id}"`, 'success');
+		} catch {
+			toasts.add('Archive failed', 'error');
+		}
+	}
+
+	async function deleteThreadById(t: { thread_id: string; archived: boolean }) {
+		threadMenuOpenFor = null;
+		if (t.thread_id === 'default') {
+			toasts.add('Cannot delete the Default Space', 'error');
+			return;
+		}
+		// Backend requires archived=true before delete. Auto-archive if needed.
+		if (!t.archived) {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ archived: true })
+			}).catch(() => null);
+		}
+		const ok = window.confirm(
+			`Delete thread "${t.thread_id}"? This permanently removes all messages, drafts, and metadata for it.`
+		);
+		if (!ok) return;
+		try {
+			const r = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'DELETE'
+			});
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			threads = threads.filter((x) => x.thread_id !== t.thread_id);
+			if (activeThread === t.thread_id) {
+				await switchThread('default');
+			}
+			toasts.add(`Deleted "${t.thread_id}"`, 'success');
+		} catch (e) {
+			toasts.add(`Delete failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+		}
+	}
+
+	async function clearAllSessions() {
+		const ok = window.confirm(
+			'Archive and delete every thread except Default Space? This cannot be undone.'
+		);
+		if (!ok) return;
+		const targets = threads.filter((t) => t.thread_id !== 'default');
+		let removed = 0;
+		for (const t of targets) {
+			try {
+				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ archived: true })
+				});
+				const r = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+					method: 'DELETE'
+				});
+				if (r.ok) removed++;
+			} catch {
+				/* skip */
+			}
+		}
+		threads = threads.filter((t) => t.thread_id === 'default');
+		if (activeThread !== 'default') await switchThread('default');
+		toasts.add(`Cleared ${removed} thread${removed === 1 ? '' : 's'}`, 'success');
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -1170,7 +1297,17 @@
 					return;
 				}
 				if (!threads.some((t) => t.thread_id === slug)) {
-					threads = [{ thread_id: slug, message_count: 0, latest_ts: '' }, ...threads];
+					threads = [
+						{
+							thread_id: slug,
+							title: rest.trim() || slug,
+							archived: false,
+							pinned: false,
+							message_count: 0,
+							latest_ts: ''
+						},
+						...threads
+					];
 				}
 				await switchThread(slug);
 				toasts.add(`Switched to thread "${slug}"`, 'success');
@@ -1387,39 +1524,162 @@
 		</div>
 
 		<!-- Threads Scroll Area -->
-		<div class="flex-1 space-y-1 overflow-y-auto p-2">
+		<div class="flex flex-1 flex-col overflow-y-auto p-2">
+			<!-- Toolbar — Show archived toggle + Clear All -->
+			<div class="mb-1 flex items-center justify-between px-2 py-1">
+				<button
+					type="button"
+					onclick={() => (showArchived = !showArchived)}
+					class="flex items-center gap-1 font-mono text-[9px] tracking-wider text-zinc-500 uppercase transition-colors hover:text-zinc-300"
+					title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+				>
+					<Archive size={10} />
+					<span>{showArchived ? 'Hide archived' : 'Show archived'}</span>
+				</button>
+				<button
+					type="button"
+					onclick={clearAllSessions}
+					class="flex items-center gap-1 rounded font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:text-red-400"
+					title="Archive and delete every non-default thread"
+				>
+					<Eraser size={10} />
+					<span>Clear all</span>
+				</button>
+			</div>
+
 			{#if threads.length === 0}
-				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">
-					No active threads
-				</div>
+				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">No sessions yet</div>
 			{:else}
-				{#each threads as t (t.thread_id)}
-					<button
-						type="button"
-						onclick={() => switchThread(t.thread_id)}
-						class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left font-sans text-xs transition-all hover:scale-[1.01] active:scale-[0.99]
-							{activeThread === t.thread_id
-							? 'border border-zinc-700/50 bg-zinc-800/40 font-medium text-white'
-							: 'border border-transparent bg-transparent text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'}"
-					>
-						<div class="flex items-center gap-2.5 truncate">
-							<MessageSquare
-								size={13}
-								class={activeThread === t.thread_id ? 'text-purple-400' : 'text-zinc-500'}
-							/>
-							<span class="truncate"
-								>{t.thread_id === 'default' ? 'Default Space' : t.thread_id}</span
-							>
+				<div class="space-y-1">
+					{#each threads.filter((t) => showArchived || !t.archived) as t (t.thread_id)}
+						<div class="relative">
+							{#if renamingFor === t.thread_id}
+								<!-- Rename input replaces the row in-place. -->
+								<form
+									class="flex items-center gap-1 rounded-xl border border-purple-500/40 bg-zinc-900 px-2 py-1.5"
+									onsubmit={(e) => {
+										e.preventDefault();
+										void commitRename(t.thread_id);
+									}}
+								>
+									<input
+										type="text"
+										bind:value={renameDraft}
+										class="flex-1 bg-transparent text-xs text-white focus:outline-none"
+										autofocus
+										onkeydown={(e) => {
+											if (e.key === 'Escape') cancelRename();
+										}}
+									/>
+									<button
+										type="submit"
+										class="rounded px-1.5 py-0.5 text-[10px] text-purple-300 hover:bg-purple-500/10"
+										>Save</button
+									>
+									<button
+										type="button"
+										onclick={cancelRename}
+										class="rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-zinc-800"
+										>Cancel</button
+									>
+								</form>
+							{:else}
+								<div
+									class="group flex w-full items-center gap-1 rounded-xl pr-1 transition-all
+										{activeThread === t.thread_id
+										? 'border border-zinc-700/50 bg-zinc-800/40'
+										: 'border border-transparent hover:bg-zinc-900/40'}
+										{t.archived ? 'opacity-60' : ''}"
+								>
+									<button
+										type="button"
+										onclick={() => switchThread(t.thread_id)}
+										class="flex flex-1 items-center justify-between truncate px-3 py-2 text-left font-sans text-xs
+											{activeThread === t.thread_id ? 'font-medium text-white' : 'text-zinc-300'}"
+									>
+										<div class="flex min-w-0 items-center gap-2.5 truncate">
+											<MessageSquare
+												size={13}
+												class={activeThread === t.thread_id ? 'text-purple-400' : 'text-zinc-500'}
+											/>
+											<span class="truncate"
+												>{t.thread_id === 'default' && t.title === 'default'
+													? 'Default Space'
+													: t.title || t.thread_id}</span
+											>
+											{#if t.archived}
+												<Archive size={10} class="shrink-0 text-zinc-600" />
+											{/if}
+										</div>
+										{#if t.message_count > 0}
+											<span
+												class="ml-2 shrink-0 rounded border border-zinc-900 bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
+												>{t.message_count}</span
+											>
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={(e) => {
+											e.stopPropagation();
+											threadMenuOpenFor = threadMenuOpenFor === t.thread_id ? null : t.thread_id;
+										}}
+										class="flex h-7 w-6 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
+										aria-label="Session options"
+									>
+										<MoreVertical size={13} />
+									</button>
+								</div>
+							{/if}
+
+							{#if threadMenuOpenFor === t.thread_id}
+								<button
+									type="button"
+									class="fixed inset-0 z-40 cursor-default"
+									onclick={() => (threadMenuOpenFor = null)}
+									aria-label="Close menu"
+									tabindex="-1"
+								></button>
+								<div
+									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-800 bg-[#0e0e0e] py-1 shadow-2xl"
+								>
+									<button
+										type="button"
+										onclick={() => openRename(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
+									>
+										<Edit3 size={11} class="text-zinc-500" />
+										<span>Rename</span>
+									</button>
+									<button
+										type="button"
+										onclick={() => toggleArchive(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
+									>
+										{#if t.archived}
+											<ArchiveRestore size={11} class="text-zinc-500" />
+											<span>Restore</span>
+										{:else}
+											<Archive size={11} class="text-zinc-500" />
+											<span>Archive</span>
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={() => deleteThreadById(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 border-t border-zinc-800/50 px-3 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-40"
+									>
+										<Trash2 size={11} />
+										<span>Delete</span>
+									</button>
+								</div>
+							{/if}
 						</div>
-						{#if t.message_count > 0}
-							<span
-								class="rounded border border-zinc-900 bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
-							>
-								{t.message_count}
-							</span>
-						{/if}
-					</button>
-				{/each}
+					{/each}
+				</div>
 			{/if}
 		</div>
 
