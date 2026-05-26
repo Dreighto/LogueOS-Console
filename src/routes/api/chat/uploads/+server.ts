@@ -6,6 +6,21 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { serverConfig } from '$lib/server/config';
 
+// heic-convert ships no types of its own. Minimal shape — accepts Buffer
+// (or ArrayBuffer) and returns a Promise<Buffer> with the converted JPEG.
+type HeicConvertFn = (opts: {
+	buffer: ArrayBuffer | Uint8Array;
+	format: 'JPEG' | 'PNG';
+	quality?: number;
+}) => Promise<Buffer>;
+
+const HEIC_MIMES = new Set([
+	'image/heic',
+	'image/heif',
+	'image/heic-sequence',
+	'image/heif-sequence'
+]);
+
 // Accept these and only these. The Markdown renderer allows <img>; permitting
 // non-image MIME types would let an operator paste arbitrary blobs which then
 // render as broken images at best. Keep the list tight.
@@ -87,12 +102,37 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const id = crypto.randomUUID();
-	const ext = extFromMime(file.type);
+	let ext = extFromMime(file.type);
+	let outputMime = file.type;
+	let buffer: Buffer;
+	try {
+		buffer = Buffer.from(await file.arrayBuffer());
+	} catch (e) {
+		console.error('chat-uploads buffer read failed:', e);
+		return error(500, 'read failed');
+	}
+
+	// HEIC/HEIF transcode → JPEG. iPhone photos default to HEIC which most
+	// non-Safari browsers can't render inline. Transcode server-side and
+	// store the JPEG so the chat renderer's markdown image link works
+	// universally. Original HEIC bytes aren't persisted.
+	if (HEIC_MIMES.has(file.type)) {
+		try {
+			const mod = await import('heic-convert');
+			const heicConvert = (mod.default ?? mod) as HeicConvertFn;
+			buffer = await heicConvert({ buffer, format: 'JPEG', quality: 0.85 });
+			ext = 'jpg';
+			outputMime = 'image/jpeg';
+		} catch (e) {
+			console.error('chat-uploads HEIC transcode failed:', e);
+			return error(500, 'HEIC transcode failed');
+		}
+	}
+
 	const filename = `${id}.${ext}`;
 	const fullPath = path.join(serverConfig.chatUploadsDir, filename);
 
 	try {
-		const buffer = Buffer.from(await file.arrayBuffer());
 		fs.writeFileSync(fullPath, buffer);
 	} catch (e) {
 		console.error('chat-uploads write failed:', e);
@@ -115,7 +155,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		).run();
 		db.prepare(
 			'INSERT INTO chat_uploads (id, filename, mime, size, target_repo) VALUES (?, ?, ?, ?, ?)'
-		).run(id, filename, file.type, file.size, targetRepo);
+		).run(id, filename, outputMime, buffer.length, targetRepo);
 		db.close();
 	} catch (e) {
 		// Non-fatal — file is already written; log and continue.
@@ -128,8 +168,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	return json({
 		url: `./api/chat/uploads/${filename}`,
 		filename,
-		size: file.size,
-		mime: file.type,
+		size: buffer.length,
+		mime: outputMime,
+		original_mime: file.type,
+		transcoded: outputMime !== file.type,
 		target_repo: targetRepo
 	});
 };
