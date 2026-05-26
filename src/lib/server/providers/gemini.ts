@@ -196,3 +196,117 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		}
 	};
 }
+
+export type StreamEvent =
+	| { type: 'token'; text: string }
+	| { type: 'done'; usage: { input: number; output: number; total: number } };
+
+// Streaming chat — yields text deltas as they arrive from Gemini's SSE
+// transport (?alt=sse). Each event is a partial GenerateContentResponse.
+// Tracks the final usageMetadata if Gemini emits it in the last chunk.
+export async function* streamChat(options: ProviderChatOptions): AsyncGenerator<StreamEvent> {
+	const authMode = options.authMode ?? 'oauth';
+	let authHeader: Record<string, string> = {};
+	let urlKey = '';
+
+	if (authMode === 'oauth') {
+		const token = await getOAuthToken();
+		if (token) {
+			authHeader = { Authorization: `Bearer ${token}` };
+		} else {
+			const key = getApiKey();
+			if (!key) throw new Error('Gemini: no OAuth token and GEMINI_API_KEY not configured');
+			urlKey = `?key=${key}&alt=sse`;
+		}
+	} else {
+		const key = getApiKey();
+		if (!key) throw new Error('Gemini: GEMINI_API_KEY not configured');
+		urlKey = `?key=${key}&alt=sse`;
+	}
+	if (!urlKey) urlKey = '?alt=sse';
+
+	const contents: GeminiContent[] = options.messages.map((m) => ({
+		role: m.role === 'user' ? 'user' : 'model',
+		parts: [{ text: m.content }]
+	}));
+
+	const resp = await fetch(
+		`${GEMINI_BASE}/models/${options.model}:streamGenerateContent${urlKey}`,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', ...authHeader },
+			body: JSON.stringify({
+				contents,
+				generationConfig: { maxOutputTokens: 4096 },
+				...(options.system ? { systemInstruction: { parts: [{ text: options.system }] } } : {})
+			}),
+			signal: options.signal
+		}
+	);
+
+	if (!resp.ok) {
+		const body = await resp.text().catch(() => '');
+		const err = new Error(`Gemini HTTP ${resp.status}: ${body.slice(0, 300)}`);
+		(err as Error & { status: number }).status = resp.status;
+		throw err;
+	}
+	if (!resp.body) throw new Error('Gemini: empty stream body');
+
+	const reader = resp.body.getReader();
+	const decoder = new TextDecoder('utf-8');
+	let buf = '';
+	let inputTokens = 0;
+	let outputTokens = 0;
+	let totalTokens = 0;
+
+	// Gemini emits SSE event delimiters as CRLF-CRLF (\r\n\r\n) while
+	// Anthropic uses bare LF-LF (\n\n). Find whichever comes first.
+	const findDelim = (s: string): { idx: number; len: number } => {
+		const a = s.indexOf('\r\n\r\n');
+		const b = s.indexOf('\n\n');
+		if (a !== -1 && (b === -1 || a < b)) return { idx: a, len: 4 };
+		if (b !== -1) return { idx: b, len: 2 };
+		return { idx: -1, len: 0 };
+	};
+
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		buf += decoder.decode(value, { stream: true });
+
+		let next: { idx: number; len: number };
+		while ((next = findDelim(buf)).idx !== -1) {
+			const raw = buf.slice(0, next.idx);
+			buf = buf.slice(next.idx + next.len);
+			const dataLine = raw.split(/\r?\n/).find((l) => l.startsWith('data: '));
+			if (!dataLine) continue;
+			const payload = dataLine.slice(6).replace(/\r$/, '');
+			if (!payload) continue;
+			let chunk: GeminiResponse;
+			try {
+				chunk = JSON.parse(payload) as GeminiResponse;
+			} catch {
+				continue;
+			}
+			const text = chunk.candidates?.[0]?.content?.parts
+				?.map((p) => p.text ?? '')
+				.filter(Boolean)
+				.join('');
+			if (text) yield { type: 'token', text };
+			if (chunk.usageMetadata) {
+				inputTokens = chunk.usageMetadata.promptTokenCount ?? inputTokens;
+				outputTokens = chunk.usageMetadata.candidatesTokenCount ?? outputTokens;
+				totalTokens = chunk.usageMetadata.totalTokenCount ?? totalTokens;
+			}
+		}
+	}
+
+	yield {
+		type: 'done',
+		usage: {
+			input: inputTokens,
+			output: outputTokens,
+			total: totalTokens || inputTokens + outputTokens
+		}
+	};
+}

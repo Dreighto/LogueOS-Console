@@ -167,3 +167,110 @@ export async function routeChat(
 		`All providers exhausted for tier '${tier}'. Check provider keys and daily caps.`
 	);
 }
+
+export type RouterStreamEvent =
+	| { type: 'token'; text: string }
+	| {
+			type: 'done';
+			reply: string;
+			provider_used: string;
+			model_used: string;
+			tokens_used: number;
+			fell_forward: boolean;
+	  };
+
+// Streaming variant of routeChat. Yields token events as they arrive from the
+// chosen provider, then a single 'done' event with the assembled reply and
+// usage metadata. Falls forward across providers in the same tier on failure
+// of the first attempt — but only BEFORE any tokens have been yielded
+// (mid-stream failures can't be silently retried, the caller would see a
+// truncated reply with no signal). Only Anthropic + Gemini support streaming
+// today; OpenAI/Ollama fall back to the non-streaming chat() and emit the
+// full reply as a single token event.
+export async function* routeChatStream(
+	tier: Tier,
+	messages: RouterMessage[],
+	preference?: 'gemini',
+	signal?: AbortSignal,
+	system?: string
+): AsyncGenerator<RouterStreamEvent> {
+	const order = preference === 'gemini' ? GEMINI_FIRST_ORDER : DEFAULT_ORDER;
+	const filteredOrder: Provider[] = tier === 'local' ? ['ollama'] : order;
+
+	let fell_forward = false;
+
+	for (let i = 0; i < filteredOrder.length; i++) {
+		const provider = filteredOrder[i];
+		const model = TIER_MODELS[tier]?.[provider];
+		if (!model) continue;
+		if (provider !== 'ollama' && isCapExceeded(provider)) {
+			fell_forward = true;
+			continue;
+		}
+
+		try {
+			const reply: string[] = [];
+			let usageTotal = 0;
+			let yieldedAny = false;
+
+			if (provider === 'anthropic') {
+				if (!anthropic.isAvailable()) continue;
+				for await (const evt of anthropic.streamChat({ messages, model, signal, system })) {
+					if (evt.type === 'token') {
+						reply.push(evt.text);
+						yieldedAny = true;
+						yield { type: 'token', text: evt.text };
+					} else {
+						usageTotal = evt.usage.total;
+					}
+				}
+			} else if (provider === 'gemini') {
+				if (!gemini.isAvailable()) continue;
+				for await (const evt of gemini.streamChat({ messages, model, signal, system })) {
+					if (evt.type === 'token') {
+						reply.push(evt.text);
+						yieldedAny = true;
+						yield { type: 'token', text: evt.text };
+					} else {
+						usageTotal = evt.usage.total;
+					}
+				}
+			} else {
+				// OpenAI / Ollama — no streamChat yet. Fall back to non-streaming
+				// and emit the full reply as a single token. Caller still gets a
+				// 'done' event so the UX path is uniform.
+				const fn = provider === 'openai' ? openai.chat : ollama.chat;
+				if (provider === 'openai' && !openai.isAvailable()) continue;
+				const result = await fn({ messages, model, signal, system });
+				reply.push(result.reply);
+				yieldedAny = true;
+				usageTotal = result.usage.total;
+				yield { type: 'token', text: result.reply };
+			}
+
+			addTokenUsage(provider, usageTotal);
+			yield {
+				type: 'done',
+				reply: reply.join(''),
+				provider_used: provider,
+				model_used: model,
+				tokens_used: usageTotal,
+				fell_forward
+			};
+			return;
+		} catch (err) {
+			const status = getStatus(err);
+			if (status === 402) {
+				throw new Error(
+					`${provider} billing limit (402). Credential rotation required — check account standing.`
+				);
+			}
+			console.error(`[llm_router stream] ${provider} failed (HTTP ${status || 'unknown'}):`, err);
+			fell_forward = true;
+		}
+	}
+
+	throw new Error(
+		`All providers exhausted for tier '${tier}' (streaming). Check provider keys and daily caps.`
+	);
+}
