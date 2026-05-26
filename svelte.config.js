@@ -43,7 +43,22 @@ const config = {
 			// internal hrefs (resolve('/runs/abc')) come out as /console/runs/abc.
 			// The combination is: kit.paths.base for app links + vite.base for asset URLs.
 			base: '/console'
-		}
+		},
+		// SvelteKit's built-in CSRF check compares the request's Origin header
+		// against the URL the server thinks it's running at — and adapter-node
+		// derives that from the ORIGIN env var. Console runs behind Tailscale
+		// Serve / Funnel, where the operator may hit the surface via the
+		// canonical hostname (room.taila28611.ts.net), a tailnet IP, or
+		// localhost during dev. Any mismatch returns 403 "Cross-site POST form
+		// submissions are forbidden" — which is what broke iPhone PWA uploads
+		// (multipart/form-data POST to /api/chat/uploads).
+		//
+		// Disabling this is SAFE for us: hooks.server.ts is the real auth
+		// gate. Funnel-Request requests get 401 on every /api/chat/* prefix;
+		// tailnet-direct requests are trusted as the operator. There is no
+		// session cookie for a malicious site to ride, so the Origin check is
+		// belt-and-suspenders we already gate strictly.
+		csrf: { checkOrigin: false }
 	}
 };
 
