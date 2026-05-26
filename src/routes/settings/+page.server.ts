@@ -22,9 +22,22 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.error('Settings: /api/system load failed', e);
 	}
 
+	type SpendEntry = { provider: string; tokens_used: number; cap: number; pct: number };
+	let spendProviders: SpendEntry[] = [];
+	try {
+		const usageRes = await fetch('/api/chat/usage');
+		if (usageRes.ok) {
+			const data = await usageRes.json();
+			spendProviders = Array.isArray(data.providers) ? data.providers : [];
+		}
+	} catch (e) {
+		console.error('Settings: /api/chat/usage load failed', e);
+	}
+
 	return {
 		...clientSafeConfig,
 		killSwitch: await readKillSwitchStateSafe(),
-		services
+		services,
+		spendProviders
 	};
 };

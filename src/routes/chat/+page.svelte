@@ -44,6 +44,46 @@
 	let threads = $state<ThreadInfo[]>(data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]);
 	let threadSwitcherOpen = $state(false);
 
+	// ─────────────────────────────────────────────────────────────────
+	// LLM tier badge (PR 1c). Shows current conversation tier derived
+	// by the server phase classifier. Operator can tap to override.
+	// ─────────────────────────────────────────────────────────────────
+	type Tier = 'chat' | 'planning' | 'deep' | 'local';
+	let currentTier = $state<Tier>('chat');
+	let tierOverrideOpen = $state(false);
+
+	const TIER_LABELS: Record<Tier, string> = {
+		chat: '🪶 Chat',
+		planning: '⚖️ Planning',
+		deep: '🧠 Deep',
+		local: '🔧 Local'
+	};
+
+	async function fetchTier(threadId: string) {
+		try {
+			const resp = await fetch(resolve(`/api/chat/tier?thread_id=${encodeURIComponent(threadId)}`));
+			if (resp.ok) {
+				const body = await resp.json();
+				if (body.current_tier) currentTier = body.current_tier as Tier;
+			}
+		} catch { /* offline — keep last known tier */ }
+	}
+
+	async function setTierOverride(tier: Tier | null) {
+		tierOverrideOpen = false;
+		try {
+			const resp = await fetch(resolve('/api/chat/tier'), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ thread_id: activeThread, tier })
+			});
+			if (resp.ok) {
+				const body = await resp.json();
+				if (body.current_tier) currentTier = body.current_tier as Tier;
+			}
+		} catch { /* silent */ }
+	}
+
 	// Active chat state seeded from SSR to ensure zero flicker on load.
 	let messages = $state<ChatMessage[]>(data.messages || []);
 	let textDraft = $state('');
@@ -472,6 +512,9 @@
 			})
 			.catch(() => { /* offline — use local copy */ });
 
+		// Fetch initial tier for badge.
+		void fetchTier(activeThread);
+
 		// First paint may not have measured the feed yet — defer to the next
 		// frame so scrollHeight reflects the rendered messages, then jump
 		// without animation. Snap-to-bottom feel like iMessage.
@@ -552,6 +595,8 @@
 			}
 
 			const body = await resp.json();
+			// Update tier badge from response.
+			if (body.current_tier) currentTier = body.current_tier as Tier;
 			// Snappy local append. The operator just sent — always pin them
 			// to the bottom so they see their own message + the incoming
 			// "Agent dispatched" follow-up.
@@ -798,10 +843,11 @@
 		}).catch(() => {
 			/* silent — local switch already happened, persistence is best-effort */
 		});
-		// Reload messages for the new thread.
+		// Reload messages for the new thread and refresh tier badge.
 		await pollMessages();
 		await pollActivity();
 		syncStreamSubscriptions();
+		void fetchTier(threadId);
 		requestAnimationFrame(() => scrollToBottom('auto'));
 	}
 
@@ -1526,6 +1572,51 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Tier badge: shows current conversation tier (server-driven auto-escalation).
+			     Tap → override dropdown. Only visible when using AGY/direct LLM path. -->
+			{#if agentLock === 'agy' || agentLock === 'auto'}
+				<div class="relative">
+					<button
+						type="button"
+						onclick={() => (tierOverrideOpen = !tierOverrideOpen)}
+						class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30 text-muted-foreground"
+						title="Current LLM tier. Tap to override or reset to Auto."
+						aria-label="LLM tier override"
+					>
+						<span>{TIER_LABELS[currentTier]}</span>
+					</button>
+					{#if tierOverrideOpen}
+						<button
+							type="button"
+							class="fixed inset-0 z-40"
+							onclick={() => (tierOverrideOpen = false)}
+							aria-label="Close tier dropdown"
+							tabindex="-1"
+						></button>
+						<div class="absolute bottom-full left-0 mb-1 z-50 min-w-36 rounded border border-border bg-surface shadow-lg py-1 font-mono text-[11px]">
+							<div class="px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/50">Lock tier</div>
+							{#each (['chat', 'planning', 'deep', 'local'] as Tier[]) as t (t)}
+								<button
+									type="button"
+									onclick={() => setTierOverride(t)}
+									class="w-full text-left flex items-center gap-1.5 px-2 py-1 transition-colors hover:bg-foreground/5
+										{currentTier === t ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+								>
+									{TIER_LABELS[t]}
+								</button>
+							{/each}
+							<div class="border-t border-border mt-1 pt-1">
+								<button
+									type="button"
+									onclick={() => setTierOverride(null)}
+									class="w-full text-left px-2 py-1 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+								>Auto (reset)</button>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Input field: attach + textarea + send in one flex row -->
