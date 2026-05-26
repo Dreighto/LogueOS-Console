@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGY Handoff — Chat Surface V2 Redo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #050505; color: #e8e8e8; margin: 0; padding: 20px; max-width: 600px; margin-inline: auto; line-height: 1.5; }
+        h1 { font-size: 22px; margin: 0 0 8px; }
+        .lead { color: #a0a0a0; font-size: 14px; margin-bottom: 24px; }
+        .file { display: block; background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 16px; margin: 12px 0; color: white; text-decoration: none; transition: border-color 0.15s; }
+        .file:active { border-color: #a3e635; }
+        .file .name { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+        .file .desc { color: #a0a0a0; font-size: 13px; margin-bottom: 6px; }
+        .file .action { color: #a3e635; font-size: 12px; font-family: monospace; }
+        .step { background: #18181b; border-left: 3px solid #a3e635; padding: 12px 14px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+        .step h3 { font-size: 14px; margin: 0 0 6px; color: #a3e635; text-transform: uppercase; letter-spacing: 0.05em; }
+        .step p { margin: 0; font-size: 14px; color: #d0d0d0; }
+        code { background: #27272a; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+        .key { background: #27272a; border-radius: 6px; padding: 8px 10px; font-family: monospace; font-size: 12px; color: #d4d4d4; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>AGY Handoff — Chat Surface V2 Redo</h1>
+    <p class="lead">CC's V2 shipped the look but stubbed the functionality. AGY is being asked for an independent pass to compare.</p>
+
+    <div class="step">
+        <h3>The brief (start here)</h3>
+        <p>The primary document AGY needs. Contains: what CC built, what CC stubbed, every backend endpoint AGY can use, design constraints, and the operator's verbatim feedback.</p>
+    </div>
+
+    <a class="file" href="./agy-redo-brief.md" download>
+        <div class="name">📋 agy-redo-brief.md (PRIMARY)</div>
+        <div class="desc">Full briefing. Read this first.</div>
+        <div class="action">tap → opens as text → copy all → paste to AGY</div>
+    </a>
+
+    <div class="step">
+        <h3>Reference files (upload alongside the brief)</h3>
+    </div>
+
+    <a class="file" href="./cc-v2-screenshot.png" download>
+        <div class="name">📸 cc-v2-screenshot.png</div>
+        <div class="desc">What CC's V2 looks like rendered at iPhone 16 Pro Max width. The operator's screenshot.</div>
+        <div class="action">long-press → Save to Photos</div>
+    </a>
+
+    <a class="file" href="./2026-05-25_chat-composer-mockup.png" download>
+        <div class="name">🖼️ original-mockup-composer.png</div>
+        <div class="desc">AGY's original composer mockup (the unified pill design).</div>
+        <div class="action">long-press → Save to Photos</div>
+    </a>
+
+    <a class="file" href="./2026-05-25_chat-compact-header.png" download>
+        <div class="name">🖼️ original-mockup-full-chat.png</div>
+        <div class="desc">AGY's original full chat surface mockup.</div>
+        <div class="action">long-press → Save to Photos</div>
+    </a>
+
+    <a class="file" href="./chat-v2-page.svelte.txt" download>
+        <div class="name">💻 cc-v2-source.svelte.txt</div>
+        <div class="desc">CC's V2 page source. AGY can use it as reference for what NOT to do (stubbed buttons) and what to preserve (philosophical direction).</div>
+        <div class="action">tap → copy → paste to AGY</div>
+    </a>
+
+    <a class="file" href="./layout-v2.svelte.txt" download>
+        <div class="name">💻 cc-v2-layout.svelte.txt</div>
+        <div class="desc">CC's layout patch (added 'immersive' header mode). AGY can reuse this same hook for its version.</div>
+        <div class="action">tap → copy → paste to AGY</div>
+    </a>
+
+    <a class="file" href="./design-doc.md" download>
+        <div class="name">📄 design-doc.md</div>
+        <div class="desc">The original chat-composer-revamp design doc. Backend context only — NOT the visual source of truth.</div>
+        <div class="action">tap → copy → paste to AGY (or skip if AGY has it already)</div>
+    </a>
+
+    <div class="step">
+        <h3>Paste this to AGY first</h3>
+        <p>Opening message to give AGY context immediately before file uploads:</p>
+        <div class="key">AGY — I'm asking you to do a second pass on the immersive chat surface CC built. CC got the look right (full-bleed Conversational OS aesthetic, single unified composer pill, no global chrome) but stubbed most of the functionality — the image button, paperclip, mic, talkback, model picker, threads panel are all either non-functional placeholders or pure state-flip stubs.
+
+I want you to read the primary brief I'm about to upload (agy-redo-brief.md), look at CC's screenshot + source for context, and produce your own version. The goal is a side-by-side comparison so I can pick which to ship (or merge the best of both).
+
+Backend is solid — every endpoint exists and works. This is a frontend-only pass. Reuse the existing `immersive` layout hook in +layout.svelte (it's already wired for any path ending in chat-v2). Build at /chat-v2-agy or whatever path you prefer.
+
+What you actually need to fix vs CC's version is detailed in the brief.</div>
+    </div>
+
+    <p style="color:#52525b; font-size:12px; margin-top:32px; text-align:center;">
+        Once AGY's done, ask CC to remove this folder.
+    </p>
+</body>
+</html>

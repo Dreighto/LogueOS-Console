@@ -80,22 +80,12 @@
 		};
 	});
 
-	// ── Header style (chat surfaces only) ───────────────────────────────────
+	// ── Compact header (chat-only, §2B) ─────────────────────────────────────
 	// page.url.pathname includes the SvelteKit paths.base ('/console'), so we
-	// compare against the full path. Three modes:
-	//   'immersive' — /chat-v2: full-bleed, NO global chrome at all. The page
-	//                 owns its own viewport (Conversational OS surface).
-	//   'compact'   — /chat: legacy 32px compact header + sidebar (kept as
-	//                 safety net while V2 stabilizes).
-	//   'full'      — everything else.
-	// .endsWith() is defensive against future base changes.
-	const headerStyle = $derived(
-		page.url.pathname.endsWith('/chat-v2') || page.url.pathname.endsWith('/chat-v2-agy')
-			? 'immersive'
-			: page.url.pathname.endsWith('/chat')
-				? 'compact'
-				: 'full'
-	);
+	// compare against the full path. .endsWith() is defensive against future
+	// base changes. Same gotcha bit PR 1c's hooks.server.ts — see
+	// reference_sveltekit_basepath_pathname memory.
+	const headerStyle = $derived(page.url.pathname.endsWith('/chat') ? 'compact' : 'full');
 
 	type ActivityRow = {
 		id: number;
@@ -198,15 +188,6 @@
 	<link rel="manifest" href="{base}/manifest.webmanifest" />
 </svelte:head>
 
-{#if headerStyle === 'immersive'}
-	<!-- Conversational OS surface (V2): no global chrome at all. The page
-	     owns its own viewport, header, composer, everything. Layout just
-	     provides safe-area-aware full-bleed canvas. -->
-	<div class="flex min-h-[100dvh] flex-col bg-background text-foreground">
-		{@render children()}
-		<ToastContainer />
-	</div>
-{:else}
 <div
 	data-sveltekit-preload-data="hover"
 	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
@@ -405,7 +386,6 @@
 
 	<ToastContainer />
 </div>
-{/if}
 
 <style>
 	:global(html) {

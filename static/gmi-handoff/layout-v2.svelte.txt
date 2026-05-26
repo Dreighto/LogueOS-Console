@@ -90,7 +90,7 @@
 	//   'full'      — everything else.
 	// .endsWith() is defensive against future base changes.
 	const headerStyle = $derived(
-		page.url.pathname.endsWith('/chat-v2') || page.url.pathname.endsWith('/chat-v2-agy')
+		page.url.pathname.endsWith('/chat-v2')
 			? 'immersive'
 			: page.url.pathname.endsWith('/chat')
 				? 'compact'
