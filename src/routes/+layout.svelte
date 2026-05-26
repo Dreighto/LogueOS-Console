@@ -81,7 +81,11 @@
 	});
 
 	// ── Compact header (chat-only, §2B) ─────────────────────────────────────
-	const headerStyle = $derived(page.url.pathname === '/chat' ? 'compact' : 'full');
+	// page.url.pathname includes the SvelteKit paths.base ('/console'), so we
+	// compare against the full path. .endsWith() is defensive against future
+	// base changes. Same gotcha bit PR 1c's hooks.server.ts — see
+	// reference_sveltekit_basepath_pathname memory.
+	const headerStyle = $derived(page.url.pathname.endsWith('/chat') ? 'compact' : 'full');
 
 	type ActivityRow = {
 		id: number;
@@ -286,20 +290,20 @@
 				<a
 					href={resolve('/usage')}
 					aria-label="API usage"
-					aria-current={page.url.pathname === '/usage' ? 'page' : undefined}
+					aria-current={page.url.pathname.endsWith('/usage') ? 'page' : undefined}
 					class="active-trigger flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface"
-					class:text-cta={page.url.pathname === '/usage'}
-					class:text-muted-foreground={page.url.pathname !== '/usage'}
+					class:text-cta={page.url.pathname.endsWith('/usage')}
+					class:text-muted-foreground={!page.url.pathname.endsWith('/usage')}
 				>
 					<DollarSign size={18} aria-hidden="true" />
 				</a>
 				<a
 					href={resolve('/settings')}
 					aria-label="Settings"
-					aria-current={page.url.pathname === '/settings' ? 'page' : undefined}
+					aria-current={page.url.pathname.endsWith('/settings') ? 'page' : undefined}
 					class="active-trigger flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface"
-					class:text-cta={page.url.pathname === '/settings'}
-					class:text-muted-foreground={page.url.pathname !== '/settings'}
+					class:text-cta={page.url.pathname.endsWith('/settings')}
+					class:text-muted-foreground={!page.url.pathname.endsWith('/settings')}
 				>
 					<Settings size={18} aria-hidden="true" />
 				</a>
