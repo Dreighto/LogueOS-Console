@@ -26,7 +26,15 @@
 		Mic,
 		Volume2,
 		Headphones,
-		Square
+		Square,
+		Pin,
+		Archive,
+		Trash2,
+		FileText,
+		Brain,
+		MoreHorizontal,
+		ChevronLeft,
+		PanelLeft
 	} from 'lucide-svelte';
 	import type { Workspace } from './+page.server';
 	import { toasts } from '$lib/utils/toasts';
@@ -49,6 +57,35 @@
 		data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]
 	);
 	let threadSwitcherOpen = $state(false);
+
+	// ─────────────────────────────────────────────────────────────────
+	// Thread management (PR 7): sidebar + pin + archive + rename + auto-title
+	// ─────────────────────────────────────────────────────────────────
+	type ThreadMetaFull = {
+		thread_id: string;
+		title: string;
+		pinned: boolean;
+		archived: boolean;
+		summary: string | null;
+		remember_flag: boolean;
+		created_at: string;
+		last_activity_at: string;
+		message_count: number;
+		latest_ts: string;
+	};
+	let threadMetasActive = $state<ThreadMetaFull[]>([]);
+	let threadMetasArchived = $state<ThreadMetaFull[]>([]);
+	// Sidebar: open by default on desktop, hidden on mobile (overlay instead).
+	let sidebarOpen = $state(true);
+	// Mobile full-screen overlay (opened by Threads button in compact header).
+	let mobileThreadsOpen = $state(false);
+	let kebabOpenThreadId = $state<string | null>(null);
+	let renamingThreadId = $state<string | null>(null);
+	let renameValue = $state('');
+	let showArchivedThreads = $state(false);
+	// Track threads that have already received an auto-title this session
+	// to avoid firing the endpoint on every poll.
+	const autoTitledThreads = new Set<string>();
 
 	// ─────────────────────────────────────────────────────────────────
 	// LLM tier badge (PR 1c). Shows current conversation tier derived
@@ -946,6 +983,9 @@
 			const prevLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
 			messages = newMessages;
 
+			// Auto-title: fire once when the first assistant message lands.
+			void maybeAutoTitle(activeThread);
+
 			// Clear the "dispatching..." indicator once the dispatch follow-up
 			// (system "Agent dispatched" bubble OR a real worker reply) has
 			// landed after the operator's most recent send.
@@ -1182,9 +1222,19 @@
 		};
 		document.addEventListener('visibilitychange', onVisibility);
 
+		// Mobile Threads button in +layout.svelte dispatches this custom event.
+		const onOpenThreads = () => {
+			mobileThreadsOpen = true;
+		};
+		document.addEventListener('logueos:open-threads', onOpenThreads);
+
+		// Initial thread meta load.
+		void refreshThreads();
+
 		return () => {
 			clearInterval(interval);
 			if (activityTimer !== null) clearTimeout(activityTimer);
+			document.removeEventListener('logueos:open-threads', onOpenThreads);
 			if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
 			sentinelObserver?.disconnect();
 			document.removeEventListener('visibilitychange', onVisibility);
@@ -1418,9 +1468,166 @@
 			const resp = await fetch(resolve('/api/chat/threads'));
 			if (!resp.ok) return;
 			const body = await resp.json();
-			threads = body.threads || threads;
+			if (body.active !== undefined) {
+				// New enriched format from PR 7 endpoint.
+				threadMetasActive = body.active || [];
+				threadMetasArchived = body.archived || [];
+				// Keep backward-compat threads list for legacy code paths.
+				threads = [...threadMetasActive, ...threadMetasArchived].map((m) => ({
+					thread_id: m.thread_id,
+					message_count: m.message_count,
+					latest_ts: m.latest_ts
+				}));
+				if (!threads.some((t) => t.thread_id === 'default')) {
+					threads = [{ thread_id: 'default', message_count: 0, latest_ts: '' }, ...threads];
+				}
+			} else if (body.threads) {
+				// Fallback: old format.
+				threads = body.threads;
+			}
 		} catch {
 			// silent
+		}
+	}
+
+	function getThreadTitle(threadId: string): string {
+		const meta = threadMetasActive.find((m) => m.thread_id === threadId)
+			?? threadMetasArchived.find((m) => m.thread_id === threadId);
+		if (meta && meta.title && meta.title !== 'New thread') return meta.title;
+		return threadId === 'default' ? 'Default' : threadId;
+	}
+
+	async function pinThread(threadId: string, pinned: boolean) {
+		kebabOpenThreadId = null;
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ pinned })
+			});
+			await refreshThreads();
+		} catch {
+			/* silent */
+		}
+	}
+
+	async function archiveThread(threadId: string, archived: boolean) {
+		kebabOpenThreadId = null;
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ archived })
+			});
+			await refreshThreads();
+			// If we archived the active thread, switch to default.
+			if (archived && threadId === activeThread) {
+				await switchThread('default');
+			}
+		} catch {
+			/* silent */
+		}
+	}
+
+	async function deleteThreadConfirmed(threadId: string) {
+		kebabOpenThreadId = null;
+		try {
+			const resp = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'DELETE'
+			});
+			if (!resp.ok) {
+				const err = await resp.json().catch(() => ({}));
+				toasts.add(err.message || 'Delete failed.', 'error');
+				return;
+			}
+			toasts.add('Thread deleted.', 'success');
+			await refreshThreads();
+			if (threadId === activeThread) await switchThread('default');
+		} catch {
+			toasts.add('Delete failed.', 'error');
+		}
+	}
+
+	function startRename(threadId: string, currentTitle: string) {
+		kebabOpenThreadId = null;
+		renamingThreadId = threadId;
+		renameValue = currentTitle === 'New thread' || currentTitle === 'Default'
+			? (threadId === 'default' ? '' : threadId)
+			: currentTitle;
+	}
+
+	async function commitRename(threadId: string) {
+		const title = renameValue.trim();
+		renamingThreadId = null;
+		if (!title) return;
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title })
+			});
+			await refreshThreads();
+		} catch {
+			/* silent */
+		}
+	}
+
+	async function generateSummary(threadId: string) {
+		kebabOpenThreadId = null;
+		toasts.add('Generating summary…', 'success');
+		try {
+			const resp = await fetch(
+				resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/summary`),
+				{ method: 'POST' }
+			);
+			if (resp.ok) {
+				const body = await resp.json();
+				toasts.add(`Summary: ${body.summary?.slice(0, 120) ?? ''}`, 'success');
+				await refreshThreads();
+			} else {
+				toasts.add('Summary generation failed.', 'error');
+			}
+		} catch {
+			toasts.add('Summary generation failed.', 'error');
+		}
+	}
+
+	async function toggleRemember(threadId: string, current: boolean) {
+		kebabOpenThreadId = null;
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ remember_flag: !current })
+			});
+			await refreshThreads();
+		} catch {
+			/* silent */
+		}
+	}
+
+	async function maybeAutoTitle(threadId: string) {
+		if (autoTitledThreads.has(threadId)) return;
+		const meta = threadMetasActive.find((m) => m.thread_id === threadId)
+			?? threadMetasArchived.find((m) => m.thread_id === threadId);
+		if (meta && meta.title !== 'New thread') {
+			autoTitledThreads.add(threadId);
+			return;
+		}
+		// Only fire if there's at least one assistant message.
+		const hasAssistant = messages.some(
+			(m) => m.sender !== 'operator' && m.sender !== 'system'
+		);
+		if (!hasAssistant) return;
+		autoTitledThreads.add(threadId);
+		try {
+			const resp = await fetch(
+				resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/auto-title`),
+				{ method: 'POST' }
+			);
+			if (resp.ok) await refreshThreads();
+		} catch {
+			/* silent */
 		}
 	}
 
@@ -1668,60 +1875,95 @@
      pattern (per mobile-chat-ux skill). Magic-number heights like
      calc(100dvh-100px) break when iOS shrinks 100dvh on keyboard appearance,
      pushing the composer below the visible area. -->
-<div class="-m-4 flex h-full flex-col overflow-hidden">
-	<div class="flex shrink-0 items-start justify-between gap-2 px-2 pt-1">
-		<!-- Thread switcher: replaces the static "Co-Working Chat" title. Shows
-		     the active thread name + chevron; tap opens a dropdown of all
-		     known threads with a "+ New thread" button. Operators can run
-		     multiple parallel conversations and switch between them. -->
-		<div class="relative shrink-0">
+<div class="-m-4 relative flex h-full overflow-hidden">
+
+	<!-- ── Desktop sidebar (PR 7) — 250px, collapsible, hidden on mobile ──────── -->
+	{#if sidebarOpen}
+		<aside
+			class="hidden md:flex w-[250px] shrink-0 flex-col border-r border-border bg-background overflow-hidden"
+			aria-label="Thread list"
+		>
+			<!-- Sidebar header -->
+			<div class="flex items-center justify-between border-b border-border px-3 py-2">
+				<span class="font-sans text-xs font-bold tracking-wider text-foreground uppercase">Threads</span>
+				<button
+					type="button"
+					onclick={newThread}
+					class="flex items-center gap-1 rounded px-1.5 py-0.5 font-sans text-[10px] text-cta transition-colors hover:bg-cta/10"
+					title="New thread"
+				>
+					<Plus size={10} />
+					New
+				</button>
+			</div>
+			<!-- Sidebar thread list -->
+			<div class="custom-scrollbar flex flex-1 flex-col overflow-y-auto">
+				<!-- Active (pinned first, then chronological) -->
+				{#each threadMetasActive as meta (meta.thread_id)}
+					{@render threadListItem(meta, false)}
+				{/each}
+				{#if threadMetasActive.length === 0}
+					<div class="px-3 py-4 text-center font-sans text-[11px] text-muted-foreground">No threads yet</div>
+				{/if}
+				<!-- Archived section (collapsible) -->
+				{#if threadMetasArchived.length > 0}
+					<button
+						type="button"
+						onclick={() => (showArchivedThreads = !showArchivedThreads)}
+						class="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 font-mono text-[10px] tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground uppercase"
+					>
+						<span>{showArchivedThreads ? '▾' : '▸'}</span>
+						<span>Archived ({threadMetasArchived.length})</span>
+					</button>
+					{#if showArchivedThreads}
+						{#each threadMetasArchived as meta (meta.thread_id)}
+							{@render threadListItem(meta, true)}
+						{/each}
+					{/if}
+				{/if}
+			</div>
+		</aside>
+	{/if}
+
+	<!-- ── Main chat column ──────────────────────────────────────────────────── -->
+	<div class="flex flex-1 flex-col overflow-hidden min-w-0">
+	<!-- Top row: sidebar toggle + active thread name + reset context -->
+	<div class="flex shrink-0 items-center justify-between gap-2 px-2 pt-1">
+		<div class="flex items-center gap-1.5">
+			<!-- Desktop: sidebar toggle -->
 			<button
 				type="button"
-				onclick={() => (threadSwitcherOpen = !threadSwitcherOpen)}
-				class="flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1.5 transition-colors hover:bg-surface/80 active:scale-95"
-				aria-label="Switch chat thread"
-				aria-expanded={threadSwitcherOpen}
+				onclick={() => (sidebarOpen = !sidebarOpen)}
+				class="hidden md:flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-surface hover:text-foreground active:scale-95"
+				aria-label={sidebarOpen ? 'Close thread sidebar' : 'Open thread sidebar'}
+				title={sidebarOpen ? 'Close sidebar' : 'Open thread sidebar'}
+			>
+				<PanelLeft size={13} />
+			</button>
+			<!-- Mobile: opens full-screen overlay -->
+			<button
+				type="button"
+				onclick={() => (mobileThreadsOpen = true)}
+				class="flex md:hidden items-center gap-1.5 rounded border border-border bg-surface px-2 py-1.5 transition-colors hover:bg-surface/80 active:scale-95"
+				aria-label="Open threads"
 			>
 				<MessageSquare size={12} class="text-muted-foreground" />
 				<span class="font-sans text-sm font-bold tracking-tight text-foreground">
-					{activeThread === 'default' ? 'Default' : activeThread}
+					{getThreadTitle(activeThread)}
 				</span>
 				<span class="text-xs text-muted-foreground" aria-hidden="true">▾</span>
 			</button>
-			{#if threadSwitcherOpen}
-				<div
-					class="custom-scrollbar animate-fade-in absolute top-full left-0 z-30 mt-1 flex max-h-[60vh] min-w-[200px] flex-col overflow-y-auto rounded-md border border-border bg-background/95 shadow-lg backdrop-blur-md"
-				>
-					{#each threads as t (t.thread_id)}
-						<button
-							type="button"
-							onclick={() => switchThread(t.thread_id)}
-							class="flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-surface
-								{t.thread_id === activeThread ? 'bg-surface/60 text-foreground' : 'text-muted-foreground'}"
-						>
-							<span class="font-sans text-sm">
-								{t.thread_id === 'default' ? 'Default' : t.thread_id}
-							</span>
-							<span class="font-mono text-[10px] text-muted-foreground">{t.message_count}</span>
-						</button>
-					{/each}
-					<button
-						type="button"
-						onclick={newThread}
-						class="flex items-center gap-1.5 border-t border-border px-3 py-2 font-sans text-sm text-cta transition-colors hover:bg-cta/5"
-					>
-						<Plus size={12} />
-						<span>New thread</span>
-					</button>
-				</div>
-			{/if}
+			<!-- Desktop: active thread name label -->
+			<span class="hidden md:block font-sans text-sm font-bold tracking-tight text-foreground">
+				{getThreadTitle(activeThread)}
+			</span>
 		</div>
 
 		<button
 			type="button"
 			onclick={handleNewConversation}
 			disabled={resetting}
-			class="mt-1 flex shrink-0 items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors hover:bg-surface/80 hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+			class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors hover:bg-surface/80 hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
 			title="Drop a 'new conversation' marker inside this thread so old context isn't replayed to workers."
 		>
 			{#if resetting}
@@ -2525,7 +2767,206 @@
 			</button>
 		</div>
 	</div>
+	</div><!-- end main chat column -->
+
+	<!-- ── Mobile full-screen thread overlay ─────────────────────────────────── -->
+	{#if mobileThreadsOpen}
+		<div class="absolute inset-0 z-50 flex flex-col bg-background md:hidden" aria-modal="true">
+			<!-- Overlay header -->
+			<div class="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+				<span class="font-sans text-sm font-bold text-foreground">Threads</span>
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						onclick={newThread}
+						class="flex items-center gap-1 rounded border border-cta/30 px-2 py-0.5 font-sans text-xs text-cta transition-colors hover:bg-cta/10"
+					>
+						<Plus size={10} />
+						New
+					</button>
+					<button
+						type="button"
+						onclick={() => (mobileThreadsOpen = false)}
+						class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+						aria-label="Close threads"
+					>
+						<X size={16} />
+					</button>
+				</div>
+			</div>
+			<!-- Overlay thread list -->
+			<div class="custom-scrollbar flex flex-1 flex-col overflow-y-auto">
+				{#each threadMetasActive as meta (meta.thread_id)}
+					{@render threadListItem(meta, false)}
+				{/each}
+				{#if threadMetasActive.length === 0}
+					<div class="px-3 py-6 text-center font-sans text-xs text-muted-foreground">No threads yet. Start chatting to create one.</div>
+				{/if}
+				{#if threadMetasArchived.length > 0}
+					<button
+						type="button"
+						onclick={() => (showArchivedThreads = !showArchivedThreads)}
+						class="flex w-full items-center gap-1.5 border-t border-border px-3 py-2 font-mono text-[10px] tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground uppercase"
+					>
+						<span>{showArchivedThreads ? '▾' : '▸'}</span>
+						<span>Archived ({threadMetasArchived.length})</span>
+					</button>
+					{#if showArchivedThreads}
+						{#each threadMetasArchived as meta (meta.thread_id)}
+							{@render threadListItem(meta, true)}
+						{/each}
+					{/if}
+				{/if}
+			</div>
+		</div>
+	{/if}
 </div>
+
+{#snippet threadListItem(meta: ThreadMetaFull, isArchivedSection: boolean)}
+	<div
+		class="group relative flex items-center gap-2 px-3 py-2 transition-colors hover:bg-surface/50
+			{meta.thread_id === activeThread ? 'bg-surface/60 border-l-2 border-cta' : 'border-l-2 border-transparent'}
+			{meta.pinned ? 'bg-cta/5' : ''}"
+	>
+		<!-- Pin indicator -->
+		{#if meta.pinned}
+			<span class="shrink-0 text-[9px] text-cta/70" aria-label="Pinned" title="Pinned">📌</span>
+		{/if}
+
+		<!-- Thread title / inline rename -->
+		<button
+			type="button"
+			onclick={() => {
+				void switchThread(meta.thread_id);
+				mobileThreadsOpen = false;
+			}}
+			class="min-w-0 flex-1 text-left"
+		>
+			{#if renamingThreadId === meta.thread_id}
+				<!-- Inline rename — click elsewhere or press Enter/Escape to commit -->
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					type="text"
+					bind:value={renameValue}
+					autofocus
+					onkeydown={(e) => {
+						if (e.key === 'Enter') void commitRename(meta.thread_id);
+						if (e.key === 'Escape') renamingThreadId = null;
+					}}
+					onblur={() => void commitRename(meta.thread_id)}
+					onclick={(e) => e.stopPropagation()}
+					class="w-full rounded border border-cta/40 bg-surface px-1.5 py-0.5 font-sans text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-cta/30"
+				/>
+			{:else}
+				<span class="block truncate font-sans text-xs text-foreground">
+					{meta.title}
+				</span>
+				{#if meta.latest_ts}
+					<span class="block font-mono text-[9px] text-muted-foreground/60">
+						{formatShortTime(meta.latest_ts)}
+					</span>
+				{/if}
+			{/if}
+		</button>
+
+		<!-- Active worker dot -->
+		{#if meta.thread_id === activeThread && dispatching}
+			<span class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-cta" aria-label="Worker active" title="Worker in flight"></span>
+		{/if}
+
+		<!-- Kebab menu button -->
+		<div class="relative shrink-0">
+			<button
+				type="button"
+				onclick={(e) => {
+					e.stopPropagation();
+					kebabOpenThreadId = kebabOpenThreadId === meta.thread_id ? null : meta.thread_id;
+				}}
+				class="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface hover:text-muted-foreground"
+				aria-label="Thread actions"
+				aria-haspopup="true"
+				aria-expanded={kebabOpenThreadId === meta.thread_id}
+			>
+				<MoreHorizontal size={12} />
+			</button>
+
+			{#if kebabOpenThreadId === meta.thread_id}
+				<!-- Dismiss backdrop -->
+				<button
+					type="button"
+					class="fixed inset-0 z-40"
+					onclick={() => (kebabOpenThreadId = null)}
+					aria-label="Close menu"
+					tabindex="-1"
+				></button>
+				<!-- Kebab dropdown -->
+				<div class="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-background/95 py-1 shadow-lg backdrop-blur-md">
+					<button
+						type="button"
+						onclick={() => pinThread(meta.thread_id, !meta.pinned)}
+						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+					>
+						<Pin size={11} />
+						{meta.pinned ? 'Unpin' : 'Pin'}
+					</button>
+					<button
+						type="button"
+						onclick={() => startRename(meta.thread_id, meta.title)}
+						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+					>
+						<Edit3 size={11} />
+						Rename
+					</button>
+					{#if !isArchivedSection}
+						<button
+							type="button"
+							onclick={() => archiveThread(meta.thread_id, true)}
+							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+						>
+							<Archive size={11} />
+							Archive
+						</button>
+					{:else}
+						<button
+							type="button"
+							onclick={() => archiveThread(meta.thread_id, false)}
+							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+						>
+							<Archive size={11} />
+							Restore
+						</button>
+						<button
+							type="button"
+							onclick={() => deleteThreadConfirmed(meta.thread_id)}
+							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-status-red transition-colors hover:bg-status-red/10"
+						>
+							<Trash2 size={11} />
+							Delete
+						</button>
+					{/if}
+					<div class="my-1 h-px bg-border"></div>
+					<button
+						type="button"
+						onclick={() => generateSummary(meta.thread_id)}
+						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+					>
+						<FileText size={11} />
+						Summary
+					</button>
+					<button
+						type="button"
+						onclick={() => toggleRemember(meta.thread_id, meta.remember_flag)}
+						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs transition-colors hover:bg-surface
+							{meta.remember_flag ? 'text-cta' : 'text-foreground'}"
+					>
+						<Brain size={11} />
+						{meta.remember_flag ? 'Remembering ✓' : 'Remember this'}
+					</button>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/snippet}
 
 <style>
 	.custom-scrollbar::-webkit-scrollbar {

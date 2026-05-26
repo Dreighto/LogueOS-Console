@@ -15,7 +15,8 @@
 		Pause,
 		RefreshCw,
 		Power,
-		RotateCcw
+		RotateCcw,
+		PanelLeft
 	} from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
@@ -198,10 +199,20 @@
 		>
 			<img src="{base}/favicon.png" alt="LogueOS" width="28" height="28" class="h-7 w-7 shrink-0" />
 
-			<span class="flex items-center gap-1 font-sans text-xs font-semibold text-muted-foreground">
-				{compactActiveThread === 'default' ? 'Default' : compactActiveThread}
-				<span aria-hidden="true">▾</span>
-			</span>
+			<!-- Mobile Threads button: dispatches logueos:open-threads which the
+			     chat page's onMount listener picks up to open the overlay. Only
+			     visible on mobile (md:hidden); desktop uses the inline sidebar. -->
+			<button
+				type="button"
+				onclick={() => document.dispatchEvent(new CustomEvent('logueos:open-threads'))}
+				class="active-trigger md:hidden flex items-center gap-1 rounded px-2 py-0.5 font-sans text-xs text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+				aria-label="Open thread list"
+				title="Switch or manage threads"
+			>
+				<PanelLeft size={11} aria-hidden="true" />
+				<span>{compactActiveThread === 'default' ? 'Default' : compactActiveThread}</span>
+				<span aria-hidden="true" class="text-[10px]">▾</span>
+			</button>
 
 			<button
 				type="button"

@@ -8,6 +8,7 @@ import { classifyTier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { routeChat } from '$lib/server/llm_router';
 import type { RouterMessage } from '$lib/server/llm_router';
+import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -75,6 +76,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			'sent',
 			threadId
 		);
+		// Ensure the thread has a meta row and update last_activity_at.
+		upsertThreadMeta(threadId, {});
+		touchLastActivity(threadId);
 
 		// Classify conversation tier and persist. Runs on every message regardless
 		// of which branch handles the response (gateway dispatch, LLM router, etc.)
