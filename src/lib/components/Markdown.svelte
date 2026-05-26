@@ -61,7 +61,9 @@
 		gfm: true, // GitHub-flavored markdown (tables, strikethrough, autolinks)
 		renderer: {
 			code(token) {
-				const lang = String(token.lang || '').trim().toLowerCase();
+				const lang = String(token.lang || '')
+					.trim()
+					.toLowerCase();
 				const source = String(token.text || '');
 				let body = '';
 				try {
@@ -77,7 +79,8 @@
 					body = escapeHtml(source);
 				}
 				const cls = lang ? `language-${lang}` : '';
-				return `<pre class="md-codeblock"><code class="hljs ${cls}">${body}</code></pre>`;
+				const langLabel = lang ? lang : '';
+				return `<div class="md-codeblock-wrap"><div class="md-codeblock-bar"><span class="md-codeblock-lang">${langLabel}</span><button type="button" class="md-codeblock-copy" aria-label="Copy code"><span class="md-copy-icon" aria-hidden="true">📋</span><span class="md-copy-label">Copy</span></button></div><pre class="md-codeblock"><code class="hljs ${cls}">${body}</code></pre></div>`;
 			}
 		}
 	});
@@ -95,10 +98,41 @@
 
 	let rendered = $state('');
 	let mounted = $state(false);
+	let containerEl = $state<HTMLDivElement | null>(null);
 
 	onMount(() => {
 		mounted = true;
 	});
+
+	// Per-codeblock Copy button. Listens at the wrapper for delegated clicks
+	// on .md-codeblock-copy. Reads the adjacent <pre><code> textContent, writes
+	// to clipboard, then flips the button label to "Copied" for 1500ms.
+	async function handleCopyClick(e: Event) {
+		const target = e.target as HTMLElement | null;
+		const btn = target?.closest('.md-codeblock-copy') as HTMLButtonElement | null;
+		if (!btn || !containerEl?.contains(btn)) return;
+		const wrap = btn.closest('.md-codeblock-wrap');
+		const code = wrap?.querySelector('pre.md-codeblock code');
+		const text = code?.textContent ?? '';
+		if (!text) return;
+		try {
+			await navigator.clipboard.writeText(text);
+			const label = btn.querySelector('.md-copy-label');
+			const icon = btn.querySelector('.md-copy-icon');
+			const prevLabel = label?.textContent ?? 'Copy';
+			const prevIcon = icon?.textContent ?? '📋';
+			if (label) label.textContent = 'Copied';
+			if (icon) icon.textContent = '✓';
+			btn.classList.add('md-copy-success');
+			setTimeout(() => {
+				if (label) label.textContent = prevLabel;
+				if (icon) icon.textContent = prevIcon;
+				btn.classList.remove('md-copy-success');
+			}, 1500);
+		} catch {
+			/* clipboard unavailable */
+		}
+	}
 
 	$effect(() => {
 		if (!mounted) return;
@@ -139,9 +173,21 @@
 				'td',
 				'span',
 				'div',
-				'img'
+				'img',
+				'button'
 			],
-			ALLOWED_ATTR: ['href', 'title', 'class', 'target', 'rel', 'src', 'alt'],
+			ALLOWED_ATTR: [
+				'href',
+				'title',
+				'class',
+				'target',
+				'rel',
+				'src',
+				'alt',
+				'type',
+				'aria-label',
+				'aria-hidden'
+			],
 			ADD_ATTR: ['target'],
 			// Force all links to open in a new tab safely.
 			FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick']
@@ -150,7 +196,12 @@
 </script>
 
 {#if mounted}
-	<div class="md-content {inline ? 'md-inline' : ''}">
+	<div
+		bind:this={containerEl}
+		class="md-content {inline ? 'md-inline' : ''}"
+		onclick={handleCopyClick}
+		role="presentation"
+	>
 		{@html rendered}
 	</div>
 {:else}
@@ -199,13 +250,62 @@
 		word-break: break-word;
 	}
 
-	/* Code block */
-	.md-content :global(pre.md-codeblock) {
+	/* Code block wrap — header bar with language + copy button, then pre below. */
+	.md-content :global(.md-codeblock-wrap) {
 		background: rgb(0 0 0 / 0.4);
 		border: 1px solid rgb(255 255 255 / 0.08);
-		border-radius: 0.375rem;
-		padding: 0.75rem 0.9rem;
+		border-radius: 0.5rem;
 		margin: 0.5rem 0;
+		overflow: hidden;
+	}
+	.md-content :global(.md-codeblock-bar) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+		background: rgb(255 255 255 / 0.03);
+		border-bottom: 1px solid rgb(255 255 255 / 0.06);
+		font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 0.7em;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+	.md-content :global(.md-codeblock-lang) {
+		color: rgb(255 255 255 / 0.35);
+	}
+	.md-content :global(.md-codeblock-copy) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.15rem 0.4rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+		color: rgb(255 255 255 / 0.45);
+		font-family: inherit;
+		font-size: inherit;
+		letter-spacing: inherit;
+		text-transform: inherit;
+		cursor: pointer;
+		transition:
+			background 120ms,
+			color 120ms;
+	}
+	.md-content :global(.md-codeblock-copy:hover) {
+		background: rgb(255 255 255 / 0.05);
+		color: rgb(255 255 255 / 0.85);
+		border-color: rgb(255 255 255 / 0.1);
+	}
+	.md-content :global(.md-codeblock-copy.md-copy-success) {
+		color: rgb(110 231 183);
+	}
+	/* Code block */
+	.md-content :global(pre.md-codeblock) {
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		padding: 0.75rem 0.9rem;
+		margin: 0;
 		overflow-x: auto;
 		font-size: 0.85em;
 		line-height: 1.45;

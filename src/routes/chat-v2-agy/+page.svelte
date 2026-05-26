@@ -32,6 +32,7 @@
 		RefreshCw
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
+	import Markdown from '$lib/components/Markdown.svelte';
 
 	let { data } = $props();
 
@@ -1487,14 +1488,21 @@
 							</div>
 						{/if}
 
-						<!-- Text Bubble -->
+						<!-- Text Bubble. Operator bubbles render raw (whitespace-pre)
+						     since they're literally what was typed. Assistant
+						     bubbles render through the Markdown component for
+						     code-block highlighting, inline code, lists, etc. -->
 						<div
-							class="max-w-[85%] rounded-2xl px-4 py-2.5 font-sans text-[15px] leading-relaxed whitespace-pre-wrap selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
+							class="max-w-[85%] rounded-2xl px-4 py-2.5 font-sans text-[15px] leading-relaxed selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
 								{m.sender === 'operator'
 								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
 								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
 						>
-							{m.message}
+							{#if m.sender === 'operator'}
+								<span class="whitespace-pre-wrap">{m.message}</span>
+							{:else}
+								<Markdown content={m.message} />
+							{/if}
 						</div>
 
 						<!-- Time + actions footer. Copy + Regenerate on assistant
