@@ -1227,6 +1227,40 @@
 						</div>
 					</div>
 				{/each}
+
+				<!-- Thinking indicator — renders an AGY-style bubble with three
+				     staggered bouncing dots while we're waiting on a reply.
+				     Conditions: a send is in flight AND the most recent message
+				     in the feed is from the operator (i.e. we're between their
+				     send and the LLM's response landing). -->
+				{#if sending && messages.length > 0 && messages[messages.length - 1].sender === 'operator'}
+					<div class="flex flex-col items-start gap-1">
+						<div
+							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
+						>
+							<Sparkles size={10} class="shrink-0 text-cyan-400" />
+							<span>AGY</span>
+						</div>
+						<div
+							class="flex items-center gap-1.5 rounded-2xl border border-zinc-900 bg-zinc-950/40 px-4 py-3.5"
+							aria-label="Assistant is thinking"
+							role="status"
+						>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 0ms"
+							></span>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 150ms"
+							></span>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 300ms"
+							></span>
+						</div>
+					</div>
+				{/if}
 			{/if}
 			<div bind:this={scrollSentinel} class="h-px shrink-0" aria-hidden="true"></div>
 		</div>
