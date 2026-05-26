@@ -9,6 +9,7 @@ export interface ProviderMessage {
 export interface ProviderChatOptions {
 	messages: ProviderMessage[];
 	model: string;
+	system?: string;
 	signal?: AbortSignal;
 }
 
@@ -45,7 +46,9 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		},
 		body: JSON.stringify({
 			model: options.model,
-			messages: options.messages,
+			messages: options.system
+				? [{ role: 'system', content: options.system }, ...options.messages]
+				: options.messages,
 			max_tokens: 4096
 		}),
 		signal: options.signal

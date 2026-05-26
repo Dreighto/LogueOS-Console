@@ -1010,7 +1010,7 @@
 					<button
 						type="button"
 						onclick={() => (openChip = openChip === 'repo' ? null : 'repo')}
-						class="flex items-center gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 font-sans text-xs text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
 						aria-label="Target repository"
 					>
 						<span>{selectedWorkspace?.emoji ?? '📁'}</span>
@@ -1059,7 +1059,7 @@
 					<button
 						type="button"
 						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
-						class="flex items-center gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 font-sans text-xs text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
 						aria-label="Model routing tier"
 						title="Override default classification routing"
 					>

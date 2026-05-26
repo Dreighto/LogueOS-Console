@@ -7,7 +7,7 @@ import { serverConfig } from '$lib/server/config';
 // Only this character set is valid for filenames written by POST /api/chat/uploads
 // (UUID + . + 3-4 char extension). Anything else is either a traversal attempt
 // or a stale link from a previous storage scheme — refuse early.
-const FILENAME_RE = /^[a-f0-9-]{36}\.(png|jpe?g|gif|webp|svg)$/i;
+const FILENAME_RE = /^[a-f0-9-]{36}\.(png|jpe?g|gif|webp|svg|heic|heif)$/i;
 
 const MIME_BY_EXT: Record<string, string> = {
 	png: 'image/png',
@@ -15,7 +15,9 @@ const MIME_BY_EXT: Record<string, string> = {
 	jpeg: 'image/jpeg',
 	gif: 'image/gif',
 	webp: 'image/webp',
-	svg: 'image/svg+xml'
+	svg: 'image/svg+xml',
+	heic: 'image/heic',
+	heif: 'image/heif'
 };
 
 export const GET: RequestHandler = async ({ params }) => {

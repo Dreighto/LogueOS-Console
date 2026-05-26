@@ -9,6 +9,7 @@ export interface ProviderMessage {
 export interface ProviderChatOptions {
 	messages: ProviderMessage[];
 	model: string;
+	system?: string;
 	signal?: AbortSignal;
 }
 
@@ -18,9 +19,7 @@ export interface ProviderChatResult {
 }
 
 const OLLAMA_BASE =
-	process.env.LOGUEOS_HERMES_OLLAMA_URL ||
-	process.env.OLLAMA_BASE_URL ||
-	'http://127.0.0.1:11434';
+	process.env.LOGUEOS_HERMES_OLLAMA_URL || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 
 export function isAvailable(): boolean {
 	return true; // Always true — offline fallback.
@@ -39,7 +38,9 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
 			model: options.model,
-			messages: options.messages,
+			messages: options.system
+				? [{ role: 'system', content: options.system }, ...options.messages]
+				: options.messages,
 			stream: false,
 			options: { num_predict: 4096, temperature: 0.7 }
 		}),

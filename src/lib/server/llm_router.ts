@@ -94,7 +94,11 @@ export async function routeChat(
 	messages: RouterMessage[],
 	/** 'gemini' to prefer Gemini (agy lock), undefined for Anthropic-first. */
 	preference?: 'gemini',
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	/** Optional system prompt — formatted per-provider (system param for
+	 * Anthropic, systemInstruction for Gemini, leading system message for
+	 * OpenAI/Ollama). Pass undefined for a bare conversation. */
+	system?: string
 ): Promise<RouterResult> {
 	const order = preference === 'gemini' ? GEMINI_FIRST_ORDER : DEFAULT_ORDER;
 
@@ -119,15 +123,15 @@ export async function routeChat(
 
 			if (provider === 'anthropic') {
 				if (!anthropic.isAvailable()) continue;
-				result = await anthropic.chat({ messages, model, signal });
+				result = await anthropic.chat({ messages, model, signal, system });
 			} else if (provider === 'gemini') {
 				if (!gemini.isAvailable()) continue;
-				result = await gemini.chat({ messages, model, signal });
+				result = await gemini.chat({ messages, model, signal, system });
 			} else if (provider === 'openai') {
 				if (!openai.isAvailable()) continue;
-				result = await openai.chat({ messages, model, signal });
+				result = await openai.chat({ messages, model, signal, system });
 			} else {
-				result = await ollama.chat({ messages, model, signal });
+				result = await ollama.chat({ messages, model, signal, system });
 			}
 
 			// Track usage.
@@ -159,5 +163,7 @@ export async function routeChat(
 		}
 	}
 
-	throw new Error(`All providers exhausted for tier '${tier}'. Check provider keys and daily caps.`);
+	throw new Error(
+		`All providers exhausted for tier '${tier}'. Check provider keys and daily caps.`
+	);
 }

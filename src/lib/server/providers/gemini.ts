@@ -15,6 +15,7 @@ export interface ProviderMessage {
 export interface ProviderChatOptions {
 	messages: ProviderMessage[];
 	model: string;
+	system?: string;
 	signal?: AbortSignal;
 	/** 'oauth' tries OAuth first; 'api_key' skips OAuth. Default: 'oauth'. */
 	authMode?: 'oauth' | 'api_key';
@@ -27,8 +28,7 @@ export interface ProviderChatResult {
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const OAUTH_CREDS_PATH =
-	process.env.LOGUEOS_GEMINI_OAUTH_PATH ||
-	path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+	process.env.LOGUEOS_GEMINI_OAUTH_PATH || path.join(os.homedir(), '.gemini', 'oauth_creds.json');
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
 // In-memory token cache. Refreshed automatically when expired or on 401.
@@ -115,7 +115,11 @@ interface GeminiContent {
 
 interface GeminiResponse {
 	candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-	usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+	usageMetadata?: {
+		promptTokenCount?: number;
+		candidatesTokenCount?: number;
+		totalTokenCount?: number;
+	};
 	error?: { message: string };
 }
 
@@ -145,15 +149,16 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		parts: [{ text: m.content }]
 	}));
 
-	const resp = await fetch(
-		`${GEMINI_BASE}/models/${options.model}:generateContent${urlKey}`,
-		{
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json', ...authHeader },
-			body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 4096 } }),
-			signal: options.signal
-		}
-	);
+	const resp = await fetch(`${GEMINI_BASE}/models/${options.model}:generateContent${urlKey}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeader },
+		body: JSON.stringify({
+			contents,
+			generationConfig: { maxOutputTokens: 4096 },
+			...(options.system ? { systemInstruction: { parts: [{ text: options.system }] } } : {})
+		}),
+		signal: options.signal
+	});
 
 	// On 401/403, invalidate cached token and retry once with API key.
 	if ((resp.status === 401 || resp.status === 403) && authMode === 'oauth' && !urlKey) {
