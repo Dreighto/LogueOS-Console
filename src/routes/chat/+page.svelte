@@ -256,10 +256,17 @@
 	// land at the bottom on first paint, auto-scroll on new messages ONLY if
 	// the operator is already near the bottom. If they've scrolled up to read
 	// history, show a "X new ↓" pill instead of yanking the viewport.
-	const SCROLL_NEAR_BOTTOM_PX = 80; // tolerance for "user is at bottom"
 	let userAtBottom = $state(true);
 	let unseenCount = $state(0);
 	let lastSeenMessageId = $state<number | null>(null);
+	// ID of the first message that arrived while scrolled up (drives the unread divider).
+	let firstUnseenMessageId = $state<number | null>(null);
+	// IntersectionObserver sentinel element — bound in the template at feed bottom.
+	let scrollSentinel = $state<HTMLDivElement | null>(null);
+	// Connection status dot wired to the EventSource (SSE) streams in syncStreamSubscriptions.
+	let connStatus = $state<'green' | 'amber' | 'red'>('green');
+	let connDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let connConsecutiveErrors = 0;
 
 	// Optimistic "dispatching..." indicator. Set true the moment the operator
 	// hits send; cleared when the dispatch-side system bubble (or a streaming
@@ -322,6 +329,14 @@
 		return Array.from(set);
 	}
 
+	function scheduleConnStatus(status: 'green' | 'amber' | 'red') {
+		if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
+		connDebounceTimer = setTimeout(() => {
+			connStatus = status;
+			connDebounceTimer = null;
+		}, 1000);
+	}
+
 	// Scroll the chat container to the absolute bottom. Wraps in
 	// requestAnimationFrame so the call lands after layout/paint — on first
 	// mount, calling scrollTo before the messages render does nothing.
@@ -334,25 +349,10 @@
 		});
 	}
 
-	function recomputeAtBottom() {
-		if (!feedContainer) return;
-		const remaining = feedContainer.scrollHeight - feedContainer.scrollTop - feedContainer.clientHeight;
-		userAtBottom = remaining <= SCROLL_NEAR_BOTTOM_PX;
-		if (userAtBottom) {
-			unseenCount = 0;
-			if (messages.length > 0) {
-				lastSeenMessageId = messages[messages.length - 1].id;
-			}
-		}
-	}
-
-	function handleFeedScroll() {
-		recomputeAtBottom();
-	}
-
 	async function jumpToLatest() {
 		userAtBottom = true;
 		unseenCount = 0;
+		firstUnseenMessageId = null;
 		if (messages.length > 0) lastSeenMessageId = messages[messages.length - 1].id;
 		await scrollToBottom('smooth');
 	}
@@ -397,8 +397,13 @@
 					lastSeenMessageId = newMessages[newMessages.length - 1].id;
 				}
 			} else {
-				const added = newMessages.filter((m) => prevLastId === null || m.id > prevLastId).length;
-				if (added > 0) unseenCount += added;
+				const newOnes = newMessages.filter((m) => prevLastId === null || m.id > prevLastId);
+				if (newOnes.length > 0) {
+					unseenCount += newOnes.length;
+					if (firstUnseenMessageId === null && newOnes[0]) {
+						firstUnseenMessageId = newOnes[0].id;
+					}
+				}
 			}
 		} catch {
 			// silent fallback
@@ -458,15 +463,18 @@
 					pendingStreamChunks.set(traceId, next);
 					scheduleStreamFlush();
 				});
+				es.onopen = () => {
+					connConsecutiveErrors = 0;
+					scheduleConnStatus('green');
+				};
 				es.addEventListener('end', () => {
 					streamEnded = { ...streamEnded, [traceId]: true };
 					es.close();
 					streamSources.delete(traceId);
 				});
 				es.addEventListener('error', () => {
-					// EventSource will auto-retry on transient errors. If the
-					// connection ultimately closes, the 'end' handler does the
-					// cleanup. Nothing to do here for transient drops.
+					connConsecutiveErrors++;
+					scheduleConnStatus(connConsecutiveErrors >= 3 ? 'red' : 'amber');
 				});
 				streamSources.set(traceId, es);
 			} catch (e) {
@@ -480,6 +488,11 @@
 				es.close();
 				streamSources.delete(traceId);
 			}
+		}
+		// No active traces → reset conn status to green (nothing to fail).
+		if (active.size === 0) {
+			connConsecutiveErrors = 0;
+			scheduleConnStatus('green');
 		}
 	}
 
@@ -520,11 +533,35 @@
 		// without animation. Snap-to-bottom feel like iMessage.
 		requestAnimationFrame(() => {
 			scrollToBottom('auto');
-			recomputeAtBottom();
 			if (messages.length > 0) {
 				lastSeenMessageId = messages[messages.length - 1].id;
 			}
 		});
+
+		// IntersectionObserver on the sentinel div at the bottom of the feed.
+		// When sentinel enters feedContainer's visible area → user is at bottom.
+		// No scroll-event math; no layout thrash on every scroll tick.
+		let sentinelObserver: IntersectionObserver | null = null;
+		if (feedContainer && scrollSentinel) {
+			sentinelObserver = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (entry?.isIntersecting) {
+						userAtBottom = true;
+						unseenCount = 0;
+						firstUnseenMessageId = null;
+						if (messages.length > 0) {
+							lastSeenMessageId = messages[messages.length - 1].id;
+						}
+					} else {
+						userAtBottom = false;
+					}
+				},
+				{ root: feedContainer, threshold: 0 }
+			);
+			sentinelObserver.observe(scrollSentinel);
+		}
+
 		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
 
 		// Activity ticker — separate cadence than messages so a running worker
@@ -560,6 +597,8 @@
 		return () => {
 			clearInterval(interval);
 			if (activityTimer !== null) clearTimeout(activityTimer);
+			if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
+			sentinelObserver?.disconnect();
 			document.removeEventListener('visibilitychange', onVisibility);
 			// Close every open SSE on unmount.
 			for (const es of streamSources.values()) {
@@ -1086,7 +1125,6 @@
 	<!-- Main Chat Area (Scrollable Feed) -->
 	<div
 		bind:this={feedContainer}
-		onscroll={handleFeedScroll}
 		class="relative flex-1 overflow-y-auto px-2 py-4 flex flex-col gap-4 custom-scrollbar"
 	>
 		{#if messages.length === 0}
@@ -1099,6 +1137,14 @@
 			</div>
 		{:else}
 			{#each messages as m (m.id)}
+				{#if !isResetMarker(m) && m.id === firstUnseenMessageId}
+					<!-- Unread boundary: first message that arrived while operator was scrolled up. -->
+					<div class="flex items-center gap-2 my-1 animate-fade-in" aria-label="New messages">
+						<div class="h-px flex-1 bg-border/60"></div>
+						<span class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 shrink-0">New Messages</span>
+						<div class="h-px flex-1 bg-border/60"></div>
+					</div>
+				{/if}
 				{#if isResetMarker(m)}
 					<!-- Conversation boundary — dispatched workers after this point
 					     see no context from before. -->
@@ -1397,6 +1443,9 @@
 					</div>
 				{/if}
 			{/if}
+		<!-- IntersectionObserver sentinel — always rendered at the bottom of feed content.
+		     When this element is visible inside feedContainer, the user is at the bottom. -->
+		<div bind:this={scrollSentinel} class="h-px w-full shrink-0" aria-hidden="true"></div>
 		</div>
 
 	<!-- "X new ↓" pill: appears when new messages arrive while the operator is
@@ -1617,6 +1666,14 @@
 					{/if}
 				</div>
 			{/if}
+			<!-- Connection status dot: green=connected, amber=reconnecting, red=disconnected.
+			     Wired to EventSource (SSE) streams. Debounced 1s to suppress transient blips. -->
+			<span
+				class="ml-auto shrink-0 h-1.5 w-1.5 rounded-full transition-colors duration-700
+					{connStatus === 'green' ? 'bg-status-green' : connStatus === 'amber' ? 'bg-status-amber animate-pulse' : 'bg-status-red'}"
+				title={connStatus === 'green' ? 'EventSource: connected' : connStatus === 'amber' ? 'EventSource: reconnecting...' : 'EventSource: disconnected'}
+				aria-label="Connection status"
+			></span>
 		</div>
 
 		<!-- Input field: attach + textarea + send in one flex row -->
