@@ -21,8 +21,10 @@
 		Plus,
 		Paperclip,
 		Sparkles,
-		RefreshCw
+		RefreshCw,
+		ChevronDown
 	} from 'lucide-svelte';
+	import type { Workspace } from './+page.server';
 	import { toasts } from '$lib/utils/toasts';
 	import { formatShortTime } from '$lib/utils/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -67,6 +69,61 @@
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
 	let attachInputEl = $state<HTMLInputElement | null>(null);
 	let examplesOpen = $state(false);
+
+	// ─────────────────────────────────────────────────────────────────
+	// Workspace (repo) selector — drives target_repo on all dispatches.
+	// Persisted per-thread in localStorage; PR 1c will move to server.
+	// ─────────────────────────────────────────────────────────────────
+	let selectedRepo = $state('LogueOS-Console');
+	let repoDropdownOpen = $state(false);
+	let showArchivedWorkspaces = $state(false);
+	let workspaceByThread = $state<Record<string, string>>({});
+
+	const selectedWorkspace = $derived<Workspace | undefined>(
+		[...(data.workspaces ?? []), ...(data.archivedWorkspaces ?? [])].find(
+			(w) => w.name === selectedRepo
+		)
+	);
+
+	function selectWorkspace(name: string) {
+		selectedRepo = name;
+		repoDropdownOpen = false;
+		workspaceByThread = { ...workspaceByThread, [activeThread]: name };
+		try {
+			localStorage.setItem('chat_workspaces_v1', JSON.stringify(workspaceByThread));
+		} catch { /* ignore */ }
+	}
+
+	// ─────────────────────────────────────────────────────────────────
+	// Cross-device draft sync. localStorage is the offline write-through;
+	// the /api/chat/drafts endpoint is the cross-device source of truth.
+	// ─────────────────────────────────────────────────────────────────
+	let drafts = $state<Map<string, string>>(new Map());
+	let draftDebounceTimer: ReturnType<typeof setTimeout>;
+
+	// Debounce textDraft changes → save to localStorage + PUT to server.
+	$effect(() => {
+		const text = textDraft; // reactive dependency — fires on every keystroke
+		clearTimeout(draftDebounceTimer);
+		draftDebounceTimer = setTimeout(() => {
+			// activeThread captured in callback (not tracked, avoids spurious fires)
+			const tid = activeThread;
+			if (text.trim()) {
+				drafts.set(tid, text);
+			} else {
+				drafts.delete(tid);
+			}
+			try {
+				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
+			} catch { /* storage quota exceeded */ }
+			// Fire-and-forget server sync for cross-device persistence.
+			void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(tid)}`), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ body: text })
+			}).catch(() => { /* offline — localStorage copy is the fallback */ });
+		}, 300);
+	});
 
 	// Starter prompt library — small, hand-curated. Kept inline so opening
 	// the drawer is zero-fetch. Categories help orient as the list grows.
@@ -387,6 +444,34 @@
 	}
 
 	onMount(() => {
+		// Restore draft map and workspace selections from localStorage.
+		try {
+			const savedDrafts = JSON.parse(localStorage.getItem('chat_drafts_v1') || '[]') as [string, string][];
+			drafts = new Map(savedDrafts);
+			const localDraft = drafts.get(activeThread) || '';
+			if (localDraft) textDraft = localDraft;
+		} catch { /* corrupted key — ignore */ }
+		try {
+			const savedWS = JSON.parse(localStorage.getItem('chat_workspaces_v1') || '{}') as Record<string, string>;
+			workspaceByThread = savedWS;
+			const savedRepo = savedWS[activeThread];
+			if (savedRepo) selectedRepo = savedRepo;
+		} catch { /* corrupted key — ignore */ }
+
+		// Async: fetch server draft for cross-device sync (overwrites local if newer).
+		void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(activeThread)}`))
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body: { body?: string } | null) => {
+				if (body?.body) {
+					textDraft = body.body;
+					drafts.set(activeThread, body.body);
+					try {
+						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
+					} catch { /* ignore */ }
+				}
+			})
+			.catch(() => { /* offline — use local copy */ });
+
 		// First paint may not have measured the feed yet — defer to the next
 		// frame so scrollHeight reflects the rendered messages, then jump
 		// without animation. Snap-to-bottom feel like iMessage.
@@ -548,6 +633,7 @@
 	async function uploadImage(file: File): Promise<string | null> {
 		const fd = new FormData();
 		fd.append('file', file);
+		fd.append('target_repo', selectedRepo);
 		const resp = await fetch(resolve('/api/chat/uploads'), {
 			method: 'POST',
 			body: fd
@@ -661,6 +747,17 @@
 			threadSwitcherOpen = false;
 			return;
 		}
+
+		// Save the current draft before switching away from this thread.
+		const prevThread = activeThread;
+		const prevDraft = textDraft;
+		if (prevDraft.trim()) {
+			drafts.set(prevThread, prevDraft);
+			try {
+				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
+			} catch { /* ignore */ }
+		}
+
 		activeThread = threadId;
 		threadSwitcherOpen = false;
 		messages = [];
@@ -671,6 +768,26 @@
 		dispatchingSinceMsgId = null;
 		unseenCount = 0;
 		userAtBottom = true;
+
+		// Restore workspace selection for the new thread.
+		const savedRepo = workspaceByThread[threadId];
+		if (savedRepo) selectedRepo = savedRepo;
+
+		// Restore draft: use localStorage for instant paint, then async-reconcile with server.
+		textDraft = drafts.get(threadId) || '';
+		void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(threadId)}`))
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body: { body?: string } | null) => {
+				if (body?.body && body.body !== textDraft) {
+					textDraft = body.body;
+					drafts.set(threadId, body.body);
+					try {
+						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
+					} catch { /* ignore */ }
+				}
+			})
+			.catch(() => { /* offline — localStorage copy stands */ });
+
 		// Persist the choice so a fresh page load (phone or desktop) lands
 		// here instead of the default thread. Fire-and-forget; never blocks
 		// the visual switch.
@@ -793,7 +910,7 @@
 					action,
 					source_message_id: messageId,
 					target_agent: agent,
-					target_repo: 'LogueOS-Console'
+					target_repo: selectedRepo
 				})
 			});
 			if (!resp.ok) {
@@ -1349,6 +1466,65 @@
 				>
 					Silent
 				</button>
+			</div>
+			<span class="text-muted-foreground/50">·</span>
+			<!-- Workspace selector pill — drives target_repo on all dispatches -->
+			<div class="relative">
+				<button
+					type="button"
+					onclick={() => (repoDropdownOpen = !repoDropdownOpen)}
+					class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30"
+					title="Switch target repository for workflow actions"
+					aria-label="Select repository"
+				>
+					<span>{selectedWorkspace?.emoji ?? '📁'}</span>
+					<span>{selectedWorkspace?.display_name ?? selectedRepo}</span>
+					<ChevronDown size={8} />
+				</button>
+				{#if repoDropdownOpen}
+					<button
+						type="button"
+						class="fixed inset-0 z-40"
+						onclick={() => (repoDropdownOpen = false)}
+						aria-label="Close workspace dropdown"
+						tabindex="-1"
+					></button>
+					<div class="absolute bottom-full left-0 mb-1 z-50 min-w-44 rounded border border-border bg-surface shadow-lg py-1 font-mono">
+						{#each Array.from(new Set([...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].map((w) => w.group))) as grp (grp)}
+							<div class="px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/50 mt-1 first:mt-0">{grp}</div>
+							{#each [...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].filter((w) => w.group === grp) as ws (ws.name)}
+								<button
+									type="button"
+									onclick={() => selectWorkspace(ws.name)}
+									class="w-full text-left flex items-center gap-1.5 px-2 py-1 text-[11px] transition-colors hover:bg-foreground/5
+										{ws.is_archived ? 'opacity-60' : ''}
+										{selectedRepo === ws.name ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+								>
+									<span>{ws.emoji}</span>
+									<span>{ws.display_name}</span>
+									{#if selectedRepo === ws.name}
+										<Check size={8} class="ml-auto shrink-0" />
+									{/if}
+								</button>
+							{/each}
+						{/each}
+						{#if (data.archivedWorkspaces ?? []).length > 0 || showArchivedWorkspaces}
+							<div class="border-t border-border mt-1 pt-1">
+								<button
+									type="button"
+									onclick={() => (showArchivedWorkspaces = !showArchivedWorkspaces)}
+									class="w-full text-left px-2 py-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors flex items-center gap-1"
+								>
+									{showArchivedWorkspaces ? '▾' : '▸'}
+									<span>{showArchivedWorkspaces ? 'Hide' : 'Show'} archived</span>
+									{#if (data.archivedWorkspaces ?? []).length > 0}
+										<span class="ml-auto">{(data.archivedWorkspaces ?? []).length}</span>
+									{/if}
+								</button>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 

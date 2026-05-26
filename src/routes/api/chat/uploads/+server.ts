@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
 import { serverConfig } from '$lib/server/config';
 
 // Accept these and only these. The Markdown renderer allows <img>; permitting
@@ -47,6 +48,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return error(400, 'multipart/form-data expected');
 	}
 
+	const targetRepo = (formData.get('target_repo') as string | null)?.trim() ?? '';
 	const file = formData.get('file');
 	if (!(file instanceof File)) {
 		return error(400, 'missing field: file');
@@ -82,6 +84,29 @@ export const POST: RequestHandler = async ({ request }) => {
 		return error(500, 'write failed');
 	}
 
+	// Persist upload metadata (including target_repo) to the memory DB so we
+	// can retrospectively trace which repo an image was uploaded for.
+	try {
+		const db = new Database(serverConfig.memoryDbPath);
+		db.prepare(
+			`CREATE TABLE IF NOT EXISTS chat_uploads (
+				id TEXT PRIMARY KEY,
+				filename TEXT NOT NULL,
+				mime TEXT NOT NULL,
+				size INTEGER NOT NULL,
+				target_repo TEXT NOT NULL DEFAULT '',
+				uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)`
+		).run();
+		db.prepare(
+			'INSERT INTO chat_uploads (id, filename, mime, size, target_repo) VALUES (?, ?, ?, ?, ?)'
+		).run(id, filename, file.type, file.size, targetRepo);
+		db.close();
+	} catch (e) {
+		// Non-fatal — file is already written; log and continue.
+		console.warn('chat-uploads DB log failed:', e);
+	}
+
 	// Return a relative URL — the chat textarea inserts this verbatim as a
 	// markdown image. Browser resolves it against the current path so
 	// /console/chat + ./api/chat/uploads/X = /console/api/chat/uploads/X.
@@ -89,6 +114,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		url: `./api/chat/uploads/${filename}`,
 		filename,
 		size: file.size,
-		mime: file.type
+		mime: file.type,
+		target_repo: targetRepo
 	});
 };
