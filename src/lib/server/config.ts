@@ -132,12 +132,23 @@ export const serverConfig = {
 	geminiDailyTokenCap: parsePositiveInt(
 		getEnv('GEMINI_DAILY_TOKEN_CAP', '2000000'),
 		'GEMINI_DAILY_TOKEN_CAP'
-	)
+	),
+	// VAPID keys for Web Push (PR 6). Generate once with tools/generate_vapid_keys.js.
+	// VAPID subject MUST be mailto: — Apple returns 403 on bare-domain subjects
+	// per Decision Log entry 10.
+	vapidPublicKey: getEnv('VAPID_PUBLIC_KEY', ''),
+	vapidPrivateKey: getEnv('VAPID_PRIVATE_KEY', ''),
+	vapidSubject: 'mailto:dreighto@gmail.com',
+	// Feature flag: set ENABLE_WEB_PUSH=false to disable without a git revert.
+	enableWebPush: getEnv('ENABLE_WEB_PUSH', 'true') !== 'false'
 };
 
 // Subset of serverConfig that's safe to expose to the client via load().
 // Specifically excludes completionLogPath (filesystem path leak risk).
 export const clientSafeConfig = {
 	pollIntervalMs: serverConfig.pollIntervalMs,
-	feedLimit: serverConfig.feedLimit
+	feedLimit: serverConfig.feedLimit,
+	// Public VAPID key is safe to expose — it's the public half of the pair.
+	vapidPublicKey: serverConfig.vapidPublicKey,
+	enableWebPush: serverConfig.enableWebPush
 };
