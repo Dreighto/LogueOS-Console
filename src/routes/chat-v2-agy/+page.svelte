@@ -929,15 +929,14 @@
 		fileInputEl?.click();
 	}
 
-	async function handleUpload(e: Event) {
-		const target = e.target as HTMLInputElement;
-		const file = target.files?.[0];
-		if (!file) return;
-
+	// Uploads a single File via /api/chat/uploads and stages it as a chip.
+	// Shared between the paperclip-triggered <input type=file> and the
+	// drag-and-drop handler. Errors surface via toast; success is silent
+	// because the chip itself is the success indicator.
+	async function uploadOneFile(file: File): Promise<void> {
 		const fd = new FormData();
 		fd.append('file', file);
 		fd.append('target_repo', selectedRepo);
-
 		try {
 			toasts.add(`Uploading ${file.name}...`, 'info');
 			const r = await fetch(resolve('/api/chat/uploads'), {
@@ -960,13 +959,57 @@
 						size: body.size || file.size
 					}
 				];
-				textareaEl?.focus();
 			}
 		} catch (err) {
 			toasts.add(`Upload failed: ${err instanceof Error ? err.message : 'unknown'}`, 'error');
+		}
+	}
+
+	async function handleUpload(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+		try {
+			await uploadOneFile(file);
+			textareaEl?.focus();
 		} finally {
 			target.value = '';
 		}
+	}
+
+	// Drag-and-drop wiring. dragover MUST preventDefault for drop to fire.
+	// Use a counter for dragenter/leave because they bubble across child
+	// elements — naive boolean would flicker as the cursor crosses child
+	// boundaries inside the drop zone.
+	let isDragging = $state(false);
+	let dragCounter = 0;
+	function handleDragEnter(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragCounter++;
+		isDragging = true;
+	}
+	function handleDragOver(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'copy';
+	}
+	function handleDragLeave(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragCounter = Math.max(0, dragCounter - 1);
+		if (dragCounter === 0) isDragging = false;
+	}
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		dragCounter = 0;
+		isDragging = false;
+		const files = Array.from(e.dataTransfer?.files ?? []);
+		if (files.length === 0) return;
+		for (const file of files) {
+			await uploadOneFile(file);
+		}
+		textareaEl?.focus();
 	}
 
 	function removeAttachment(id: string) {
@@ -1087,7 +1130,30 @@
 	onchange={handleUpload}
 />
 
-<div class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] font-sans text-foreground">
+<div
+	class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] font-sans text-foreground"
+	ondragenter={handleDragEnter}
+	ondragover={handleDragOver}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+	role="region"
+	aria-label="Chat surface (drop images to attach)"
+>
+	<!-- Drag-and-drop overlay — appears when the operator drags a file over
+	     the surface from desktop / Files app. pointer-events-none keeps it
+	     from intercepting the drop event itself. -->
+	{#if isDragging}
+		<div
+			class="pointer-events-none absolute inset-3 z-[60] flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-cyan-400/60 bg-cyan-500/10 backdrop-blur-md"
+			aria-hidden="true"
+		>
+			<Paperclip size={32} class="text-cyan-300" />
+			<span class="font-mono text-xs tracking-wider text-cyan-200 uppercase">Drop to attach</span>
+			<span class="px-4 text-center font-sans text-xs text-cyan-300/70"
+				>Images stage as chips above the composer</span
+			>
+		</div>
+	{/if}
 	<!-- Radial Gradient Atmosphere Background -->
 	<div
 		class="pointer-events-none absolute inset-0 -z-0"
