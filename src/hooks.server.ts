@@ -22,8 +22,9 @@ import { startCompletionPoller } from '$lib/server/completion_poller';
 startCompletionPoller();
 
 // Routes that require tailnet-direct access. Funnel requests to these
-// paths return 401 with a JSON error body.
-const SENSITIVE_PREFIXES = ['/api/chat/'];
+// paths return 401 with a JSON error body. Note: event.url.pathname
+// INCLUDES the SvelteKit `paths.base` ('/console'), so the prefix must too.
+const SENSITIVE_PREFIXES = ['/console/api/chat/', '/api/chat/'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
