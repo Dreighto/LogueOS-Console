@@ -146,6 +146,19 @@
 		}, 400);
 	});
 
+	// Auto-grow the composer textarea with the draft. Default rows=3 sets the
+	// resting height; this effect expands it up to the inline max-height (240px)
+	// then lets the textarea scroll internally. Without this the textarea is
+	// stuck at a single-line snippet on long messages.
+	$effect(() => {
+		const _ = textDraft; // dep — re-run whenever the draft changes
+		void _;
+		if (!textareaEl) return;
+		textareaEl.style.height = 'auto';
+		const target = Math.min(Math.max(textareaEl.scrollHeight, 64), 240);
+		textareaEl.style.height = `${target}px`;
+	});
+
 	// ─────────────────────────────────────────────────────────────────────
 	// Network & Data Actions
 	// ─────────────────────────────────────────────────────────────────────
@@ -1280,27 +1293,31 @@
 					</div>
 				{/if}
 
-				<!-- Text input area + icons -->
-				<div class="flex items-center gap-2">
+				<!-- Text input area + icons. items-end so buttons sit at the bottom
+				     as the textarea grows; min-h on the wrapper preserves the
+				     hero-pill height even when the textarea collapses to 1 row. -->
+				<div class="flex min-h-[64px] items-end gap-2">
 					<!-- Attach File -->
 					<button
 						type="button"
 						onclick={triggerUpload}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
+						class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
 						aria-label="Attach File"
 						title="Attach image"
 					>
 						<Paperclip size={15} />
 					</button>
 
-					<!-- Text Area -->
+					<!-- Text Area. rows=3 so the composer reads as a writing
+					     surface, not a single-line search bar. Auto-grows up to
+					     max-height via the $effect below; then scrolls. -->
 					<textarea
 						bind:this={textareaEl}
 						bind:value={textDraft}
 						onkeypress={handleKey}
 						onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
 						onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-						rows="1"
+						rows="3"
 						placeholder={composerMode === 'recording'
 							? 'Listening dictation… press stop when done.'
 							: composerMode === 'talkback'
@@ -1312,8 +1329,8 @@
 						autocapitalize="sentences"
 						spellcheck="false"
 						disabled={composerMode === 'recording' || composerMode === 'talkback'}
-						class="flex-1 resize-none bg-transparent px-1 py-2 font-sans text-[15px] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-						style="max-height: 140px;"
+						class="flex-1 resize-none self-stretch bg-transparent px-1 py-2 font-sans text-[15px] leading-relaxed text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
+						style="min-height: 64px; max-height: 240px;"
 					></textarea>
 
 					<!-- Sparkles Image Toggle -->
