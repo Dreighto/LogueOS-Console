@@ -104,6 +104,13 @@
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
 	let fileInputEl = $state<HTMLInputElement | null>(null);
 
+	// Pending attachments — uploads stage here as removable chips above the
+	// composer rather than getting injected as markdown into the textarea.
+	// On send, each attachment's markdown link is appended to the outgoing
+	// message body so the server-side rendering stays unchanged.
+	type Attachment = { id: string; filename: string; url: string; mime: string; size: number };
+	let attachments = $state<Attachment[]>([]);
+
 	// Scroll state
 	let userAtBottom = $state(true);
 	let unseenCount = $state(0);
@@ -276,21 +283,32 @@
 	// ─────────────────────────────────────────────────────────────────────
 	async function sendMessage() {
 		const text = textDraft.trim();
-		if (!text || sending) return;
+		// Allow sending an attachment-only message (no text body), but require
+		// at least one of the two so we don't post empty rows.
+		if (!text && attachments.length === 0) return;
+		if (sending) return;
 		unlockAudio();
 		sending = true;
 
 		const isGenImage = imageMode;
 		imageMode = false; // toggle off image mode immediately on send
 
+		// Fold staged attachments into the outgoing message body as markdown
+		// image links. The server is unchanged — the message field is a string;
+		// the chat renderer already handles ![alt](url) markdown. Chips just
+		// stage them visually until send.
+		const attachmentMd = attachments.map((a) => `![${a.filename}](${a.url})`).join('\n');
+		const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
+
 		const optimistic: ChatMessage = {
 			id: Date.now(),
 			sender: 'operator',
-			message: text,
+			message: messageBody,
 			timestamp: new Date().toISOString()
 		};
 		messages = [...messages, optimistic];
 		textDraft = '';
+		attachments = [];
 		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
 
 		try {
@@ -298,7 +316,7 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					message: text,
+					message: messageBody,
 					thread: activeThread,
 					target_repo: selectedRepo,
 					image: isGenImage || undefined
@@ -750,30 +768,33 @@
 			}
 			const body = await r.json();
 			if (body.url) {
-				const markdownLink = `![${file.name}](${body.url})`;
-				if (textareaEl) {
-					const start = textareaEl.selectionStart;
-					const end = textareaEl.selectionEnd;
-					const before = textDraft.slice(0, start);
-					const after = textDraft.slice(end);
-					textDraft = before + markdownLink + after;
-					textareaEl.focus();
-					const newPos = start + markdownLink.length;
-					queueMicrotask(() => {
-						if (textareaEl) {
-							textareaEl.selectionStart = textareaEl.selectionEnd = newPos;
-						}
-					});
-				} else {
-					textDraft = (textDraft + ' ' + markdownLink).trim();
-				}
-				toasts.add('Upload completed successfully', 'success');
+				attachments = [
+					...attachments,
+					{
+						id: body.filename || crypto.randomUUID(),
+						filename: file.name,
+						url: body.url,
+						mime: body.mime || file.type,
+						size: body.size || file.size
+					}
+				];
+				textareaEl?.focus();
 			}
 		} catch (err) {
 			toasts.add(`Upload failed: ${err instanceof Error ? err.message : 'unknown'}`, 'error');
 		} finally {
 			target.value = '';
 		}
+	}
+
+	function removeAttachment(id: string) {
+		attachments = attachments.filter((a) => a.id !== id);
+	}
+
+	function humanSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -1290,6 +1311,48 @@
 						>
 							Cancel
 						</button>
+					</div>
+				{/if}
+
+				<!-- Staged attachments — appear as removable chips with a thumbnail
+				     preview, above the text input row. On send, each chip's
+				     markdown link is folded into the outgoing message body. -->
+				{#if attachments.length > 0}
+					<div class="flex flex-wrap gap-2 border-b border-white/5 px-1 pb-2">
+						{#each attachments as att (att.id)}
+							<div
+								class="group relative flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 py-1 pr-1 pl-2 text-xs text-zinc-200 shadow-sm"
+							>
+								{#if att.mime?.startsWith('image/')}
+									<img
+										src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
+										alt={att.filename}
+										class="h-8 w-8 shrink-0 rounded-md object-cover"
+									/>
+								{:else}
+									<div
+										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-zinc-500"
+									>
+										<Paperclip size={14} />
+									</div>
+								{/if}
+								<div class="flex flex-col leading-tight">
+									<span class="max-w-[160px] truncate font-medium text-zinc-200"
+										>{att.filename}</span
+									>
+									<span class="font-mono text-[10px] text-zinc-500">{humanSize(att.size)}</span>
+								</div>
+								<button
+									type="button"
+									onclick={() => removeAttachment(att.id)}
+									class="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
+									aria-label="Remove attachment"
+									title="Remove"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						{/each}
 					</div>
 				{/if}
 
