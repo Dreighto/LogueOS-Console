@@ -22,7 +22,9 @@
 		Paperclip,
 		Sparkles,
 		RefreshCw,
-		ChevronDown
+		ChevronDown,
+		Mic,
+		Volume2
 	} from 'lucide-svelte';
 	import type { Workspace } from './+page.server';
 	import { toasts } from '$lib/utils/toasts';
@@ -314,6 +316,127 @@
 	let connStatus = $state<'green' | 'amber' | 'red'>('green');
 	let connDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let connConsecutiveErrors = 0;
+
+	// ─────────────────────────────────────────────────────────────────
+	// Voice: mic dictation + read-aloud (PR 4)
+	// ─────────────────────────────────────────────────────────────────
+	let isRecording = $state(false);
+	let transcribing = $state(false);
+	let speakingMessageId = $state<number | null>(null);
+
+	let mediaRecorder: MediaRecorder | null = null;
+	let audioChunks: Blob[] = [];
+	// Single persistent <audio> element — never recreated (iOS gesture-unlock continuity).
+	let persistentAudio = $state<HTMLAudioElement | null>(null);
+	let audioUnlocked = false;
+
+	// Plays a 1-frame silent WAV through the persistent audio element to
+	// satisfy iOS Safari's requirement that audio.play() be called inside a
+	// user gesture before any async play is allowed.
+	function unlockAudio() {
+		if (audioUnlocked || !persistentAudio) return;
+		const SILENT_WAV =
+			'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+		persistentAudio.src = SILENT_WAV;
+		persistentAudio.play().catch(() => {});
+		audioUnlocked = true;
+	}
+
+	async function handleMicPress() {
+		unlockAudio();
+		if (isRecording) {
+			// Second tap = stop and transcribe
+			mediaRecorder?.stop();
+			return;
+		}
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			audioChunks = [];
+			mediaRecorder = new MediaRecorder(stream);
+			mediaRecorder.ondataavailable = (e) => {
+				if (e.data.size > 0) audioChunks.push(e.data);
+			};
+			mediaRecorder.onstop = async () => {
+				stream.getTracks().forEach((t) => t.stop());
+				isRecording = false;
+				if (audioChunks.length === 0) return;
+				const blob = new Blob(audioChunks, { type: audioChunks[0].type || 'audio/webm' });
+				audioChunks = [];
+				transcribing = true;
+				try {
+					const form = new FormData();
+					form.append('file', blob, 'recording.webm');
+					const resp = await fetch(resolve('/api/chat/transcribe'), {
+						method: 'POST',
+						body: form
+					});
+					if (resp.status === 429) {
+						const body = await resp.json().catch(() => ({}));
+						toasts.add(
+							`STT cap hit (${(body.usage_today_minutes ?? 0).toFixed(1)} min today)`,
+							'error'
+						);
+						return;
+					}
+					if (!resp.ok) {
+						toasts.add('Transcription failed', 'error');
+						return;
+					}
+					const { text } = (await resp.json()) as { text: string; duration_seconds: number };
+					if (text) {
+						textDraft = textDraft ? textDraft + ' ' + text : text;
+					}
+				} catch (e) {
+					toasts.add('Transcription error', 'error');
+					console.error('transcribe error:', e);
+				} finally {
+					transcribing = false;
+				}
+			};
+			mediaRecorder.start();
+			isRecording = true;
+		} catch (e) {
+			toasts.add('Microphone access denied', 'error');
+			console.error('getUserMedia error:', e);
+		}
+	}
+
+	async function handleSpeakMessage(messageId: number, text: string) {
+		if (!text.trim()) return;
+		unlockAudio();
+		speakingMessageId = messageId;
+		try {
+			const resp = await fetch(resolve('/api/chat/speak'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ text })
+			});
+			if (resp.status === 429) {
+				const body = await resp.json().catch(() => ({}));
+				toasts.add(
+					`TTS cap hit (${(body.chars_used_today ?? 0).toLocaleString()} chars today)`,
+					'error'
+				);
+				return;
+			}
+			if (!resp.ok) {
+				toasts.add('Read-aloud failed', 'error');
+				return;
+			}
+			const audioBlob = await resp.blob();
+			const url = URL.createObjectURL(audioBlob);
+			if (!persistentAudio) return;
+			persistentAudio.src = url;
+			persistentAudio.onended = () => URL.revokeObjectURL(url);
+			await persistentAudio.play();
+		} catch (e) {
+			toasts.add('Read-aloud error', 'error');
+			console.error('speak error:', e);
+		} finally {
+			speakingMessageId = null;
+		}
+	}
+
 
 	// Optimistic "dispatching..." indicator. Set true the moment the operator
 	// hits send; cleared when the dispatch-side system bubble (or a streaming
@@ -1137,6 +1260,11 @@
 	<title>Co-Working Chat — LogueOS</title>
 </svelte:head>
 
+<!-- Single persistent audio element for all voice playback (PR 4).
+     Never recreated — iOS Safari requires audio.play() to stay on the same
+     element that was unlocked by the initial user gesture. -->
+<audio bind:this={persistentAudio} class="hidden" aria-hidden="true"></audio>
+
 <!-- h-full flexes inside the parent <main flex-1>, which is the canonical
      pattern (per mobile-chat-ux skill). Magic-number heights like
      calc(100dvh-100px) break when iOS shrinks 100dvh on keyboard appearance,
@@ -1366,6 +1494,23 @@
 					     phone. Pure render — no extra fetches. -->
 						{#if isWorkerReply(m)}
 							<div class="mt-0.5 flex items-center gap-1 text-muted-foreground">
+								<!-- Speaker button: read this reply aloud via ElevenLabs Emma. -->
+								<button
+									type="button"
+									onclick={() => handleSpeakMessage(m.id, m.message)}
+									disabled={speakingMessageId !== null}
+									title="Read aloud (Emma)"
+									aria-label="Read aloud"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40
+										{speakingMessageId === m.id ? 'text-cta' : ''}"
+								>
+									{#if speakingMessageId === m.id}
+										<Loader2 size={10} class="animate-spin" />
+									{:else}
+										<Volume2 size={10} />
+									{/if}
+									<span>Speak</span>
+								</button>
 								<button
 									type="button"
 									onclick={() => handleWorkflowAction(m.id, 'critique')}
@@ -1917,6 +2062,24 @@
 					<Loader2 size={16} class="animate-spin" />
 				{:else}
 					<Send size={16} />
+				{/if}
+			</button>
+			<!-- Mic button: tap to start recording, tap again to stop & transcribe. -->
+			<button
+				type="button"
+				onclick={handleMicPress}
+				disabled={transcribing}
+				aria-label={isRecording ? 'Stop recording' : 'Start voice dictation'}
+				title={isRecording ? 'Tap to stop and transcribe' : 'Voice dictation'}
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90 disabled:pointer-events-none disabled:opacity-40
+					{isRecording
+					? 'animate-pulse border-status-red/40 bg-status-red/15 text-status-red'
+					: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
+			>
+				{#if transcribing}
+					<Loader2 size={16} class="animate-spin" />
+				{:else}
+					<Mic size={16} />
 				{/if}
 			</button>
 		</div>

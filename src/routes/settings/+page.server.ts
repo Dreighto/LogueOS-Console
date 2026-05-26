@@ -34,10 +34,27 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.error('Settings: /api/chat/usage load failed', e);
 	}
 
+	type VoiceStatus = {
+		chars_used: number;
+		char_cap: number;
+		minutes_used: number;
+		minute_cap: number;
+	};
+	let voiceStatus: VoiceStatus | null = null;
+	try {
+		const voiceRes = await fetch('/api/chat/speak/status');
+		if (voiceRes.ok) {
+			voiceStatus = await voiceRes.json();
+		}
+	} catch (e) {
+		console.error('Settings: /api/chat/speak/status load failed', e);
+	}
+
 	return {
 		...clientSafeConfig,
 		killSwitch: await readKillSwitchStateSafe(),
 		services,
-		spendProviders
+		spendProviders,
+		voiceStatus
 	};
 };

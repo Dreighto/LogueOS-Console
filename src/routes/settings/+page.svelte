@@ -48,6 +48,14 @@
 		spendData = data.spendProviders ?? [];
 	});
 
+	// Voice usage data (PR 4).
+	type VoiceStatus = { chars_used: number; char_cap: number; minutes_used: number; minute_cap: number };
+	let voiceStatus = $state<VoiceStatus | null>(data.voiceStatus ?? null);
+
+	$effect(() => {
+		voiceStatus = data.voiceStatus ?? null;
+	});
+
 	async function refresh() {
 		// Kill switch
 		try {
@@ -88,6 +96,16 @@
 			}
 		} catch (e: unknown) {
 			spendError = e instanceof Error ? e.message : 'Unknown error';
+		}
+
+		// Voice usage data
+		try {
+			const resp = await fetch(resolve('/api/chat/speak/status'));
+			if (resp.ok) {
+				voiceStatus = await resp.json();
+			}
+		} catch {
+			// non-fatal — voice banner stays at last known value
 		}
 	}
 
@@ -310,6 +328,55 @@
 			{#if spendError}
 				<p class="font-mono text-xs text-status-amber">Spend refresh failed: {spendError}</p>
 			{/if}
+		</section>
+	{/if}
+
+	<!-- Voice usage banner (PR 4). Today's ElevenLabs chars + AssemblyAI minutes vs caps. -->
+	{#if voiceStatus}
+		{@const ttsPct = voiceStatus.char_cap > 0 ? Math.min(100, Math.round((voiceStatus.chars_used / voiceStatus.char_cap) * 100)) : 0}
+		{@const sttPct = voiceStatus.minute_cap > 0 ? Math.min(100, Math.round((voiceStatus.minutes_used / voiceStatus.minute_cap) * 100)) : 0}
+		<section class="flex flex-col gap-3" aria-labelledby="voice-spend-heading">
+			<div class="flex items-center gap-2 px-1">
+				<span class="text-muted-foreground text-sm">🎙️</span>
+				<h2
+					id="voice-spend-heading"
+					class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+				>
+					Voice Today
+				</h2>
+			</div>
+			<div class="flex flex-col gap-2">
+				<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+					<div class="flex items-center justify-between">
+						<span class="font-mono text-xs uppercase tracking-wider text-foreground">ElevenLabs TTS</span>
+						<span class="font-mono text-xs text-muted-foreground">
+							{voiceStatus.chars_used.toLocaleString()} / {voiceStatus.char_cap.toLocaleString()} chars · {ttsPct}%
+						</span>
+					</div>
+					<div class="h-1 w-full rounded bg-border overflow-hidden">
+						<div
+							class="h-full rounded transition-all duration-300
+								{ttsPct >= 90 ? 'bg-status-red' : ttsPct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
+							style="width: {ttsPct}%"
+						></div>
+					</div>
+				</div>
+				<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+					<div class="flex items-center justify-between">
+						<span class="font-mono text-xs uppercase tracking-wider text-foreground">AssemblyAI STT</span>
+						<span class="font-mono text-xs text-muted-foreground">
+							{voiceStatus.minutes_used.toFixed(1)} / {voiceStatus.minute_cap} min · {sttPct}%
+						</span>
+					</div>
+					<div class="h-1 w-full rounded bg-border overflow-hidden">
+						<div
+							class="h-full rounded transition-all duration-300
+								{sttPct >= 90 ? 'bg-status-red' : sttPct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
+							style="width: {sttPct}%"
+						></div>
+					</div>
+				</div>
+			</div>
 		</section>
 	{/if}
 
