@@ -1595,11 +1595,24 @@
 	async function toggleRemember(threadId: string, current: boolean) {
 		kebabOpenThreadId = null;
 		try {
-			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ remember_flag: !current })
-			});
+			if (!current) {
+				// Enabling: POST to /remember to set flag AND fire immediate Tier 0 emission.
+				await fetch(
+					resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/remember`),
+					{
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({})
+					}
+				);
+			} else {
+				// Disabling: just clear the flag, no emission needed.
+				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ remember_flag: false })
+				});
+			}
 			await refreshThreads();
 		} catch {
 			/* silent */

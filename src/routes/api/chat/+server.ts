@@ -9,6 +9,7 @@ import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { routeChat } from '$lib/server/llm_router';
 import type { RouterMessage } from '$lib/server/llm_router';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
+import { emitDispatchLinkObservation, maybeMarkDeepCandidate } from '$lib/server/observation_emit';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -94,6 +95,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			operatorOverride: threadState.operator_override
 		});
 		upsertThreadTier(threadId, currentTier, null);
+		// PR 8: silently mark Deep-tier threads with 3+ exchanges as observation candidates.
+		maybeMarkDeepCandidate(threadId, currentTier, recentForClassify.length);
 		let routerMeta: { provider_used: string; model_used: string } | null = null;
 
 		// 2. Resolve worker selection. Operator's explicit pill wins if set;
@@ -373,6 +376,10 @@ the activity ticker + spinner — you don't need to announce that you're
 waiting.`;
 
 			try {
+				// PR 8: emit a linking observation BEFORE dispatch so the dispatched
+				// worker can receive operator chat context as injected memory.
+				emitDispatchLinkObservation(threadId, message, targetRepo, currentTier);
+
 				const response = await fetchWithTimeout(
 					`${serverConfig.gatewayUrl}/api/v1/dispatch`,
 					{

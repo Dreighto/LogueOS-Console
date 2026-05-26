@@ -140,7 +140,14 @@ export const serverConfig = {
 	vapidPrivateKey: getEnv('VAPID_PRIVATE_KEY', ''),
 	vapidSubject: 'mailto:dreighto@gmail.com',
 	// Feature flag: set ENABLE_WEB_PUSH=false to disable without a git revert.
-	enableWebPush: getEnv('ENABLE_WEB_PUSH', 'true') !== 'false'
+	enableWebPush: getEnv('ENABLE_WEB_PUSH', 'true') !== 'false',
+	// Path to LogueOS-Orchestrator/.env — used by the privacy redactor (PR 8) to
+	// scan observation bodies for secret values before persisting to the memory DB.
+	// Fail-closed: if this file is unreadable, Tier 0 emission is BLOCKED.
+	orchestratorEnvPath: getEnv(
+		'LOGUEOS_ORCHESTRATOR_ENV_PATH',
+		'/home/dreighto/dev/LogueOS-Orchestrator/.env'
+	)
 };
 
 // Subset of serverConfig that's safe to expose to the client via load().

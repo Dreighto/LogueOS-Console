@@ -2,7 +2,7 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle, Bell, BellOff, BellRing } from 'lucide-svelte';
+	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle, Bell, BellOff, BellRing, Brain, Trash2 } from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -69,6 +69,61 @@
 		pushDeadSubs = data.pushDeadSubs ?? [];
 		pushSubCount = data.pushSubCount ?? 0;
 	});
+
+	// Team Memory state (PR 8).
+	type ChatObservation = {
+		observation_id: string;
+		project_id: string;
+		observation_kind: string;
+		text: string;
+		task_shape: string[];
+		timestamp: string;
+		chat_thread_id: string | null;
+		tier_at_emit: string | null;
+		models_used: string[];
+	};
+	let obsToday = $state<number>(data.obsToday ?? 0);
+	let obsLifetime = $state<number>(data.obsLifetime ?? 0);
+	let memoryModalOpen = $state(false);
+	let memoryObs = $state<ChatObservation[]>([]);
+	let memoryLoading = $state(false);
+	let memoryError = $state<string | null>(null);
+
+	$effect(() => {
+		obsToday = data.obsToday ?? 0;
+		obsLifetime = data.obsLifetime ?? 0;
+	});
+
+	async function openMemoryModal() {
+		memoryModalOpen = true;
+		if (memoryObs.length > 0) return;
+		memoryLoading = true;
+		memoryError = null;
+		try {
+			const res = await fetch(resolve('/api/chat/observations?limit=50'));
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			memoryObs = Array.isArray(data.records) ? data.records : [];
+		} catch (e: unknown) {
+			memoryError = e instanceof Error ? e.message : 'Failed to load observations';
+		} finally {
+			memoryLoading = false;
+		}
+	}
+
+	async function deleteObservation(observationId: string) {
+		if (!window.confirm('Delete this observation? It will no longer be injected into worker contexts.')) return;
+		try {
+			const res = await fetch(resolve(`/api/chat/observations/${encodeURIComponent(observationId)}`), {
+				method: 'DELETE'
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			memoryObs = memoryObs.filter((o) => o.observation_id !== observationId);
+			obsLifetime = Math.max(0, obsLifetime - 1);
+		} catch (e: unknown) {
+			alert('Delete failed: ' + (e instanceof Error ? e.message : 'unknown error'));
+		}
+	}
 
 	// On mount: read/generate device_id from localStorage, then probe PushManager state.
 	$effect(() => {
@@ -594,6 +649,43 @@
 		</section>
 	{/if}
 
+	<!-- Team Memory (PR 8). Tier 0 observation stats + browse modal. -->
+	<section class="flex flex-col gap-3" aria-labelledby="memory-heading">
+		<div class="flex items-center gap-2 px-1">
+			<Brain size={16} class="text-muted-foreground" />
+			<h2
+				id="memory-heading"
+				class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+			>
+				Team Memory
+			</h2>
+		</div>
+		<div class="rounded-lg border border-border bg-surface/30 p-4 flex flex-col gap-3">
+			<div class="flex items-center justify-between gap-3">
+				<div class="flex flex-col gap-0.5">
+					<span class="font-sans text-sm font-semibold text-foreground">
+						Tier 0 Observations
+					</span>
+					<span class="font-mono text-xs text-muted-foreground">
+						{obsToday} emitted today · {obsLifetime} lifetime
+					</span>
+				</div>
+				<button
+					type="button"
+					onclick={openMemoryModal}
+					class="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-sans text-xs font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-surface/80 hover:text-foreground focus:ring-2 focus:outline-none focus:ring-cta/40"
+				>
+					<Brain size={12} />
+					Browse
+				</button>
+			</div>
+			<p class="font-mono text-xs text-muted-foreground leading-relaxed">
+				Chat threads emit Tier 0 observations on archive or 🧠 Remember this. Workers dispatched
+				from chat receive these as injected memory via the Gatekeeper.
+			</p>
+		</div>
+	</section>
+
 	<!-- Build identity (LOS-73). Lets the operator know which build is
 	     running when triaging Console issues. Values are inlined at build
 	     time via vite.config.ts `define`; zero runtime cost. -->
@@ -703,6 +795,102 @@
 					Cancel
 				</button>
 			</div>
+		</div>
+	</div>
+{/if}
+
+{#if memoryModalOpen}
+	<div
+		class="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="memory-modal-heading"
+		onclick={() => (memoryModalOpen = false)}
+		onkeydown={(e) => { if (e.key === 'Escape') memoryModalOpen = false; }}
+		tabindex="-1"
+	>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			class="custom-scrollbar flex w-full max-w-2xl flex-col gap-4 rounded-lg border border-border bg-background p-5 shadow-2xl max-h-[85vh] overflow-y-auto"
+			role="document"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			tabindex="-1"
+		>
+			<div class="flex items-center justify-between gap-3 shrink-0">
+				<h3 id="memory-modal-heading" class="flex items-center gap-2 font-sans text-base font-bold tracking-tight">
+					<Brain size={16} />
+					Recent Tier 0 Observations
+				</h3>
+				<button
+					type="button"
+					onclick={() => (memoryModalOpen = false)}
+					class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+					aria-label="Close"
+				>
+					<X size={16} />
+				</button>
+			</div>
+
+			{#if memoryLoading}
+				<p class="font-mono text-xs text-muted-foreground text-center py-6">Loading…</p>
+			{:else if memoryError}
+				<div class="flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-xs text-status-red">
+					<AlertCircle size={13} class="mt-0.5 shrink-0" />
+					<span>{memoryError}</span>
+				</div>
+			{:else if memoryObs.length === 0}
+				<p class="font-mono text-xs text-muted-foreground text-center py-6">
+					No observations yet. Archive a thread or tap 🧠 Remember this to emit one.
+				</p>
+			{:else}
+				<div class="flex flex-col gap-2">
+					{#each memoryObs as obs (obs.observation_id)}
+						<div class="rounded-md border border-border bg-surface/30 p-3 flex flex-col gap-1.5">
+							<div class="flex items-start justify-between gap-2">
+								<div class="flex flex-wrap items-center gap-1.5 min-w-0">
+									{#if obs.chat_thread_id}
+										<span class="font-mono text-[10px] text-cta shrink-0">
+											{obs.chat_thread_id === 'default' ? 'Default' : obs.chat_thread_id.slice(0, 20)}
+										</span>
+									{/if}
+									{#if obs.tier_at_emit}
+										<span class="rounded px-1 py-0.5 font-mono text-[10px] bg-surface text-muted-foreground border border-border">
+											{obs.tier_at_emit === 'deep' ? '🧠' : obs.tier_at_emit === 'planning' ? '⚖️' : '🪶'}
+											{obs.tier_at_emit}
+										</span>
+									{/if}
+									{#if obs.models_used && obs.models_used.length > 0}
+										<span class="font-mono text-[10px] text-muted-foreground">
+											{obs.models_used.join(', ')}
+										</span>
+									{/if}
+								</div>
+								<div class="flex items-center gap-1 shrink-0">
+									<span class="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
+										{obs.timestamp.slice(0, 16).replace('T', ' ')}
+									</span>
+									<button
+										type="button"
+										onclick={() => deleteObservation(obs.observation_id)}
+										class="rounded p-0.5 text-muted-foreground/60 hover:text-status-red transition-colors"
+										aria-label="Delete observation"
+										title="Delete before Tier 1 promotion"
+									>
+										<Trash2 size={12} />
+									</button>
+								</div>
+							</div>
+							<p class="font-mono text-xs text-foreground/80 leading-relaxed line-clamp-3">
+								{obs.text.slice(0, 300)}{obs.text.length > 300 ? '…' : ''}
+							</p>
+							<span class="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+								{obs.observation_kind} · {obs.project_id}
+							</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}

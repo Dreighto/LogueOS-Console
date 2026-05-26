@@ -10,6 +10,7 @@ import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
 import { readKillSwitchStateSafe } from '$lib/server/kill-switch';
 import { getPendingDeadSubs, getSubscriptionCount } from '$lib/server/web_push';
+import { listChatObservations } from '$lib/server/observation_emit';
 
 export const load: PageServerLoad = async ({ fetch }) => {
 	let services: Array<{ id: string; name: string; status: 'online' | 'offline' }> = [];
@@ -61,6 +62,17 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.error('Settings: push status load failed', e);
 	}
 
+	// Team Memory stats (PR 8). Today + lifetime counts for the Settings banner.
+	let obsToday = 0;
+	let obsLifetime = 0;
+	try {
+		const stats = listChatObservations(0, 0);
+		obsToday = stats.today_count;
+		obsLifetime = stats.lifetime_count;
+	} catch (e) {
+		console.error('Settings: observation stats load failed', e);
+	}
+
 	return {
 		...clientSafeConfig,
 		killSwitch: await readKillSwitchStateSafe(),
@@ -68,6 +80,8 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		spendProviders,
 		voiceStatus,
 		pushDeadSubs,
-		pushSubCount
+		pushSubCount,
+		obsToday,
+		obsLifetime
 	};
 };
