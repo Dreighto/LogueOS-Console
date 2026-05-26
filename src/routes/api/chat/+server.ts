@@ -9,6 +9,7 @@ import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { routeChat } from '$lib/server/llm_router';
 import type { RouterMessage } from '$lib/server/llm_router';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
+import { emitDispatchLinkObservation, maybeMarkDeepCandidate } from '$lib/server/observation_emit';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -94,6 +95,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			operatorOverride: threadState.operator_override
 		});
 		upsertThreadTier(threadId, currentTier, null);
+		// PR 8: silently mark Deep-tier threads with 3+ exchanges as observation candidates.
+		maybeMarkDeepCandidate(threadId, currentTier, recentForClassify.length);
 		let routerMeta: { provider_used: string; model_used: string } | null = null;
 
 		// 2. Resolve worker selection. Operator's explicit pill wins if set;
@@ -117,7 +120,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		let targetRepo = 'LogueOS-Console'; // Default project
 		if (text.includes('miru')) {
 			targetRepo = 'project-miru';
-		} else if (text.includes('orchestrator') || text.includes('kernel') || text.includes('logueos-orchestrator')) {
+		} else if (
+			text.includes('orchestrator') ||
+			text.includes('kernel') ||
+			text.includes('logueos-orchestrator')
+		) {
 			targetRepo = 'LogueOS-Orchestrator';
 		} else if (text.includes('nasdoom')) {
 			targetRepo = 'NASDOOM';
@@ -144,11 +151,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const isHermes = explicitAgent === 'hermes';
 		const isAgyChat = explicitAgent === 'agy';
 		const shouldTrigger =
-			sender !== 'system' &&
-			explicitAgent !== 'silent' &&
-			!isHermes &&
-			!isAgyChat &&
-			!imageMode;
+			sender !== 'system' && explicitAgent !== 'silent' && !isHermes && !isAgyChat && !imageMode;
 
 		// Hermes branch — local Ollama, no worker spawn, ~1-3s round-trip.
 		// Skips the entire gateway/listener pipeline. Hermes has no file
@@ -172,8 +175,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				}
 				// Exclude the operator message we JUST inserted (it's the
 				// userMessage we pass separately to callHermes).
-				const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory)
-					.slice(0, -1);
+				const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory).slice(
+					0,
+					-1
+				);
 				const history = chatRowsToHermesHistory(slice);
 				const reply = await callHermes(history, message.trim());
 				addChatMessage('hermes', reply, null, null, null, 'sent', threadId);
@@ -233,7 +238,11 @@ export const POST: RequestHandler = async ({ request }) => {
 					addChatMessage(
 						'system',
 						`ℹ️ Primary provider unavailable — reply served by **${result.provider_used}** (${result.model_used}).`,
-						null, null, null, 'sent', threadId
+						null,
+						null,
+						null,
+						'sent',
+						threadId
 					);
 				}
 			} catch (err) {
@@ -242,7 +251,11 @@ export const POST: RequestHandler = async ({ request }) => {
 				addChatMessage(
 					'system',
 					`⚠️ **LLM router failed.** \`${msg.slice(0, 200)}\`. Check provider keys and daily caps.`,
-					null, null, null, 'sent', threadId
+					null,
+					null,
+					null,
+					'sent',
+					threadId
 				);
 			}
 		}
@@ -373,6 +386,10 @@ the activity ticker + spinner — you don't need to announce that you're
 waiting.`;
 
 			try {
+				// PR 8: emit a linking observation BEFORE dispatch so the dispatched
+				// worker can receive operator chat context as injected memory.
+				emitDispatchLinkObservation(threadId, message, targetRepo, currentTier);
+
 				const response = await fetchWithTimeout(
 					`${serverConfig.gatewayUrl}/api/v1/dispatch`,
 					{
@@ -459,7 +476,9 @@ waiting.`;
 		return json({
 			message: chatMsg,
 			current_tier: currentTier,
-			...(routerMeta ? { provider_used: routerMeta.provider_used, model_used: routerMeta.model_used } : {})
+			...(routerMeta
+				? { provider_used: routerMeta.provider_used, model_used: routerMeta.model_used }
+				: {})
 		});
 	} catch (e: unknown) {
 		console.error('POST /api/chat error:', e);

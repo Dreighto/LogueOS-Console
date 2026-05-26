@@ -107,8 +107,7 @@ export const serverConfig = {
 	// listener Just Works.
 	dispatchListenerUrl: getEnv('LOGUEOS_DISPATCH_LISTENER_URL', 'http://127.0.0.1:19100'),
 	dispatchListenerHmacSecret:
-		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') ||
-		getEnv('W4_LISTENER_HMAC_SECRET', ''),
+		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') || getEnv('W4_LISTENER_HMAC_SECRET', ''),
 	// LogueOS Gateway address (Console -> gateway for /api/v1/* read+dispatch).
 	// Same machine in production; configurable for dev. The gateway gates
 	// every /api/v1/* call behind is_trusted_origin (localhost / Tailscale
@@ -140,7 +139,14 @@ export const serverConfig = {
 	vapidPrivateKey: getEnv('VAPID_PRIVATE_KEY', ''),
 	vapidSubject: 'mailto:dreighto@gmail.com',
 	// Feature flag: set ENABLE_WEB_PUSH=false to disable without a git revert.
-	enableWebPush: getEnv('ENABLE_WEB_PUSH', 'true') !== 'false'
+	enableWebPush: getEnv('ENABLE_WEB_PUSH', 'true') !== 'false',
+	// Path to LogueOS-Orchestrator/.env — used by the privacy redactor (PR 8) to
+	// scan observation bodies for secret values before persisting to the memory DB.
+	// Fail-closed: if this file is unreadable, Tier 0 emission is BLOCKED.
+	orchestratorEnvPath: getEnv(
+		'LOGUEOS_ORCHESTRATOR_ENV_PATH',
+		'/home/dreighto/dev/LogueOS-Orchestrator/.env'
+	)
 };
 
 // Subset of serverConfig that's safe to expose to the client via load().

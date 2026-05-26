@@ -2,7 +2,18 @@
 	import type { PageData } from './$types';
 	import type { KillSwitchState, KillSwitchToggleResponse } from '$lib/types/kill-switch';
 	import { resolve } from '$app/paths';
-	import { ShieldCheck, AlertCircle, X, Signal, PauseCircle, Bell, BellOff, BellRing } from 'lucide-svelte';
+	import {
+		ShieldCheck,
+		AlertCircle,
+		X,
+		Signal,
+		PauseCircle,
+		Bell,
+		BellOff,
+		BellRing,
+		Brain,
+		Trash2
+	} from 'lucide-svelte';
 	import { formatRelativeTime } from '$lib/utils/format';
 	import ConnectionPill from '$lib/components/ConnectionPill.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -49,7 +60,12 @@
 	});
 
 	// Voice usage data (PR 4).
-	type VoiceStatus = { chars_used: number; char_cap: number; minutes_used: number; minute_cap: number };
+	type VoiceStatus = {
+		chars_used: number;
+		char_cap: number;
+		minutes_used: number;
+		minute_cap: number;
+	};
 	let voiceStatus = $state<VoiceStatus | null>(data.voiceStatus ?? null);
 
 	$effect(() => {
@@ -60,15 +76,78 @@
 	type DeadSub = { device_id: string; endpoint: string; detected_at: string };
 	let pushDeadSubs = $state<DeadSub[]>(data.pushDeadSubs ?? []);
 	let pushSubCount = $state<number>(data.pushSubCount ?? 0);
-	let pushEnabled = $state(false);        // reflects PushManager subscription state
-	let pushWorking = $state(false);        // true while subscribe/unsubscribe is in flight
+	let pushEnabled = $state(false); // reflects PushManager subscription state
+	let pushWorking = $state(false); // true while subscribe/unsubscribe is in flight
 	let pushError = $state<string | null>(null);
-	let pushDeviceId = $state<string>('');  // persisted in localStorage
+	let pushDeviceId = $state<string>(''); // persisted in localStorage
 
 	$effect(() => {
 		pushDeadSubs = data.pushDeadSubs ?? [];
 		pushSubCount = data.pushSubCount ?? 0;
 	});
+
+	// Team Memory state (PR 8).
+	type ChatObservation = {
+		observation_id: string;
+		project_id: string;
+		observation_kind: string;
+		text: string;
+		task_shape: string[];
+		timestamp: string;
+		chat_thread_id: string | null;
+		tier_at_emit: string | null;
+		models_used: string[];
+	};
+	let obsToday = $state<number>(data.obsToday ?? 0);
+	let obsLifetime = $state<number>(data.obsLifetime ?? 0);
+	let memoryModalOpen = $state(false);
+	let memoryObs = $state<ChatObservation[]>([]);
+	let memoryLoading = $state(false);
+	let memoryError = $state<string | null>(null);
+
+	$effect(() => {
+		obsToday = data.obsToday ?? 0;
+		obsLifetime = data.obsLifetime ?? 0;
+	});
+
+	async function openMemoryModal() {
+		memoryModalOpen = true;
+		if (memoryObs.length > 0) return;
+		memoryLoading = true;
+		memoryError = null;
+		try {
+			const res = await fetch(resolve('/api/chat/observations?limit=50'));
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			memoryObs = Array.isArray(data.records) ? data.records : [];
+		} catch (e: unknown) {
+			memoryError = e instanceof Error ? e.message : 'Failed to load observations';
+		} finally {
+			memoryLoading = false;
+		}
+	}
+
+	async function deleteObservation(observationId: string) {
+		if (
+			!window.confirm(
+				'Delete this observation? It will no longer be injected into worker contexts.'
+			)
+		)
+			return;
+		try {
+			const res = await fetch(
+				resolve(`/api/chat/observations/${encodeURIComponent(observationId)}`),
+				{
+					method: 'DELETE'
+				}
+			);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			memoryObs = memoryObs.filter((o) => o.observation_id !== observationId);
+			obsLifetime = Math.max(0, obsLifetime - 1);
+		} catch (e: unknown) {
+			alert('Delete failed: ' + (e instanceof Error ? e.message : 'unknown error'));
+		}
+	}
 
 	// On mount: read/generate device_id from localStorage, then probe PushManager state.
 	$effect(() => {
@@ -83,10 +162,12 @@
 		pushDeviceId = id;
 
 		if ('serviceWorker' in navigator && 'PushManager' in window) {
-			navigator.serviceWorker.ready.then(async (reg) => {
-				const sub = await reg.pushManager.getSubscription();
-				pushEnabled = sub !== null;
-			}).catch(() => {});
+			navigator.serviceWorker.ready
+				.then(async (reg) => {
+					const sub = await reg.pushManager.getSubscription();
+					pushEnabled = sub !== null;
+				})
+				.catch(() => {});
 		}
 	});
 
@@ -284,7 +365,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-
 	<PageHeader title="Settings" />
 
 	<!-- Connection Status section (LOS-70). Pills show whether each LogueOS
@@ -364,7 +444,9 @@
 				{/if}
 				{#if killSwitch.activated_by || killSwitch.activated_at}
 					<p class="mt-2 font-mono text-xs text-status-amber/70">
-						{#if killSwitch.activated_by}Paused by {killSwitch.activated_by}{/if}{#if killSwitch.activated_by && killSwitch.activated_at} · {/if}{#if killSwitch.activated_at}{formatRelativeTime(killSwitch.activated_at)}{/if}
+						{#if killSwitch.activated_by}Paused by {killSwitch.activated_by}{/if}{#if killSwitch.activated_by && killSwitch.activated_at}
+							·
+						{/if}{#if killSwitch.activated_at}{formatRelativeTime(killSwitch.activated_at)}{/if}
 					</p>
 				{/if}
 			</div>
@@ -390,7 +472,8 @@
 					Pause all work
 				</button>
 				<p class="text-center font-mono text-xs text-muted-foreground">
-					Stops workers from picking up new tasks. In-progress work finishes its current step, then halts.
+					Stops workers from picking up new tasks. In-progress work finishes its current step, then
+					halts.
 				</p>
 			{/if}
 		</div>
@@ -409,7 +492,7 @@
 	{#if spendData.length > 0}
 		<section class="flex flex-col gap-3" aria-labelledby="spend-heading">
 			<div class="flex items-center gap-2 px-1">
-				<span class="text-muted-foreground text-sm">🪙</span>
+				<span class="text-sm text-muted-foreground">🪙</span>
 				<h2
 					id="spend-heading"
 					class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
@@ -419,14 +502,16 @@
 			</div>
 			<div class="flex flex-col gap-2">
 				{#each spendData as p (p.provider)}
-					<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+					<div class="flex flex-col gap-1 rounded-md border border-border bg-surface/30 px-3 py-2">
 						<div class="flex items-center justify-between">
-							<span class="font-mono text-xs uppercase tracking-wider text-foreground">{p.provider}</span>
+							<span class="font-mono text-xs tracking-wider text-foreground uppercase"
+								>{p.provider}</span
+							>
 							<span class="font-mono text-xs text-muted-foreground">
 								{p.tokens_used.toLocaleString()} / {p.cap.toLocaleString()} tok · {p.pct}%
 							</span>
 						</div>
-						<div class="h-1 w-full rounded bg-border overflow-hidden">
+						<div class="h-1 w-full overflow-hidden rounded bg-border">
 							<div
 								class="h-full rounded transition-all duration-300
 									{p.pct >= 90 ? 'bg-status-red' : p.pct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
@@ -444,11 +529,17 @@
 
 	<!-- Voice usage banner (PR 4). Today's ElevenLabs chars + AssemblyAI minutes vs caps. -->
 	{#if voiceStatus}
-		{@const ttsPct = voiceStatus.char_cap > 0 ? Math.min(100, Math.round((voiceStatus.chars_used / voiceStatus.char_cap) * 100)) : 0}
-		{@const sttPct = voiceStatus.minute_cap > 0 ? Math.min(100, Math.round((voiceStatus.minutes_used / voiceStatus.minute_cap) * 100)) : 0}
+		{@const ttsPct =
+			voiceStatus.char_cap > 0
+				? Math.min(100, Math.round((voiceStatus.chars_used / voiceStatus.char_cap) * 100))
+				: 0}
+		{@const sttPct =
+			voiceStatus.minute_cap > 0
+				? Math.min(100, Math.round((voiceStatus.minutes_used / voiceStatus.minute_cap) * 100))
+				: 0}
 		<section class="flex flex-col gap-3" aria-labelledby="voice-spend-heading">
 			<div class="flex items-center gap-2 px-1">
-				<span class="text-muted-foreground text-sm">🎙️</span>
+				<span class="text-sm text-muted-foreground">🎙️</span>
 				<h2
 					id="voice-spend-heading"
 					class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
@@ -457,14 +548,17 @@
 				</h2>
 			</div>
 			<div class="flex flex-col gap-2">
-				<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+				<div class="flex flex-col gap-1 rounded-md border border-border bg-surface/30 px-3 py-2">
 					<div class="flex items-center justify-between">
-						<span class="font-mono text-xs uppercase tracking-wider text-foreground">ElevenLabs TTS</span>
+						<span class="font-mono text-xs tracking-wider text-foreground uppercase"
+							>ElevenLabs TTS</span
+						>
 						<span class="font-mono text-xs text-muted-foreground">
-							{voiceStatus.chars_used.toLocaleString()} / {voiceStatus.char_cap.toLocaleString()} chars · {ttsPct}%
+							{voiceStatus.chars_used.toLocaleString()} / {voiceStatus.char_cap.toLocaleString()} chars
+							· {ttsPct}%
 						</span>
 					</div>
-					<div class="h-1 w-full rounded bg-border overflow-hidden">
+					<div class="h-1 w-full overflow-hidden rounded bg-border">
 						<div
 							class="h-full rounded transition-all duration-300
 								{ttsPct >= 90 ? 'bg-status-red' : ttsPct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
@@ -472,14 +566,16 @@
 						></div>
 					</div>
 				</div>
-				<div class="rounded-md border border-border bg-surface/30 px-3 py-2 flex flex-col gap-1">
+				<div class="flex flex-col gap-1 rounded-md border border-border bg-surface/30 px-3 py-2">
 					<div class="flex items-center justify-between">
-						<span class="font-mono text-xs uppercase tracking-wider text-foreground">AssemblyAI STT</span>
+						<span class="font-mono text-xs tracking-wider text-foreground uppercase"
+							>AssemblyAI STT</span
+						>
 						<span class="font-mono text-xs text-muted-foreground">
 							{voiceStatus.minutes_used.toFixed(1)} / {voiceStatus.minute_cap} min · {sttPct}%
 						</span>
 					</div>
-					<div class="h-1 w-full rounded bg-border overflow-hidden">
+					<div class="h-1 w-full overflow-hidden rounded bg-border">
 						<div
 							class="h-full rounded transition-all duration-300
 								{sttPct >= 90 ? 'bg-status-red' : sttPct >= 70 ? 'bg-status-amber' : 'bg-status-green'}"
@@ -513,8 +609,8 @@
 					<div class="flex flex-1 flex-col gap-1">
 						<span class="font-bold">Dead Subscription Detected — Re-subscribe</span>
 						<span class="text-status-amber/80">
-							Your push subscription expired or was revoked. Disable and re-enable
-							notifications below to restore push delivery.
+							Your push subscription expired or was revoked. Disable and re-enable notifications
+							below to restore push delivery.
 						</span>
 					</div>
 					<button
@@ -548,7 +644,7 @@
 						type="button"
 						onclick={togglePush}
 						disabled={pushWorking || !data.vapidPublicKey}
-						class="flex items-center gap-2 rounded-md border px-3 py-2 font-sans text-xs font-bold uppercase tracking-wider transition-colors focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50
+						class="flex items-center gap-2 rounded-md border px-3 py-2 font-sans text-xs font-bold tracking-wider uppercase transition-colors focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50
 							{pushEnabled
 							? 'border-status-red/30 bg-status-red/10 text-status-red hover:bg-status-red/20 focus:ring-status-red/40'
 							: 'border-status-green/30 bg-status-green/10 text-status-green hover:bg-status-green/20 focus:ring-status-green/40'}"
@@ -569,8 +665,8 @@
 					>
 						<AlertCircle size={13} class="mt-0.5 shrink-0" />
 						<span>
-							VAPID keys not configured. Run <code>node tools/generate_vapid_keys.js</code> and
-							add the output to <code>.env</code>.
+							VAPID keys not configured. Run <code>node tools/generate_vapid_keys.js</code> and add
+							the output to <code>.env</code>.
 						</span>
 					</div>
 				{/if}
@@ -585,20 +681,55 @@
 				{/if}
 
 				<!-- iOS-specific inline quirks note -->
-				<p class="mt-3 font-mono text-xs text-muted-foreground leading-relaxed">
+				<p class="mt-3 font-mono text-xs leading-relaxed text-muted-foreground">
 					Apple Web Push requires the PWA to be home-screen-installed AND launched at least once
-					since reboot. On iOS, tap the Share button → "Add to Home Screen", then open the app
-					from the home screen before enabling notifications.
+					since reboot. On iOS, tap the Share button → "Add to Home Screen", then open the app from
+					the home screen before enabling notifications.
 				</p>
 			</div>
 		</section>
 	{/if}
 
+	<!-- Team Memory (PR 8). Tier 0 observation stats + browse modal. -->
+	<section class="flex flex-col gap-3" aria-labelledby="memory-heading">
+		<div class="flex items-center gap-2 px-1">
+			<Brain size={16} class="text-muted-foreground" />
+			<h2
+				id="memory-heading"
+				class="font-sans text-xs font-bold tracking-widest text-muted-foreground uppercase"
+			>
+				Team Memory
+			</h2>
+		</div>
+		<div class="flex flex-col gap-3 rounded-lg border border-border bg-surface/30 p-4">
+			<div class="flex items-center justify-between gap-3">
+				<div class="flex flex-col gap-0.5">
+					<span class="font-sans text-sm font-semibold text-foreground"> Tier 0 Observations </span>
+					<span class="font-mono text-xs text-muted-foreground">
+						{obsToday} emitted today · {obsLifetime} lifetime
+					</span>
+				</div>
+				<button
+					type="button"
+					onclick={openMemoryModal}
+					class="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase transition-colors hover:bg-surface/80 hover:text-foreground focus:ring-2 focus:ring-cta/40 focus:outline-none"
+				>
+					<Brain size={12} />
+					Browse
+				</button>
+			</div>
+			<p class="font-mono text-xs leading-relaxed text-muted-foreground">
+				Chat threads emit Tier 0 observations on archive or 🧠 Remember this. Workers dispatched
+				from chat receive these as injected memory via the Gatekeeper.
+			</p>
+		</div>
+	</section>
+
 	<!-- Build identity (LOS-73). Lets the operator know which build is
 	     running when triaging Console issues. Values are inlined at build
 	     time via vite.config.ts `define`; zero runtime cost. -->
 	<footer
-		class="text-muted-foreground mt-6 border-t border-border pt-3 text-center font-mono text-xs"
+		class="mt-6 border-t border-border pt-3 text-center font-mono text-xs text-muted-foreground"
 		aria-label="Build identity"
 	>
 		{__BUILD_SHA__} · built {__BUILD_TS__.slice(0, 16).replace('T', ' ')} UTC
@@ -646,8 +777,8 @@
 
 			<p class="font-sans text-sm text-muted-foreground">
 				{#if pendingAction === 'activate'}
-					Every in-flight worker will finish its current step, then stop. New
-					tasks won't be picked up until work is resumed.
+					Every in-flight worker will finish its current step, then stop. New tasks won't be picked
+					up until work is resumed.
 				{:else}
 					Workers will be allowed to pick up new tasks again.
 				{/if}
@@ -665,7 +796,7 @@
 						? 'e.g. live demo at 3pm, pausing non-essential work'
 						: 'e.g. demo done, resuming normal ops'}
 					disabled={submitting}
-					class="placeholder:text-muted-foreground rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:border-cta focus:ring-1 focus:ring-cta focus:outline-none"
+					class="rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-cta focus:ring-1 focus:ring-cta focus:outline-none"
 				/>
 			</label>
 
@@ -688,11 +819,7 @@
 						? 'border-status-amber/40 bg-status-amber/10 text-status-amber hover:bg-status-amber/20 focus:ring-status-amber/50'
 						: 'border-status-green/40 bg-status-green/10 text-status-green hover:bg-status-green/20 focus:ring-status-green/50'}"
 				>
-					{submitting
-						? 'Working…'
-						: pendingAction === 'activate'
-							? 'Confirm pause'
-							: 'Resume work'}
+					{submitting ? 'Working…' : pendingAction === 'activate' ? 'Confirm pause' : 'Resume work'}
 				</button>
 				<button
 					type="button"
@@ -703,6 +830,117 @@
 					Cancel
 				</button>
 			</div>
+		</div>
+	</div>
+{/if}
+
+{#if memoryModalOpen}
+	<div
+		class="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="memory-modal-heading"
+		onclick={() => (memoryModalOpen = false)}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') memoryModalOpen = false;
+		}}
+		tabindex="-1"
+	>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			class="custom-scrollbar flex max-h-[85vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-background p-5 shadow-2xl"
+			role="document"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			tabindex="-1"
+		>
+			<div class="flex shrink-0 items-center justify-between gap-3">
+				<h3
+					id="memory-modal-heading"
+					class="flex items-center gap-2 font-sans text-base font-bold tracking-tight"
+				>
+					<Brain size={16} />
+					Recent Tier 0 Observations
+				</h3>
+				<button
+					type="button"
+					onclick={() => (memoryModalOpen = false)}
+					class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+					aria-label="Close"
+				>
+					<X size={16} />
+				</button>
+			</div>
+
+			{#if memoryLoading}
+				<p class="py-6 text-center font-mono text-xs text-muted-foreground">Loading…</p>
+			{:else if memoryError}
+				<div
+					class="flex items-start gap-2 rounded-md border border-status-red/20 bg-status-red/5 p-2 font-mono text-xs text-status-red"
+				>
+					<AlertCircle size={13} class="mt-0.5 shrink-0" />
+					<span>{memoryError}</span>
+				</div>
+			{:else if memoryObs.length === 0}
+				<p class="py-6 text-center font-mono text-xs text-muted-foreground">
+					No observations yet. Archive a thread or tap 🧠 Remember this to emit one.
+				</p>
+			{:else}
+				<div class="flex flex-col gap-2">
+					{#each memoryObs as obs (obs.observation_id)}
+						<div class="flex flex-col gap-1.5 rounded-md border border-border bg-surface/30 p-3">
+							<div class="flex items-start justify-between gap-2">
+								<div class="flex min-w-0 flex-wrap items-center gap-1.5">
+									{#if obs.chat_thread_id}
+										<span class="shrink-0 font-mono text-[10px] text-cta">
+											{obs.chat_thread_id === 'default'
+												? 'Default'
+												: obs.chat_thread_id.slice(0, 20)}
+										</span>
+									{/if}
+									{#if obs.tier_at_emit}
+										<span
+											class="rounded border border-border bg-surface px-1 py-0.5 font-mono text-[10px] text-muted-foreground"
+										>
+											{obs.tier_at_emit === 'deep'
+												? '🧠'
+												: obs.tier_at_emit === 'planning'
+													? '⚖️'
+													: '🪶'}
+											{obs.tier_at_emit}
+										</span>
+									{/if}
+									{#if obs.models_used && obs.models_used.length > 0}
+										<span class="font-mono text-[10px] text-muted-foreground">
+											{obs.models_used.join(', ')}
+										</span>
+									{/if}
+								</div>
+								<div class="flex shrink-0 items-center gap-1">
+									<span class="font-mono text-[10px] whitespace-nowrap text-muted-foreground">
+										{obs.timestamp.slice(0, 16).replace('T', ' ')}
+									</span>
+									<button
+										type="button"
+										onclick={() => deleteObservation(obs.observation_id)}
+										class="rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-status-red"
+										aria-label="Delete observation"
+										title="Delete before Tier 1 promotion"
+									>
+										<Trash2 size={12} />
+									</button>
+								</div>
+							</div>
+							<p class="line-clamp-3 font-mono text-xs leading-relaxed text-foreground/80">
+								{obs.text.slice(0, 300)}{obs.text.length > 300 ? '…' : ''}
+							</p>
+							<span class="font-mono text-[10px] tracking-wider text-muted-foreground/60 uppercase">
+								{obs.observation_kind} · {obs.project_id}
+							</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
