@@ -311,19 +311,31 @@
 		attachments = [];
 		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
 
+		// Routing decision (mirrors /api/chat server logic): if the message
+		// looks like an explicit worker dispatch or it's an image-gen request,
+		// use the non-streaming /api/chat endpoint. Otherwise stream tokens
+		// via /api/chat/stream so the reply renders live.
+		const lower = messageBody.toLowerCase();
+		const isDispatch = lower.includes('@cc') || lower.includes('@agy') || lower.includes('@gemini');
+		const useStream = !isDispatch && !isGenImage;
+
 		try {
-			const r = await fetch(resolve('/api/chat'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message: messageBody,
-					thread: activeThread,
-					target_repo: selectedRepo,
-					image: isGenImage || undefined
-				})
-			});
-			if (!r.ok) throw new Error(`HTTP ${r.status}`);
-			await pollMessages();
+			if (useStream) {
+				await runStreamingSend(messageBody);
+			} else {
+				const r = await fetch(resolve('/api/chat'), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						message: messageBody,
+						thread: activeThread,
+						target_repo: selectedRepo,
+						image: isGenImage || undefined
+					})
+				});
+				if (!r.ok) throw new Error(`HTTP ${r.status}`);
+				await pollMessages();
+			}
 		} catch (e) {
 			toasts.add(`Send failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
 			textDraft = text; // restore
@@ -337,6 +349,93 @@
 			e.preventDefault();
 			void sendMessage();
 		}
+	}
+
+	// Streaming send — opens an SSE connection to /api/chat/stream, inserts
+	// a placeholder AGY bubble, then appends token text as it arrives. The
+	// server persists the final assembled reply to DB before closing the
+	// stream, so pollMessages() at the end reconciles the optimistic bubble
+	// with the persisted row (replaces it with the canonical numeric-id row).
+	async function runStreamingSend(messageBody: string) {
+		const STREAM_ID = Date.now() + 1; // distinct from the operator optimistic id
+		// Insert an empty placeholder; tokens will append. With this bubble
+		// present, the thinking-dots indicator suppresses (last msg !== operator).
+		messages = [
+			...messages,
+			{
+				id: STREAM_ID,
+				sender: 'agy',
+				message: '',
+				timestamp: new Date().toISOString()
+			}
+		];
+
+		const resp = await fetch(resolve('/api/chat/stream'), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				message: messageBody,
+				thread: activeThread,
+				target_repo: selectedRepo
+			})
+		});
+		if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
+
+		const reader = resp.body.getReader();
+		const decoder = new TextDecoder('utf-8');
+		let buf = '';
+		let assembled = '';
+		let errored = false;
+
+		while (true) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			buf += decoder.decode(value, { stream: true });
+			let sep: number;
+			while ((sep = buf.indexOf('\n\n')) !== -1) {
+				const raw = buf.slice(0, sep);
+				buf = buf.slice(sep + 2);
+				const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
+				if (!dataLine) continue;
+				try {
+					const evt = JSON.parse(dataLine.slice(6)) as
+						| { type: 'token'; text: string }
+						| { type: 'done'; provider_used: string; model_used: string }
+						| { type: 'error'; message: string };
+					if (evt.type === 'token') {
+						assembled += evt.text;
+						messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
+						if (userAtBottom) {
+							queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+						}
+					} else if (evt.type === 'done') {
+						upsertThreadTier_local(evt.model_used);
+					} else if (evt.type === 'error') {
+						errored = true;
+						toasts.add(`LLM stream failed: ${evt.message}`, 'error');
+						messages = messages.map((m) =>
+							m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
+						);
+					}
+				} catch {
+					/* skip malformed */
+				}
+			}
+		}
+
+		// Reconcile against the persisted DB state.
+		await pollMessages();
+		if (!errored) {
+			// pollMessages replaces the messages array from DB; the optimistic
+			// STREAM_ID row should now be gone (DB has the canonical row).
+			// Nothing else to do here.
+		}
+	}
+
+	// Tiny local-only setter for the model label badge — avoids hitting the
+	// /api/chat/tier roundtrip just to display the model used.
+	function upsertThreadTier_local(modelUsed: string) {
+		if (modelUsed) lastModelUsed = modelUsed;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
