@@ -183,9 +183,7 @@
 
 	async function pollMessages() {
 		try {
-			const r = await fetch(
-				resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`
-			);
+			const r = await fetch(resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`);
 			if (!r.ok) return;
 			const b = await r.json();
 			const newMessages: ChatMessage[] = b.messages || [];
@@ -425,7 +423,10 @@
 
 	async function toggleTalkback() {
 		if (talkbackActive) {
-			await stopTalkback('Talkback off');
+			// No toast on manual stop — the pill returns to idle, which is signal enough.
+			// Auto-stop paths (cap hit, mic disconnected, error streak) still toast
+			// because their reason carries information the operator needs.
+			await stopTalkback();
 			return;
 		}
 		unlockAudio();
@@ -870,7 +871,7 @@
 	onchange={handleUpload}
 />
 
-<div class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] text-foreground font-sans">
+<div class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] font-sans text-foreground">
 	<!-- Radial Gradient Atmosphere Background -->
 	<div
 		class="pointer-events-none absolute inset-0 -z-0"
@@ -892,19 +893,23 @@
 
 	<aside
 		class="fixed top-0 bottom-0 left-0 z-40 flex w-72 flex-col border-r border-zinc-800/60 bg-[#090909]/98 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out lg:static lg:translate-x-0
-			{sidebarOpen ? 'translate-x-0 lg:w-72 lg:opacity-100' : '-translate-x-full lg:w-0 lg:opacity-0 lg:pointer-events-none'}"
+			{sidebarOpen
+			? 'translate-x-0 lg:w-72 lg:opacity-100'
+			: '-translate-x-full lg:pointer-events-none lg:w-0 lg:opacity-0'}"
 	>
 		<!-- Sidebar Header -->
-		<div class="flex items-center justify-between border-b border-zinc-800/50 px-4 py-4 shrink-0">
+		<div class="flex shrink-0 items-center justify-between border-b border-zinc-800/50 px-4 py-4">
 			<div class="flex items-center gap-2">
 				<img src="{base}/favicon.png" alt="LogueOS" class="h-6 w-6" />
-				<span class="font-mono text-xs font-semibold tracking-wider uppercase text-zinc-300">Sessions</span>
+				<span class="font-mono text-xs font-semibold tracking-wider text-zinc-300 uppercase"
+					>Sessions</span
+				>
 			</div>
 			<div class="flex items-center gap-1.5">
 				<button
 					type="button"
 					onclick={newThread}
-					class="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-all hover:scale-105 active:scale-95"
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:scale-105 hover:text-white active:scale-95"
 					title="Create new session"
 				>
 					<Plus size={14} />
@@ -912,7 +917,7 @@
 				<button
 					type="button"
 					onclick={() => (sidebarOpen = false)}
-					class="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-all lg:hidden"
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:text-white lg:hidden"
 					aria-label="Close sidebar"
 				>
 					<X size={14} />
@@ -921,9 +926,11 @@
 		</div>
 
 		<!-- Threads Scroll Area -->
-		<div class="flex-1 overflow-y-auto p-2 space-y-1">
+		<div class="flex-1 space-y-1 overflow-y-auto p-2">
 			{#if threads.length === 0}
-				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">No active threads</div>
+				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">
+					No active threads
+				</div>
 			{:else}
 				{#each threads as t (t.thread_id)}
 					<button
@@ -931,15 +938,22 @@
 						onclick={() => switchThread(t.thread_id)}
 						class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left font-sans text-xs transition-all hover:scale-[1.01] active:scale-[0.99]
 							{activeThread === t.thread_id
-							? 'bg-zinc-800/40 border border-zinc-700/50 text-white font-medium'
-							: 'bg-transparent text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 border border-transparent'}"
+							? 'border border-zinc-700/50 bg-zinc-800/40 font-medium text-white'
+							: 'border border-transparent bg-transparent text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'}"
 					>
 						<div class="flex items-center gap-2.5 truncate">
-							<MessageSquare size={13} class={activeThread === t.thread_id ? 'text-purple-400' : 'text-zinc-500'} />
-							<span class="truncate">{t.thread_id === 'default' ? 'Default Space' : t.thread_id}</span>
+							<MessageSquare
+								size={13}
+								class={activeThread === t.thread_id ? 'text-purple-400' : 'text-zinc-500'}
+							/>
+							<span class="truncate"
+								>{t.thread_id === 'default' ? 'Default Space' : t.thread_id}</span
+							>
 						</div>
 						{#if t.message_count > 0}
-							<span class="rounded bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 border border-zinc-900">
+							<span
+								class="rounded border border-zinc-900 bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
+							>
 								{t.message_count}
 							</span>
 						{/if}
@@ -949,7 +963,9 @@
 		</div>
 
 		<!-- Sidebar Footer info -->
-		<div class="border-t border-zinc-800/50 p-3 bg-black/25 font-mono text-[9px] text-zinc-600 space-y-0.5 shrink-0 select-none">
+		<div
+			class="shrink-0 space-y-0.5 border-t border-zinc-800/50 bg-black/25 p-3 font-mono text-[9px] text-zinc-600 select-none"
+		>
 			<div>CORE: LogueOS-Console</div>
 			<div>HOST: 127.0.0.1:18080</div>
 		</div>
@@ -962,24 +978,26 @@
 		<!-- ═════════════════════════════════════════════════════════════════
 		     QUIET HEADER
 		     ═════════════════════════════════════════════════════════════════ -->
-		<header class="relative z-10 flex shrink-0 items-center justify-between px-4 pt-3 pb-2 select-none">
+		<header
+			class="relative z-10 flex shrink-0 items-center justify-between px-4 pt-3 pb-2 select-none"
+		>
 			<div class="flex items-center gap-1.5">
 				<!-- Sidebar toggle button -->
 				<button
 					type="button"
 					onclick={() => (sidebarOpen = !sidebarOpen)}
-					class="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-zinc-400 hover:text-white transition-all active:scale-90"
+					class="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-zinc-400 transition-all hover:text-white active:scale-90"
 					aria-label="Toggle Sessions Sidebar"
 					title="Toggle Sessions Sidebar"
 				>
 					<Menu size={16} />
 				</button>
-				
+
 				<!-- Logo home anchor -->
 				<a
 					href={resolve('/')}
 					aria-label="Return to Dashboard"
-					class="flex h-9 w-9 items-center justify-center transition-opacity hover:opacity-80 ml-0.5"
+					class="ml-0.5 flex h-9 w-9 items-center justify-center transition-opacity hover:opacity-80"
 				>
 					<img src="{base}/favicon.png" alt="LogueOS" class="h-6 w-6" />
 				</a>
@@ -992,7 +1010,7 @@
 					<button
 						type="button"
 						onclick={() => (openChip = openChip === 'repo' ? null : 'repo')}
-						class="flex items-center gap-1.5 rounded-full bg-zinc-950/60 border border-zinc-800/80 px-3 py-1.5 font-sans text-xs text-zinc-300 hover:text-white hover:border-zinc-700 transition-all"
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 font-sans text-xs text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
 						aria-label="Target repository"
 					>
 						<span>{selectedWorkspace?.emoji ?? '📁'}</span>
@@ -1011,7 +1029,9 @@
 						<div
 							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
-							<div class="px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-zinc-600 select-none">
+							<div
+								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
+							>
 								Target Directory
 							</div>
 							{#each workspaces as ws (ws.name)}
@@ -1019,7 +1039,7 @@
 									type="button"
 									onclick={() => switchRepo(ws.name)}
 									class="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-zinc-900
-										{selectedRepo === ws.name ? 'text-cyan-400 font-medium' : 'text-zinc-400'}"
+										{selectedRepo === ws.name ? 'font-medium text-cyan-400' : 'text-zinc-400'}"
 								>
 									<span class="flex items-center gap-2">
 										<span>{ws.emoji}</span>
@@ -1039,15 +1059,19 @@
 					<button
 						type="button"
 						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
-						class="flex items-center gap-1.5 rounded-full bg-zinc-950/60 border border-zinc-800/80 px-3 py-1.5 font-sans text-xs text-zinc-300 hover:text-white hover:border-zinc-700 transition-all"
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800/80 bg-zinc-950/60 px-3 py-1.5 font-sans text-xs text-zinc-300 transition-all hover:border-zinc-700 hover:text-white"
 						aria-label="Model routing tier"
 						title="Override default classification routing"
 					>
 						<span>{tierEmoji}</span>
 						{#if lastModelUsed}
-							<span class="max-w-[100px] truncate font-mono text-[10px] tracking-wide text-zinc-400">{lastModelUsed}</span>
+							<span class="max-w-[100px] truncate font-mono text-[10px] tracking-wide text-zinc-400"
+								>{lastModelUsed}</span
+							>
 						{:else}
-							<span class="font-mono text-[10px] tracking-wide text-zinc-400 capitalize">{currentTier}</span>
+							<span class="font-mono text-[10px] tracking-wide text-zinc-400 capitalize"
+								>{currentTier}</span
+							>
 						{/if}
 						<ChevronDown size={10} class="text-zinc-500" />
 					</button>
@@ -1063,7 +1087,9 @@
 						<div
 							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
-							<div class="px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-zinc-600 select-none">
+							<div
+								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
+							>
 								Routing Tier Lock
 							</div>
 							{#each ['chat', 'planning', 'deep', 'local'] as Tier[] as t}
@@ -1071,7 +1097,7 @@
 									type="button"
 									onclick={() => setTierOverride(t)}
 									class="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-zinc-900
-										{currentTier === t ? 'text-purple-400 font-medium' : 'text-zinc-400'}"
+										{currentTier === t ? 'font-medium text-purple-400' : 'text-zinc-400'}"
 								>
 									<span>{TIER_LABELS[t]}</span>
 									{#if currentTier === t}
@@ -1083,7 +1109,7 @@
 								<button
 									type="button"
 									onclick={() => setTierOverride(null)}
-									class="flex w-full items-center px-3 py-2 text-left text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors"
+									class="flex w-full items-center px-3 py-2 text-left text-xs text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-300"
 								>
 									🔄 Auto-classify (Reset)
 								</button>
@@ -1098,20 +1124,21 @@
 		     EPHEMERAL ACTIVITY PILL
 		     ═════════════════════════════════════════════════════════════════ -->
 		{#if activityPill}
-			<div class="relative z-10 mx-auto px-4 pb-1 shrink-0 select-none" style="animation: fade-in 0.3s ease-out;">
+			<div
+				class="relative z-10 mx-auto shrink-0 px-4 pb-1 select-none"
+				style="animation: fade-in 0.3s ease-out;"
+			>
 				<div
 					class="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-950/20 px-3.5 py-1.5 backdrop-blur-md"
 					style="box-shadow: 0 0 16px rgba(34, 211, 238, 0.1);"
 				>
-					<span
-						class="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"
-					></span>
+					<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
 					<span class="font-mono text-[11px] tracking-wide text-cyan-400">
 						⚡ {activityPill.worker}: {activityPill.step}
 					</span>
 					<a
 						href={resolve('/activity')}
-						class="font-mono text-[10px] text-cyan-300/60 hover:text-cyan-300 transition-colors ml-1.5"
+						class="ml-1.5 font-mono text-[10px] text-cyan-300/60 transition-colors hover:text-cyan-300"
 					>
 						[View Logs]
 					</a>
@@ -1142,18 +1169,20 @@
 					<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}">
 						<!-- Custom Labeling / Bubble Headers -->
 						{#if m.sender !== 'operator'}
-							<div class="mb-1.5 flex items-center gap-1 select-none font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase bg-cyan-950/20 border border-cyan-500/20 rounded-full px-2 py-0.5 w-fit">
-								<Sparkles size={10} class="text-cyan-400 shrink-0" />
+							<div
+								class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
+							>
+								<Sparkles size={10} class="shrink-0 text-cyan-400" />
 								<span>{m.sender === 'system' ? 'LOGUEOS' : senderDisplay(m.sender)}</span>
 							</div>
 						{/if}
 
 						<!-- Text Bubble -->
 						<div
-							class="max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 font-sans text-[15px] leading-relaxed whitespace-pre-wrap selection:bg-purple-900/50 selection:text-white
+							class="max-w-[85%] rounded-2xl px-4 py-2.5 font-sans text-[15px] leading-relaxed whitespace-pre-wrap selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
 								{m.sender === 'operator'
 								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
-								: 'bg-zinc-950/40 border border-zinc-900 text-zinc-100'}"
+								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
 						>
 							{m.message}
 						</div>
@@ -1176,7 +1205,7 @@
 					unseenCount = 0;
 					scrollSentinel?.scrollIntoView({ behavior: 'smooth' });
 				}}
-				class="absolute right-1/2 bottom-24 z-20 flex translate-x-1/2 items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3.5 py-1.5 font-mono text-[11px] text-cyan-300 backdrop-blur-md hover:scale-105 active:scale-95 transition-all select-none"
+				class="absolute right-1/2 bottom-24 z-20 flex translate-x-1/2 items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3.5 py-1.5 font-mono text-[11px] text-cyan-300 backdrop-blur-md transition-all select-none hover:scale-105 active:scale-95"
 				style="box-shadow: 0 0 16px rgba(34, 211, 238, 0.2);"
 			>
 				{unseenCount} new messages ↓
@@ -1186,54 +1215,65 @@
 		<!-- ═════════════════════════════════════════════════════════════════
 		     HERO COMPOSER PILL
 		     ═════════════════════════════════════════════════════════════════ -->
-		<div class="relative z-10 px-4 pt-2 pb-4 select-none shrink-0">
+		<div class="relative z-10 shrink-0 px-4 pt-2 pb-4 select-none">
 			<!-- Outer border shifting glow container -->
 			<div
-				class="relative flex flex-col gap-2 rounded-3xl p-2 transition-all duration-300 border
+				class="relative flex flex-col gap-2 rounded-3xl border p-2 transition-all duration-300
 					{composerMode === 'recording'
-					? 'bg-amber-500/[0.04] border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.15)]'
+					? 'border-amber-500/40 bg-amber-500/[0.04] shadow-[0_0_30px_rgba(245,158,11,0.15)]'
 					: composerMode === 'talkback'
-						? 'bg-emerald-500/[0.04] border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.15)]'
+						? 'border-emerald-500/40 bg-emerald-500/[0.04] shadow-[0_0_30px_rgba(16,185,129,0.15)]'
 						: imageMode
-							? 'bg-cyan-500/[0.04] border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.15)]'
+							? 'border-cyan-500/40 bg-cyan-500/[0.04] shadow-[0_0_30px_rgba(6,182,212,0.15)]'
 							: sending
-								? 'bg-purple-500/[0.04] border-purple-500/40 shadow-[0_0_30px_rgba(168,85,247,0.15)] animate-pulse'
-								: 'bg-zinc-950/80 border-zinc-800/80 shadow-[0_0_24px_rgba(168,85,247,0.06)] hover:border-zinc-700/80 focus-within:border-zinc-600/80'}"
+								? 'animate-pulse border-purple-500/40 bg-purple-500/[0.04] shadow-[0_0_30px_rgba(168,85,247,0.15)]'
+								: 'border-zinc-800/80 bg-zinc-950/80 shadow-[0_0_24px_rgba(168,85,247,0.06)] focus-within:border-zinc-600/80 hover:border-zinc-700/80'}"
 			>
 				<!-- Dictation / Talkback Status indicators inside composer -->
 				{#if composerMode === 'recording' || composerMode === 'talkback'}
-					<div class="flex items-center justify-between px-2 pt-0.5 pb-1 border-b border-white/5 font-mono text-[10px] select-none">
+					<div
+						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] select-none"
+					>
 						<div class="flex items-center gap-1.5">
-							<span class="h-2 w-2 rounded-full animate-ping
+							<span
+								class="h-2 w-2 animate-ping rounded-full
 								{composerMode === 'recording' ? 'bg-amber-400' : 'bg-emerald-400'}"
 							></span>
-							<span class={composerMode === 'recording' ? 'text-amber-400' : 'text-emerald-400 font-semibold'}>
-								{composerMode === 'recording' ? '🔴 Voice Dictation Hot' : '🔊 Walkie-Talkie Engaged'}
+							<span
+								class={composerMode === 'recording'
+									? 'text-amber-400'
+									: 'font-semibold text-emerald-400'}
+							>
+								{composerMode === 'recording'
+									? '🔴 Voice Dictation Hot'
+									: '🔊 Walkie-Talkie Engaged'}
 							</span>
 							{#if composerMode === 'talkback' && talkbackPhase}
-								<span class="text-zinc-500 px-1 border border-zinc-800 rounded bg-black/40">
+								<span class="rounded border border-zinc-800 bg-black/40 px-1 text-zinc-500">
 									{TALKBACK_PHASE_LABELS[talkbackPhase]}
 								</span>
 							{/if}
 						</div>
 						<button
 							type="button"
-							onclick={composerMode === 'recording' ? toggleRecord : () => stopTalkback('Talkback off')}
-							class="text-[9px] tracking-wider uppercase bg-red-950/20 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-full hover:bg-red-900/30 transition-all"
+							onclick={composerMode === 'recording' ? toggleRecord : () => stopTalkback()}
+							class="rounded-full border border-red-500/30 bg-red-950/20 px-2 py-0.5 text-[9px] tracking-wider text-red-400 uppercase transition-all hover:bg-red-900/30"
 						>
 							Disconnect
 						</button>
 					</div>
 				{:else if imageMode}
-					<div class="flex items-center justify-between px-2 pt-0.5 pb-1 border-b border-white/5 font-mono text-[10px] select-none text-cyan-400">
+					<div
+						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] text-cyan-400 select-none"
+					>
 						<div class="flex items-center gap-1.5">
-							<Sparkles size={11} class="text-cyan-400 shrink-0" />
+							<Sparkles size={11} class="shrink-0 text-cyan-400" />
 							<span>✨ Prompt will route to Image Generation</span>
 						</div>
 						<button
 							type="button"
 							onclick={() => (imageMode = false)}
-							class="text-[9px] tracking-wider uppercase bg-zinc-950 border border-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full hover:text-white transition-all"
+							class="rounded-full border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[9px] tracking-wider text-zinc-400 uppercase transition-all hover:text-white"
 						>
 							Cancel
 						</button>
@@ -1246,7 +1286,7 @@
 					<button
 						type="button"
 						onclick={triggerUpload}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800/80 text-zinc-400 hover:text-white transition-colors active:scale-90"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
 						aria-label="Attach File"
 						title="Attach image"
 					>
@@ -1282,9 +1322,9 @@
 						onclick={() => (imageMode = !imageMode)}
 						disabled={composerMode === 'recording' || composerMode === 'talkback'}
 						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
-							{imageMode 
-							? 'bg-cyan-950 border border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]' 
-							: 'bg-zinc-900 border border-zinc-800/80 text-zinc-400 hover:text-white'}"
+							{imageMode
+							? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
 						aria-label="Toggle Image Gen Mode"
 						title="Image Generation Mode"
 					>
@@ -1298,8 +1338,8 @@
 						disabled={composerMode === 'talkback'}
 						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
 							{composerMode === 'recording'
-							? 'bg-amber-950 border border-amber-500/50 text-amber-400 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.2)]'
-							: 'bg-zinc-900 border border-zinc-800/80 text-zinc-400 hover:text-white'}"
+							? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
 						aria-label={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
 						title={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
 					>
@@ -1317,8 +1357,8 @@
 						disabled={composerMode === 'recording'}
 						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
 							{composerMode === 'talkback'
-							? 'bg-emerald-950 border border-emerald-500/50 text-emerald-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.2)]'
-							: 'bg-zinc-900 border border-zinc-800/80 text-zinc-400 hover:text-white'}"
+							? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
 						aria-label="Hands-free continuous Talkback"
 						title="Hands-free continuous Talkback"
 					>
@@ -1333,11 +1373,16 @@
 					<button
 						type="button"
 						onclick={sendMessage}
-						disabled={(!textDraft.trim() && !imageMode) || sending || composerMode === 'recording' || composerMode === 'talkback'}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:from-zinc-900 disabled:to-zinc-900 disabled:border disabled:border-zinc-800 disabled:text-zinc-600 disabled:shadow-none"
+						disabled={(!textDraft.trim() && !imageMode) ||
+							sending ||
+							composerMode === 'recording' ||
+							composerMode === 'talkback'}
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
 						aria-label="Send Message"
 						title="Send (Enter)"
-						style={textDraft.trim() && !sending && composerMode === 'idle' ? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);' : ''}
+						style={textDraft.trim() && !sending && composerMode === 'idle'
+							? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
+							: ''}
 					>
 						<Send size={14} />
 					</button>
