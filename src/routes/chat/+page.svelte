@@ -41,7 +41,9 @@
 	// ─────────────────────────────────────────────────────────────────
 	type ThreadInfo = { thread_id: string; message_count: number; latest_ts: string };
 	let activeThread = $state<string>(data.activeThread || 'default');
-	let threads = $state<ThreadInfo[]>(data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]);
+	let threads = $state<ThreadInfo[]>(
+		data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]
+	);
 	let threadSwitcherOpen = $state(false);
 
 	// ─────────────────────────────────────────────────────────────────
@@ -66,7 +68,9 @@
 				const body = await resp.json();
 				if (body.current_tier) currentTier = body.current_tier as Tier;
 			}
-		} catch { /* offline — keep last known tier */ }
+		} catch {
+			/* offline — keep last known tier */
+		}
 	}
 
 	async function setTierOverride(tier: Tier | null) {
@@ -81,7 +85,9 @@
 				const body = await resp.json();
 				if (body.current_tier) currentTier = body.current_tier as Tier;
 			}
-		} catch { /* silent */ }
+		} catch {
+			/* silent */
+		}
 	}
 
 	// Active chat state seeded from SSR to ensure zero flicker on load.
@@ -131,7 +137,9 @@
 		workspaceByThread = { ...workspaceByThread, [activeThread]: name };
 		try {
 			localStorage.setItem('chat_workspaces_v1', JSON.stringify(workspaceByThread));
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────
@@ -155,27 +163,66 @@
 			}
 			try {
 				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-			} catch { /* storage quota exceeded */ }
+			} catch {
+				/* storage quota exceeded */
+			}
 			// Fire-and-forget server sync for cross-device persistence.
 			void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(tid)}`), {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ body: text })
-			}).catch(() => { /* offline — localStorage copy is the fallback */ });
+			}).catch(() => {
+				/* offline — localStorage copy is the fallback */
+			});
 		}, 300);
 	});
 
 	// Starter prompt library — small, hand-curated. Kept inline so opening
 	// the drawer is zero-fetch. Categories help orient as the list grows.
 	const STARTER_PROMPTS: { category: string; label: string; prompt: string }[] = [
-		{ category: 'Brainstorm', label: 'Suggest a feature', prompt: '@agy suggest a new feature for the Console that would speed up my workflow. Be specific and pitch the tradeoffs.' },
-		{ category: 'Brainstorm', label: 'Refactor ideas', prompt: '@agy look at the chat tab and suggest 3 refactor ideas, ordered by impact-per-effort.' },
-		{ category: 'Review', label: 'Audit recent diff', prompt: '@cc audit the last 5 commits on main for any regressions or rough edges.' },
-		{ category: 'Review', label: 'Check theme tokens', prompt: '@agy check that all color usage in the Console uses theme tokens (no hex literals).' },
-		{ category: 'Verify', label: 'Run the test suite', prompt: '@cc run the unit test suite and report any failures.' },
-		{ category: 'Verify', label: 'Smoke test the build', prompt: '@cc verify the latest build runs and key routes (/console, /chat, /activity) load.' },
-		{ category: 'Investigate', label: 'Why is X slow?', prompt: '@cc investigate why dispatch responses are slow — trace the wait between operator send and final reply.' },
-		{ category: 'Investigate', label: 'Triage Linear', prompt: '@cc do a 3-day Linear ticket sweep and report what should move state.' }
+		{
+			category: 'Brainstorm',
+			label: 'Suggest a feature',
+			prompt:
+				'@agy suggest a new feature for the Console that would speed up my workflow. Be specific and pitch the tradeoffs.'
+		},
+		{
+			category: 'Brainstorm',
+			label: 'Refactor ideas',
+			prompt:
+				'@agy look at the chat tab and suggest 3 refactor ideas, ordered by impact-per-effort.'
+		},
+		{
+			category: 'Review',
+			label: 'Audit recent diff',
+			prompt: '@cc audit the last 5 commits on main for any regressions or rough edges.'
+		},
+		{
+			category: 'Review',
+			label: 'Check theme tokens',
+			prompt: '@agy check that all color usage in the Console uses theme tokens (no hex literals).'
+		},
+		{
+			category: 'Verify',
+			label: 'Run the test suite',
+			prompt: '@cc run the unit test suite and report any failures.'
+		},
+		{
+			category: 'Verify',
+			label: 'Smoke test the build',
+			prompt: '@cc verify the latest build runs and key routes (/console, /chat, /activity) load.'
+		},
+		{
+			category: 'Investigate',
+			label: 'Why is X slow?',
+			prompt:
+				'@cc investigate why dispatch responses are slow — trace the wait between operator send and final reply.'
+		},
+		{
+			category: 'Investigate',
+			label: 'Triage Linear',
+			prompt: '@cc do a 3-day Linear ticket sweep and report what should move state.'
+		}
 	];
 
 	// Auto-grow the textarea up to ~6 visible lines. CSS-only (resize: none)
@@ -230,7 +277,7 @@
 			if (pendingStreamChunks.size === 0) return;
 			const updates: Record<string, string> = { ...streamByTrace };
 			for (const [traceId, chunk] of pendingStreamChunks) {
-				let next = (updates[traceId] || '');
+				let next = updates[traceId] || '';
 				next = next + (next.endsWith('\n') || next.length === 0 ? '' : '\n') + chunk;
 				if (next.length > STREAM_BUFFER_MAX) {
 					next = '...[truncated]...\n' + next.slice(next.length - STREAM_BUFFER_MAX);
@@ -256,10 +303,17 @@
 	// land at the bottom on first paint, auto-scroll on new messages ONLY if
 	// the operator is already near the bottom. If they've scrolled up to read
 	// history, show a "X new ↓" pill instead of yanking the viewport.
-	const SCROLL_NEAR_BOTTOM_PX = 80; // tolerance for "user is at bottom"
 	let userAtBottom = $state(true);
 	let unseenCount = $state(0);
 	let lastSeenMessageId = $state<number | null>(null);
+	// ID of the first message that arrived while scrolled up (drives the unread divider).
+	let firstUnseenMessageId = $state<number | null>(null);
+	// IntersectionObserver sentinel element — bound in the template at feed bottom.
+	let scrollSentinel = $state<HTMLDivElement | null>(null);
+	// Connection status dot wired to the EventSource (SSE) streams in syncStreamSubscriptions.
+	let connStatus = $state<'green' | 'amber' | 'red'>('green');
+	let connDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let connConsecutiveErrors = 0;
 
 	// Optimistic "dispatching..." indicator. Set true the moment the operator
 	// hits send; cleared when the dispatch-side system bubble (or a streaming
@@ -322,6 +376,14 @@
 		return Array.from(set);
 	}
 
+	function scheduleConnStatus(status: 'green' | 'amber' | 'red') {
+		if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
+		connDebounceTimer = setTimeout(() => {
+			connStatus = status;
+			connDebounceTimer = null;
+		}, 1000);
+	}
+
 	// Scroll the chat container to the absolute bottom. Wraps in
 	// requestAnimationFrame so the call lands after layout/paint — on first
 	// mount, calling scrollTo before the messages render does nothing.
@@ -334,25 +396,10 @@
 		});
 	}
 
-	function recomputeAtBottom() {
-		if (!feedContainer) return;
-		const remaining = feedContainer.scrollHeight - feedContainer.scrollTop - feedContainer.clientHeight;
-		userAtBottom = remaining <= SCROLL_NEAR_BOTTOM_PX;
-		if (userAtBottom) {
-			unseenCount = 0;
-			if (messages.length > 0) {
-				lastSeenMessageId = messages[messages.length - 1].id;
-			}
-		}
-	}
-
-	function handleFeedScroll() {
-		recomputeAtBottom();
-	}
-
 	async function jumpToLatest() {
 		userAtBottom = true;
 		unseenCount = 0;
+		firstUnseenMessageId = null;
 		if (messages.length > 0) lastSeenMessageId = messages[messages.length - 1].id;
 		await scrollToBottom('smooth');
 	}
@@ -360,12 +407,17 @@
 	// Poll the API for new messages stateless and snappy
 	async function pollMessages() {
 		try {
-			const resp = await fetch(resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`);
+			const resp = await fetch(
+				resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`
+			);
 			if (!resp.ok) return;
 			const body = await resp.json();
 			const newMessages: ChatMessage[] = body.messages || [];
 
-			if (newMessages.length === messages.length && JSON.stringify(newMessages) === JSON.stringify(messages)) {
+			if (
+				newMessages.length === messages.length &&
+				JSON.stringify(newMessages) === JSON.stringify(messages)
+			) {
 				return;
 			}
 
@@ -397,8 +449,13 @@
 					lastSeenMessageId = newMessages[newMessages.length - 1].id;
 				}
 			} else {
-				const added = newMessages.filter((m) => prevLastId === null || m.id > prevLastId).length;
-				if (added > 0) unseenCount += added;
+				const newOnes = newMessages.filter((m) => prevLastId === null || m.id > prevLastId);
+				if (newOnes.length > 0) {
+					unseenCount += newOnes.length;
+					if (firstUnseenMessageId === null && newOnes[0]) {
+						firstUnseenMessageId = newOnes[0].id;
+					}
+				}
 			}
 		} catch {
 			// silent fallback
@@ -458,15 +515,18 @@
 					pendingStreamChunks.set(traceId, next);
 					scheduleStreamFlush();
 				});
+				es.onopen = () => {
+					connConsecutiveErrors = 0;
+					scheduleConnStatus('green');
+				};
 				es.addEventListener('end', () => {
 					streamEnded = { ...streamEnded, [traceId]: true };
 					es.close();
 					streamSources.delete(traceId);
 				});
 				es.addEventListener('error', () => {
-					// EventSource will auto-retry on transient errors. If the
-					// connection ultimately closes, the 'end' handler does the
-					// cleanup. Nothing to do here for transient drops.
+					connConsecutiveErrors++;
+					scheduleConnStatus(connConsecutiveErrors >= 3 ? 'red' : 'amber');
 				});
 				streamSources.set(traceId, es);
 			} catch (e) {
@@ -481,22 +541,37 @@
 				streamSources.delete(traceId);
 			}
 		}
+		// No active traces → reset conn status to green (nothing to fail).
+		if (active.size === 0) {
+			connConsecutiveErrors = 0;
+			scheduleConnStatus('green');
+		}
 	}
 
 	onMount(() => {
 		// Restore draft map and workspace selections from localStorage.
 		try {
-			const savedDrafts = JSON.parse(localStorage.getItem('chat_drafts_v1') || '[]') as [string, string][];
+			const savedDrafts = JSON.parse(localStorage.getItem('chat_drafts_v1') || '[]') as [
+				string,
+				string
+			][];
 			drafts = new Map(savedDrafts);
 			const localDraft = drafts.get(activeThread) || '';
 			if (localDraft) textDraft = localDraft;
-		} catch { /* corrupted key — ignore */ }
+		} catch {
+			/* corrupted key — ignore */
+		}
 		try {
-			const savedWS = JSON.parse(localStorage.getItem('chat_workspaces_v1') || '{}') as Record<string, string>;
+			const savedWS = JSON.parse(localStorage.getItem('chat_workspaces_v1') || '{}') as Record<
+				string,
+				string
+			>;
 			workspaceByThread = savedWS;
 			const savedRepo = savedWS[activeThread];
 			if (savedRepo) selectedRepo = savedRepo;
-		} catch { /* corrupted key — ignore */ }
+		} catch {
+			/* corrupted key — ignore */
+		}
 
 		// Async: fetch server draft for cross-device sync (overwrites local if newer).
 		void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(activeThread)}`))
@@ -507,10 +582,14 @@
 					drafts.set(activeThread, body.body);
 					try {
 						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-					} catch { /* ignore */ }
+					} catch {
+						/* ignore */
+					}
 				}
 			})
-			.catch(() => { /* offline — use local copy */ });
+			.catch(() => {
+				/* offline — use local copy */
+			});
 
 		// Fetch initial tier for badge.
 		void fetchTier(activeThread);
@@ -520,11 +599,35 @@
 		// without animation. Snap-to-bottom feel like iMessage.
 		requestAnimationFrame(() => {
 			scrollToBottom('auto');
-			recomputeAtBottom();
 			if (messages.length > 0) {
 				lastSeenMessageId = messages[messages.length - 1].id;
 			}
 		});
+
+		// IntersectionObserver on the sentinel div at the bottom of the feed.
+		// When sentinel enters feedContainer's visible area → user is at bottom.
+		// No scroll-event math; no layout thrash on every scroll tick.
+		let sentinelObserver: IntersectionObserver | null = null;
+		if (feedContainer && scrollSentinel) {
+			sentinelObserver = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (entry?.isIntersecting) {
+						userAtBottom = true;
+						unseenCount = 0;
+						firstUnseenMessageId = null;
+						if (messages.length > 0) {
+							lastSeenMessageId = messages[messages.length - 1].id;
+						}
+					} else {
+						userAtBottom = false;
+					}
+				},
+				{ root: feedContainer, threshold: 0 }
+			);
+			sentinelObserver.observe(scrollSentinel);
+		}
+
 		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
 
 		// Activity ticker — separate cadence than messages so a running worker
@@ -560,10 +663,16 @@
 		return () => {
 			clearInterval(interval);
 			if (activityTimer !== null) clearTimeout(activityTimer);
+			if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
+			sentinelObserver?.disconnect();
 			document.removeEventListener('visibilitychange', onVisibility);
 			// Close every open SSE on unmount.
 			for (const es of streamSources.values()) {
-				try { es.close(); } catch { /* noop */ }
+				try {
+					es.close();
+				} catch {
+					/* noop */
+				}
 			}
 			streamSources.clear();
 		};
@@ -643,8 +752,11 @@
 				throw new Error(err.error || `HTTP ${resp.status}`);
 			}
 
-			toasts.add(`Command ${status === 'approved' ? 'approved' : 'denied'} successfully.`, 'success');
-			
+			toasts.add(
+				`Command ${status === 'approved' ? 'approved' : 'denied'} successfully.`,
+				'success'
+			);
+
 			// Snappy local update
 			messages = messages.map((m) => {
 				if (m.id === messageId) {
@@ -760,7 +872,10 @@
 			const body = await resp.json();
 			messages = [...messages, body.message];
 			scrollToBottom('smooth');
-			toasts.add('Started a new conversation. Older context cleared from worker dispatches.', 'success');
+			toasts.add(
+				'Started a new conversation. Older context cleared from worker dispatches.',
+				'success'
+			);
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : 'Unknown error';
 			toasts.add(`Reset failed: ${msg}`, 'error');
@@ -800,7 +915,9 @@
 			drafts.set(prevThread, prevDraft);
 			try {
 				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		}
 
 		activeThread = threadId;
@@ -828,10 +945,14 @@
 					drafts.set(threadId, body.body);
 					try {
 						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-					} catch { /* ignore */ }
+					} catch {
+						/* ignore */
+					}
 				}
 			})
-			.catch(() => { /* offline — localStorage copy stands */ });
+			.catch(() => {
+				/* offline — localStorage copy stands */
+			});
 
 		// Persist the choice so a fresh page load (phone or desktop) lands
 		// here instead of the default thread. Fire-and-forget; never blocks
@@ -852,12 +973,14 @@
 	}
 
 	function slugifyThreadName(name: string): string {
-		return name
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9-]+/g, '-')
-			.replace(/^-+|-+$/g, '')
-			.slice(0, 40) || 'thread';
+		return (
+			name
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9-]+/g, '-')
+				.replace(/^-+|-+$/g, '')
+				.slice(0, 40) || 'thread'
+		);
 	}
 
 	function newThread() {
@@ -1018,8 +1141,8 @@
      pattern (per mobile-chat-ux skill). Magic-number heights like
      calc(100dvh-100px) break when iOS shrinks 100dvh on keyboard appearance,
      pushing the composer below the visible area. -->
-<div class="flex flex-col h-full overflow-hidden -m-4">
-	<div class="shrink-0 flex items-start justify-between gap-2 px-2 pt-1">
+<div class="-m-4 flex h-full flex-col overflow-hidden">
+	<div class="flex shrink-0 items-start justify-between gap-2 px-2 pt-1">
 		<!-- Thread switcher: replaces the static "Co-Working Chat" title. Shows
 		     the active thread name + chevron; tap opens a dropdown of all
 		     known threads with a "+ New thread" button. Operators can run
@@ -1033,14 +1156,14 @@
 				aria-expanded={threadSwitcherOpen}
 			>
 				<MessageSquare size={12} class="text-muted-foreground" />
-				<span class="font-sans text-sm font-bold text-foreground tracking-tight">
+				<span class="font-sans text-sm font-bold tracking-tight text-foreground">
 					{activeThread === 'default' ? 'Default' : activeThread}
 				</span>
-				<span class="text-muted-foreground text-xs" aria-hidden="true">▾</span>
+				<span class="text-xs text-muted-foreground" aria-hidden="true">▾</span>
 			</button>
 			{#if threadSwitcherOpen}
 				<div
-					class="absolute left-0 top-full mt-1 z-30 flex flex-col rounded-md border border-border bg-background/95 shadow-lg backdrop-blur-md min-w-[200px] max-h-[60vh] overflow-y-auto custom-scrollbar animate-fade-in"
+					class="custom-scrollbar animate-fade-in absolute top-full left-0 z-30 mt-1 flex max-h-[60vh] min-w-[200px] flex-col overflow-y-auto rounded-md border border-border bg-background/95 shadow-lg backdrop-blur-md"
 				>
 					{#each threads as t (t.thread_id)}
 						<button
@@ -1058,7 +1181,7 @@
 					<button
 						type="button"
 						onclick={newThread}
-						class="flex items-center gap-1.5 px-3 py-2 border-t border-border text-cta font-sans text-sm hover:bg-cta/5 transition-colors"
+						class="flex items-center gap-1.5 border-t border-border px-3 py-2 font-sans text-sm text-cta transition-colors hover:bg-cta/5"
 					>
 						<Plus size={12} />
 						<span>New thread</span>
@@ -1071,7 +1194,7 @@
 			type="button"
 			onclick={handleNewConversation}
 			disabled={resetting}
-			class="shrink-0 mt-1 flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground hover:bg-surface/80 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+			class="mt-1 flex shrink-0 items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors hover:bg-surface/80 hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
 			title="Drop a 'new conversation' marker inside this thread so old context isn't replayed to workers."
 		>
 			{#if resetting}
@@ -1086,204 +1209,236 @@
 	<!-- Main Chat Area (Scrollable Feed) -->
 	<div
 		bind:this={feedContainer}
-		onscroll={handleFeedScroll}
-		class="relative flex-1 overflow-y-auto px-2 py-4 flex flex-col gap-4 custom-scrollbar"
+		class="custom-scrollbar relative flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-4"
 	>
 		{#if messages.length === 0}
-			<div class="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-border rounded-lg bg-surface/10">
-				<MessageSquare size={36} class="text-muted-foreground mb-3 opacity-60" />
+			<div
+				class="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface/10 p-8 text-center"
+			>
+				<MessageSquare size={36} class="mb-3 text-muted-foreground opacity-60" />
 				<h3 class="font-sans text-sm font-bold text-foreground">No Chat History</h3>
-				<p class="font-sans text-xs text-muted-foreground max-w-xs mt-1">
-					Type your first request below to ping GMI or CC. Mentions like <code class="text-cta">@agy</code> or <code class="text-cta">@cc</code> will automatically boot them up!
+				<p class="mt-1 max-w-xs font-sans text-xs text-muted-foreground">
+					Type your first request below to ping GMI or CC. Mentions like <code class="text-cta"
+						>@agy</code
+					>
+					or <code class="text-cta">@cc</code> will automatically boot them up!
 				</p>
 			</div>
 		{:else}
 			{#each messages as m (m.id)}
+				{#if !isResetMarker(m) && m.id === firstUnseenMessageId}
+					<!-- Unread boundary: first message that arrived while operator was scrolled up. -->
+					<div class="animate-fade-in my-1 flex items-center gap-2" aria-label="New messages">
+						<div class="h-px flex-1 bg-border/60"></div>
+						<span
+							class="shrink-0 font-mono text-[10px] tracking-wider text-muted-foreground/70 uppercase"
+							>New Messages</span
+						>
+						<div class="h-px flex-1 bg-border/60"></div>
+					</div>
+				{/if}
 				{#if isResetMarker(m)}
 					<!-- Conversation boundary — dispatched workers after this point
 					     see no context from before. -->
-					<div class="flex items-center gap-2 my-1 animate-fade-in" aria-label="New conversation">
+					<div class="animate-fade-in my-1 flex items-center gap-2" aria-label="New conversation">
 						<div class="h-px flex-1 bg-border"></div>
-						<div class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+						<div
+							class="flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+						>
 							<Plus size={10} />
 							<span>New conversation · {formatShortTime(m.timestamp)}</span>
 						</div>
 						<div class="h-px flex-1 bg-border"></div>
 					</div>
 				{:else}
-				<!-- Message Container — left-border thread-grouped when trace_id present -->
-				<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'} {m.trace_id ? 'thread-grouped' : ''} animate-fade-in">
-					
-					<!-- Metadata strip -->
-					<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase text-muted-foreground">
-						{#if m.sender === 'operator'}
-							<span>Operator</span>
-							<User size={10} />
-						{:else if m.sender === 'system'}
-							<span class="text-status-blue">System</span>
-						{:else}
-							{@const senderClass = m.sender === 'agy'
-								? 'text-purple-400'
-								: m.sender === 'hermes'
-									? 'text-status-green'
-									: 'text-orange-400'}
-							<Cpu size={10} class={senderClass} />
-							<span class={senderClass}>{m.sender}</span>
-						{/if}
-						<span>·</span>
-						<span>{formatShortTime(m.timestamp)}</span>
-					</div>
-
-					<!-- Speech Bubble -->
+					<!-- Message Container — left-border thread-grouped when trace_id present -->
 					<div
-						class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed select-text
-							{m.sender === 'operator'
-								? 'bg-cta/15 border border-cta/30 text-white rounded-tr-none'
-								: m.sender === 'system'
-									? 'bg-surface/50 border border-border/50 text-muted-foreground w-full max-w-none text-center font-mono text-xs py-1.5'
-									: 'bg-surface border border-border text-foreground rounded-tl-none'}"
+						class="flex flex-col gap-1 {m.sender === 'operator'
+							? 'items-end'
+							: 'items-start'} {m.trace_id ? 'thread-grouped' : ''} animate-fade-in"
 					>
-						<Markdown content={m.message} />
+						<!-- Metadata strip -->
+						<div
+							class="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground uppercase"
+						>
+							{#if m.sender === 'operator'}
+								<span>Operator</span>
+								<User size={10} />
+							{:else if m.sender === 'system'}
+								<span class="text-status-blue">System</span>
+							{:else}
+								{@const senderClass =
+									m.sender === 'agy'
+										? 'text-purple-400'
+										: m.sender === 'hermes'
+											? 'text-status-green'
+											: 'text-orange-400'}
+								<Cpu size={10} class={senderClass} />
+								<span class={senderClass}>{m.sender}</span>
+							{/if}
+							<span>·</span>
+							<span>{formatShortTime(m.timestamp)}</span>
+						</div>
 
-						<!-- Render interactive action cards if present -->
-						{#if m.interactive_action}
-							<div class="mt-3 rounded border border-border/80 bg-background/80 p-3 flex flex-col gap-2 font-mono text-xs">
-								<div class="flex items-center gap-1.5 text-status-amber border-b border-border/50 pb-1.5 uppercase font-bold text-[10px] tracking-wider">
-									<Terminal size={12} />
-									<span>Interactive Command Request</span>
-								</div>
+						<!-- Speech Bubble -->
+						<div
+							class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed select-text
+							{m.sender === 'operator'
+								? 'rounded-tr-none border border-cta/30 bg-cta/15 text-white'
+								: m.sender === 'system'
+									? 'w-full max-w-none border border-border/50 bg-surface/50 py-1.5 text-center font-mono text-xs text-muted-foreground'
+									: 'rounded-tl-none border border-border bg-surface text-foreground'}"
+						>
+							<Markdown content={m.message} />
 
-								<div class="text-[11px] text-muted-foreground">
-									Reason: <span class="text-foreground italic">{m.interactive_action.reason}</span>
-								</div>
+							<!-- Render interactive action cards if present -->
+							{#if m.interactive_action}
+								<div
+									class="mt-3 flex flex-col gap-2 rounded border border-border/80 bg-background/80 p-3 font-mono text-xs"
+								>
+									<div
+										class="flex items-center gap-1.5 border-b border-border/50 pb-1.5 text-[10px] font-bold tracking-wider text-status-amber uppercase"
+									>
+										<Terminal size={12} />
+										<span>Interactive Command Request</span>
+									</div>
 
-								<div class="bg-surface/60 border border-border/40 p-2 rounded text-[11px] text-green-400 break-all select-all font-mono leading-tight">
-									$ {m.interactive_action.command}
-								</div>
-
-								<!-- Card Actions -->
-								<div class="flex items-center gap-2 mt-2 w-full">
-									{#if m.interactive_action.status === 'pending'}
-										<button
-											type="button"
-											onclick={() => handleAction(m.id, 'denied')}
-											disabled={actionSubmitting !== null}
-											class="flex-1 flex items-center justify-center gap-1.5 rounded border border-status-red/40 bg-status-red/10 py-1.5 font-sans font-bold uppercase tracking-wider text-status-red text-[11px] transition-all duration-200 active:scale-95 hover:bg-status-red/20 focus:outline-none"
+									<div class="text-[11px] text-muted-foreground">
+										Reason: <span class="text-foreground italic">{m.interactive_action.reason}</span
 										>
-											{#if actionSubmitting === m.id}
-												<Loader2 size={12} class="animate-spin" />
-											{:else}
-												<X size={12} />
-												<span>Deny</span>
-											{/if}
-										</button>
-										<button
-											type="button"
-											onclick={() => handleAction(m.id, 'approved')}
-											disabled={actionSubmitting !== null}
-											class="flex-1 flex items-center justify-center gap-1.5 rounded border border-status-green/40 bg-status-green/10 py-1.5 font-sans font-bold uppercase tracking-wider text-status-green text-[11px] transition-all duration-200 active:scale-95 hover:bg-status-green/20 focus:outline-none shadow-[0_0_10px_rgba(34,197,94,0.05)]"
-										>
-											{#if actionSubmitting === m.id}
-												<Loader2 size={12} class="animate-spin" />
-											{:else}
-												<Check size={12} />
-												<span>Approve</span>
-											{/if}
-										</button>
-									{:else}
-										<div
-											class="w-full text-center py-1.5 rounded text-[10px] uppercase font-bold tracking-widest border font-sans
-												{m.interactive_action.status === 'approved' 
-													? 'border-status-green/30 bg-status-green/5 text-status-green' 
+									</div>
+
+									<div
+										class="rounded border border-border/40 bg-surface/60 p-2 font-mono text-[11px] leading-tight break-all text-green-400 select-all"
+									>
+										$ {m.interactive_action.command}
+									</div>
+
+									<!-- Card Actions -->
+									<div class="mt-2 flex w-full items-center gap-2">
+										{#if m.interactive_action.status === 'pending'}
+											<button
+												type="button"
+												onclick={() => handleAction(m.id, 'denied')}
+												disabled={actionSubmitting !== null}
+												class="flex flex-1 items-center justify-center gap-1.5 rounded border border-status-red/40 bg-status-red/10 py-1.5 font-sans text-[11px] font-bold tracking-wider text-status-red uppercase transition-all duration-200 hover:bg-status-red/20 focus:outline-none active:scale-95"
+											>
+												{#if actionSubmitting === m.id}
+													<Loader2 size={12} class="animate-spin" />
+												{:else}
+													<X size={12} />
+													<span>Deny</span>
+												{/if}
+											</button>
+											<button
+												type="button"
+												onclick={() => handleAction(m.id, 'approved')}
+												disabled={actionSubmitting !== null}
+												class="flex flex-1 items-center justify-center gap-1.5 rounded border border-status-green/40 bg-status-green/10 py-1.5 font-sans text-[11px] font-bold tracking-wider text-status-green uppercase shadow-[0_0_10px_rgba(34,197,94,0.05)] transition-all duration-200 hover:bg-status-green/20 focus:outline-none active:scale-95"
+											>
+												{#if actionSubmitting === m.id}
+													<Loader2 size={12} class="animate-spin" />
+												{:else}
+													<Check size={12} />
+													<span>Approve</span>
+												{/if}
+											</button>
+										{:else}
+											<div
+												class="w-full rounded border py-1.5 text-center font-sans text-[10px] font-bold tracking-widest uppercase
+												{m.interactive_action.status === 'approved'
+													? 'border-status-green/30 bg-status-green/5 text-status-green'
 													: 'border-status-red/30 bg-status-red/5 text-status-red'}"
-										>
-											{m.interactive_action.status === 'approved' ? '✓ Command Approved' : '✗ Command Denied'}
-										</div>
-									{/if}
+											>
+												{m.interactive_action.status === 'approved'
+													? '✓ Command Approved'
+													: '✗ Command Denied'}
+											</div>
+										{/if}
+									</div>
 								</div>
-							</div>
-						{/if}
-					</div>
+							{/if}
+						</div>
 
-					<!-- Per-message workflow actions on WORKER replies only.
+						<!-- Per-message workflow actions on WORKER replies only.
 					     Five icons: Critique, Build, Verify, Copy, Retry. All
 					     compact + tooltip-labeled to stay out of the way on
 					     phone. Pure render — no extra fetches. -->
-					{#if isWorkerReply(m)}
-						<div class="flex items-center gap-1 mt-0.5 text-muted-foreground">
-							<button
-								type="button"
-								onclick={() => handleWorkflowAction(m.id, 'critique')}
-								disabled={workflowSubmitting !== null}
-								title="Send to the other agent for critique"
-								aria-label="Critique"
-								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-							>
-								{#if workflowSubmitting === `${m.id}:critique`}
-									<Loader2 size={10} class="animate-spin" />
-								{:else}
-									<HelpCircle size={10} />
-								{/if}
-								<span>Critique</span>
-							</button>
-							<button
-								type="button"
-								onclick={() => handleWorkflowAction(m.id, 'build')}
-								disabled={workflowSubmitting !== null}
-								title="Dispatch AGY to implement this proposal"
-								aria-label="Build"
-								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-							>
-								{#if workflowSubmitting === `${m.id}:build`}
-									<Loader2 size={10} class="animate-spin" />
-								{:else}
-									<Terminal size={10} />
-								{/if}
-								<span>Build</span>
-							</button>
-							<button
-								type="button"
-								onclick={() => handleWorkflowAction(m.id, 'verify')}
-								disabled={workflowSubmitting !== null}
-								title="Dispatch CC to verify the implementation/claim"
-								aria-label="Verify"
-								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-							>
-								{#if workflowSubmitting === `${m.id}:verify`}
-									<Loader2 size={10} class="animate-spin" />
-								{:else}
-									<CheckCircle2 size={10} />
-								{/if}
-								<span>Verify</span>
-							</button>
-							<button
-								type="button"
-								onclick={() => handleWorkflowAction(m.id, 'copy', { messageText: m.message })}
-								disabled={workflowSubmitting !== null}
-								title="Copy reply to clipboard"
-								aria-label="Copy"
-								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-							>
-								<BookOpen size={10} />
-								<span>Copy</span>
-							</button>
-							<button
-								type="button"
-								onclick={() => handleWorkflowAction(m.id, 'retry')}
-								disabled={workflowSubmitting !== null}
-								title="Retry the original operator request with the other agent"
-								aria-label="Retry"
-								class="flex items-center gap-1 rounded border border-transparent hover:border-border hover:text-foreground px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
-							>
-								{#if workflowSubmitting === `${m.id}:retry`}
-									<Loader2 size={10} class="animate-spin" />
-								{:else}
-									<RefreshCw size={10} />
-								{/if}
-								<span>Retry</span>
-							</button>
-						</div>
-					{/if}
+						{#if isWorkerReply(m)}
+							<div class="mt-0.5 flex items-center gap-1 text-muted-foreground">
+								<button
+									type="button"
+									onclick={() => handleWorkflowAction(m.id, 'critique')}
+									disabled={workflowSubmitting !== null}
+									title="Send to the other agent for critique"
+									aria-label="Critique"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+								>
+									{#if workflowSubmitting === `${m.id}:critique`}
+										<Loader2 size={10} class="animate-spin" />
+									{:else}
+										<HelpCircle size={10} />
+									{/if}
+									<span>Critique</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => handleWorkflowAction(m.id, 'build')}
+									disabled={workflowSubmitting !== null}
+									title="Dispatch AGY to implement this proposal"
+									aria-label="Build"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+								>
+									{#if workflowSubmitting === `${m.id}:build`}
+										<Loader2 size={10} class="animate-spin" />
+									{:else}
+										<Terminal size={10} />
+									{/if}
+									<span>Build</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => handleWorkflowAction(m.id, 'verify')}
+									disabled={workflowSubmitting !== null}
+									title="Dispatch CC to verify the implementation/claim"
+									aria-label="Verify"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+								>
+									{#if workflowSubmitting === `${m.id}:verify`}
+										<Loader2 size={10} class="animate-spin" />
+									{:else}
+										<CheckCircle2 size={10} />
+									{/if}
+									<span>Verify</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => handleWorkflowAction(m.id, 'copy', { messageText: m.message })}
+									disabled={workflowSubmitting !== null}
+									title="Copy reply to clipboard"
+									aria-label="Copy"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+								>
+									<BookOpen size={10} />
+									<span>Copy</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => handleWorkflowAction(m.id, 'retry')}
+									disabled={workflowSubmitting !== null}
+									title="Retry the original operator request with the other agent"
+									aria-label="Retry"
+									class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+								>
+									{#if workflowSubmitting === `${m.id}:retry`}
+										<Loader2 size={10} class="animate-spin" />
+									{:else}
+										<RefreshCw size={10} />
+									{/if}
+									<span>Retry</span>
+								</button>
+							</div>
+						{/if}
 
 						<!-- Activity ticker: for any message tied to a worker trace, render the
 						     stream of progress events emitted via tools/emit_chat_activity.py.
@@ -1293,14 +1448,23 @@
 							{@const acts = activityByTrace[m.trace_id] || []}
 							{@const active = isTraceActive(m.trace_id)}
 							{#if acts.length > 0 || active}
-								<div class="mt-1 flex flex-col gap-0.5 font-mono text-[11px] {m.sender === 'operator' ? 'items-end' : 'items-start'}">
+								<div
+									class="mt-1 flex flex-col gap-0.5 font-mono text-[11px] {m.sender === 'operator'
+										? 'items-end'
+										: 'items-start'}"
+								>
 									{#each acts as a (a.id)}
 										<div
 											class="flex items-center gap-1.5 px-1
-												{a.action === 'completed' ? 'text-status-green' :
-													a.action === 'failed' ? 'text-status-red' :
-														a.action === 'edited' ? 'text-cta' :
-															a.action === 'ran' ? 'text-status-blue' : 'text-muted-foreground'}"
+												{a.action === 'completed'
+												? 'text-status-green'
+												: a.action === 'failed'
+													? 'text-status-red'
+													: a.action === 'edited'
+														? 'text-cta'
+														: a.action === 'ran'
+															? 'text-status-blue'
+															: 'text-muted-foreground'}"
 										>
 											{#if a.action === 'reading'}
 												<BookOpen size={10} />
@@ -1317,16 +1481,16 @@
 											{:else}
 												<span>·</span>
 											{/if}
-											<span class="uppercase tracking-wider opacity-80">{a.action}</span>
+											<span class="tracking-wider uppercase opacity-80">{a.action}</span>
 											{#if a.target}
-												<span class="text-foreground/70 truncate max-w-[260px]">{a.target}</span>
+												<span class="max-w-[260px] truncate text-foreground/70">{a.target}</span>
 											{/if}
 										</div>
 									{/each}
 									{#if active && (acts.length === 0 || (acts[acts.length - 1].action !== 'completed' && acts[acts.length - 1].action !== 'failed'))}
-										<div class="flex items-center gap-1.5 px-1 text-muted-foreground animate-pulse">
+										<div class="flex animate-pulse items-center gap-1.5 px-1 text-muted-foreground">
 											<Loader2 size={10} class="animate-spin" />
-											<span class="uppercase tracking-wider">Working...</span>
+											<span class="tracking-wider uppercase">Working...</span>
 										</div>
 									{/if}
 								</div>
@@ -1337,16 +1501,23 @@
 							{#if streamByTrace[m.trace_id]}
 								{@const buf = streamByTrace[m.trace_id]}
 								{@const ended = streamEnded[m.trace_id]}
-								<details class="mt-1 w-full max-w-[85%] {m.sender === 'operator' ? 'self-end' : 'self-start'}">
+								<details
+									class="mt-1 w-full max-w-[85%] {m.sender === 'operator'
+										? 'self-end'
+										: 'self-start'}"
+								>
 									<summary
-										class="cursor-pointer select-none font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+										class="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors select-none hover:text-foreground"
 									>
 										<Terminal size={10} />
-										<span>Worker output ({buf.length.toLocaleString()} chars{ended ? ', ended' : ', live'})</span>
+										<span
+											>Worker output ({buf.length.toLocaleString()} chars{ended
+												? ', ended'
+												: ', live'})</span
+										>
 									</summary>
 									<pre
-										class="mt-1 max-h-48 overflow-y-auto overflow-x-auto rounded border border-border/60 bg-background/70 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground whitespace-pre-wrap break-all custom-scrollbar"
-									>{buf}</pre>
+										class="custom-scrollbar mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded border border-border/60 bg-background/70 px-2 py-1.5 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">{buf}</pre>
 								</details>
 							{/if}
 						{/if}
@@ -1359,10 +1530,17 @@
 					{#if shouldRenderStreamingBubble(m)}
 						{@const senderLabel = senderFromTrace(m.trace_id || '')}
 						{@const buf = streamByTrace[m.trace_id || ''] || ''}
-						<div class="flex flex-col gap-1 items-start animate-fade-in">
-							<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase text-muted-foreground">
-								<Cpu size={10} class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'} />
-								<span class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}>{senderLabel}</span>
+						<div class="animate-fade-in flex flex-col items-start gap-1">
+							<div
+								class="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground uppercase"
+							>
+								<Cpu
+									size={10}
+									class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}
+								/>
+								<span class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}
+									>{senderLabel}</span
+								>
 								<span>·</span>
 								<span class="flex items-center gap-1">
 									<Loader2 size={10} class="animate-spin" />
@@ -1376,28 +1554,35 @@
 							     formatted version lands when the real chat_messages
 							     reply supersedes this synthetic bubble. -->
 							<div
-								class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed select-text text-foreground whitespace-pre-wrap break-words"
-							>{buf}</div>
+								class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground select-text"
+							>
+								{buf}
+							</div>
 						</div>
 					{/if}
 				{/if}
-				{/each}
+			{/each}
 
-				<!-- Instant dispatch feedback: fills the perception gap between
+			<!-- Instant dispatch feedback: fills the perception gap between
 				     "operator hit send" and "Agent dispatched" landing from the
 				     server (gateway round-trip + listener spawn ≈ 1-3s). The
 				     pulsing line disappears as soon as the system bubble OR a
 				     streaming bubble takes over. -->
-				{#if dispatching}
-					<div class="flex flex-col gap-1 items-start animate-fade-in">
-						<div class="flex items-center gap-1.5 px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground animate-pulse">
-							<Loader2 size={10} class="animate-spin" />
-							<span>dispatching agent...</span>
-						</div>
+			{#if dispatching}
+				<div class="animate-fade-in flex flex-col items-start gap-1">
+					<div
+						class="flex animate-pulse items-center gap-1.5 px-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+					>
+						<Loader2 size={10} class="animate-spin" />
+						<span>dispatching agent...</span>
 					</div>
-				{/if}
+				</div>
 			{/if}
-		</div>
+		{/if}
+		<!-- IntersectionObserver sentinel — always rendered at the bottom of feed content.
+		     When this element is visible inside feedContainer, the user is at the bottom. -->
+		<div bind:this={scrollSentinel} class="h-px w-full shrink-0" aria-hidden="true"></div>
+	</div>
 
 	<!-- "X new ↓" pill: appears when new messages arrive while the operator is
 	     scrolled up reading history. Tap to scroll to the bottom. Anchored
@@ -1406,7 +1591,7 @@
 		<button
 			type="button"
 			onclick={jumpToLatest}
-			class="self-center -mb-1 mt-0 flex items-center gap-1.5 rounded-full border border-cta/40 bg-cta/15 px-3 py-1 font-sans text-xs font-bold text-cta backdrop-blur-md shadow-lg transition-all duration-150 active:scale-95 hover:bg-cta/25 animate-fade-in"
+			class="animate-fade-in mt-0 -mb-1 flex items-center gap-1.5 self-center rounded-full border border-cta/40 bg-cta/15 px-3 py-1 font-sans text-xs font-bold text-cta shadow-lg backdrop-blur-md transition-all duration-150 hover:bg-cta/25 active:scale-95"
 			aria-label="Jump to latest messages"
 		>
 			<span>{unseenCount} new</span>
@@ -1418,20 +1603,26 @@
 	     attach + send icons + examples drawer. Replaces the old 3-row stack
 	     (suggestions + Send-to row + input) for ~30% less vertical space
 	     on phone. -->
-	<div class="shrink-0 border-t border-border bg-background/95 p-2 flex flex-col gap-1.5">
-
+	<div class="flex shrink-0 flex-col gap-1.5 border-t border-border bg-background/95 p-2">
 		<!-- Examples drawer (collapsed by default; only rendered when open) -->
 		{#if examplesOpen}
-			<div class="flex flex-col gap-1 px-1 pb-1 animate-fade-in">
+			<div class="animate-fade-in flex flex-col gap-1 px-1 pb-1">
 				{#each Array.from(new Set(STARTER_PROMPTS.map((p) => p.category))) as cat (cat)}
-					<div class="flex items-center gap-1.5 mt-0.5">
-						<span class="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0 w-20">{cat}</span>
+					<div class="mt-0.5 flex items-center gap-1.5">
+						<span
+							class="w-20 shrink-0 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+							>{cat}</span
+						>
 						<div class="flex flex-wrap gap-1">
 							{#each STARTER_PROMPTS.filter((p) => p.category === cat) as ex (ex.label)}
 								<button
 									type="button"
-									onclick={() => { textDraft = ex.prompt; examplesOpen = false; textareaEl?.focus(); }}
-									class="px-2 py-0.5 rounded bg-surface/50 border border-border text-[11px] font-mono text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors active:scale-95"
+									onclick={() => {
+										textDraft = ex.prompt;
+										examplesOpen = false;
+										textareaEl?.focus();
+									}}
+									class="rounded border border-border bg-surface/50 px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
 								>
 									{ex.label}
 								</button>
@@ -1443,11 +1634,13 @@
 		{/if}
 
 		<!-- Control row: examples button + agent switcher pills, single line -->
-		<div class="flex items-center gap-2 select-none text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+		<div
+			class="flex items-center gap-2 font-mono text-[10px] tracking-wider text-muted-foreground uppercase select-none"
+		>
 			<button
 				type="button"
 				onclick={() => (examplesOpen = !examplesOpen)}
-				class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30"
+				class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
 				title="Open examples / starter prompts"
 				aria-label="Examples"
 			>
@@ -1460,10 +1653,10 @@
 				<button
 					type="button"
 					onclick={() => (agentLock = 'auto')}
-					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+					class="rounded border px-2 py-0.5 transition-colors active:scale-95
 						{agentLock === 'auto'
-							? 'border-foreground/30 bg-foreground/5 text-foreground'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+						? 'border-foreground/30 bg-foreground/5 text-foreground'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
 					title="Use the @-mention heuristic to decide. Default."
 				>
 					Auto
@@ -1471,10 +1664,10 @@
 				<button
 					type="button"
 					onclick={() => (agentLock = 'claude-code')}
-					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+					class="rounded border px-2 py-0.5 transition-colors active:scale-95
 						{agentLock === 'claude-code'
-							? 'border-orange-400/40 bg-orange-400/10 text-orange-400'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+						? 'border-orange-400/40 bg-orange-400/10 text-orange-400'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
 					title="Lock all sends to Claude Code."
 				>
 					CC
@@ -1482,10 +1675,10 @@
 				<button
 					type="button"
 					onclick={() => (agentLock = 'agy')}
-					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+					class="rounded border px-2 py-0.5 transition-colors active:scale-95
 						{agentLock === 'agy'
-							? 'border-purple-400/40 bg-purple-400/10 text-purple-400'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+						? 'border-purple-400/40 bg-purple-400/10 text-purple-400'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
 					title="Talk to AGY (Gemini API) — fast chat-mode, no worker spawn. Use Build / Critique on a reply when you want the heavy worker."
 				>
 					AGY
@@ -1493,10 +1686,10 @@
 				<button
 					type="button"
 					onclick={() => (agentLock = 'hermes')}
-					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+					class="rounded border px-2 py-0.5 transition-colors active:scale-95
 						{agentLock === 'hermes'
-							? 'border-status-green/40 bg-status-green/10 text-status-green'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+						? 'border-status-green/40 bg-status-green/10 text-status-green'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
 					title="Local Hermes (Qwen via Ollama). Free, fast, no file access — sounding board only."
 				>
 					Hermes
@@ -1504,10 +1697,10 @@
 				<button
 					type="button"
 					onclick={() => (agentLock = 'silent')}
-					class="px-2 py-0.5 rounded border transition-colors active:scale-95
+					class="rounded border px-2 py-0.5 transition-colors active:scale-95
 						{agentLock === 'silent'
-							? 'border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
+						? 'border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground'
+						: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
 					title="Log this message in the chat without dispatching any worker (chat note)."
 				>
 					Silent
@@ -1519,7 +1712,7 @@
 				<button
 					type="button"
 					onclick={() => (repoDropdownOpen = !repoDropdownOpen)}
-					class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30"
+					class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
 					title="Switch target repository for workflow actions"
 					aria-label="Select repository"
 				>
@@ -1535,14 +1728,20 @@
 						aria-label="Close workspace dropdown"
 						tabindex="-1"
 					></button>
-					<div class="absolute bottom-full left-0 mb-1 z-50 min-w-44 rounded border border-border bg-surface shadow-lg py-1 font-mono">
+					<div
+						class="absolute bottom-full left-0 z-50 mb-1 min-w-44 rounded border border-border bg-surface py-1 font-mono shadow-lg"
+					>
 						{#each Array.from(new Set([...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].map((w) => w.group))) as grp (grp)}
-							<div class="px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/50 mt-1 first:mt-0">{grp}</div>
+							<div
+								class="mt-1 px-2 py-0.5 text-[9px] tracking-wider text-muted-foreground/50 uppercase first:mt-0"
+							>
+								{grp}
+							</div>
 							{#each [...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].filter((w) => w.group === grp) as ws (ws.name)}
 								<button
 									type="button"
 									onclick={() => selectWorkspace(ws.name)}
-									class="w-full text-left flex items-center gap-1.5 px-2 py-1 text-[11px] transition-colors hover:bg-foreground/5
+									class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] transition-colors hover:bg-foreground/5
 										{ws.is_archived ? 'opacity-60' : ''}
 										{selectedRepo === ws.name ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
 								>
@@ -1555,11 +1754,11 @@
 							{/each}
 						{/each}
 						{#if (data.archivedWorkspaces ?? []).length > 0 || showArchivedWorkspaces}
-							<div class="border-t border-border mt-1 pt-1">
+							<div class="mt-1 border-t border-border pt-1">
 								<button
 									type="button"
 									onclick={() => (showArchivedWorkspaces = !showArchivedWorkspaces)}
-									class="w-full text-left px-2 py-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors flex items-center gap-1"
+									class="flex w-full items-center gap-1 px-2 py-1 text-left text-[10px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
 								>
 									{showArchivedWorkspaces ? '▾' : '▸'}
 									<span>{showArchivedWorkspaces ? 'Hide' : 'Show'} archived</span>
@@ -1580,7 +1779,7 @@
 					<button
 						type="button"
 						onclick={() => (tierOverrideOpen = !tierOverrideOpen)}
-						class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors active:scale-95 hover:text-foreground hover:border-foreground/30 text-muted-foreground"
+						class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
 						title="Current LLM tier. Tap to override or reset to Auto."
 						aria-label="LLM tier override"
 					>
@@ -1594,29 +1793,50 @@
 							aria-label="Close tier dropdown"
 							tabindex="-1"
 						></button>
-						<div class="absolute bottom-full left-0 mb-1 z-50 min-w-36 rounded border border-border bg-surface shadow-lg py-1 font-mono text-[11px]">
-							<div class="px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/50">Lock tier</div>
-							{#each (['chat', 'planning', 'deep', 'local'] as Tier[]) as t (t)}
+						<div
+							class="absolute bottom-full left-0 z-50 mb-1 min-w-36 rounded border border-border bg-surface py-1 font-mono text-[11px] shadow-lg"
+						>
+							<div class="px-2 py-0.5 text-[9px] tracking-wider text-muted-foreground/50 uppercase">
+								Lock tier
+							</div>
+							{#each ['chat', 'planning', 'deep', 'local'] as Tier[] as t (t)}
 								<button
 									type="button"
 									onclick={() => setTierOverride(t)}
-									class="w-full text-left flex items-center gap-1.5 px-2 py-1 transition-colors hover:bg-foreground/5
+									class="flex w-full items-center gap-1.5 px-2 py-1 text-left transition-colors hover:bg-foreground/5
 										{currentTier === t ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
 								>
 									{TIER_LABELS[t]}
 								</button>
 							{/each}
-							<div class="border-t border-border mt-1 pt-1">
+							<div class="mt-1 border-t border-border pt-1">
 								<button
 									type="button"
 									onclick={() => setTierOverride(null)}
-									class="w-full text-left px-2 py-1 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-								>Auto (reset)</button>
+									class="w-full px-2 py-1 text-left text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+									>Auto (reset)</button
+								>
 							</div>
 						</div>
 					{/if}
 				</div>
 			{/if}
+			<!-- Connection status dot: green=connected, amber=reconnecting, red=disconnected.
+			     Wired to EventSource (SSE) streams. Debounced 1s to suppress transient blips. -->
+			<span
+				class="ml-auto h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-700
+					{connStatus === 'green'
+					? 'bg-status-green'
+					: connStatus === 'amber'
+						? 'animate-pulse bg-status-amber'
+						: 'bg-status-red'}"
+				title={connStatus === 'green'
+					? 'EventSource: connected'
+					: connStatus === 'amber'
+						? 'EventSource: reconnecting...'
+						: 'EventSource: disconnected'}
+				aria-label="Connection status"
+			></span>
 		</div>
 
 		<!-- Input field: attach + textarea + send in one flex row -->
@@ -1640,7 +1860,7 @@
 				disabled={uploading}
 				aria-label="Attach image"
 				title="Attach image (or paste / drop one)"
-				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors active:scale-90 hover:text-foreground hover:border-foreground/30 disabled:opacity-40 disabled:pointer-events-none"
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-90 disabled:pointer-events-none disabled:opacity-40"
 			>
 				{#if uploading}
 					<Loader2 size={16} class="animate-spin" />
@@ -1660,10 +1880,10 @@
 				title={imageMode
 					? 'Image mode ON — next send generates an image via Gemini. Tap to turn off.'
 					: 'Turn on image generation. Next send becomes an image prompt (Gemini).'}
-				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border transition-colors active:scale-90
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90
 					{imageMode
-						? 'border-status-green/40 bg-status-green/15 text-status-green'
-						: 'border-border bg-transparent text-muted-foreground hover:text-foreground hover:border-foreground/30'}"
+					? 'border-status-green/40 bg-status-green/15 text-status-green'
+					: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
 			>
 				<Sparkles size={16} />
 			</button>
@@ -1683,7 +1903,7 @@
 				autocomplete="off"
 				autocapitalize="none"
 				spellcheck="false"
-				class="flex-1 rounded-md border border-border bg-surface px-3 py-2 font-sans text-base text-white placeholder:text-muted-foreground resize-none transition-colors focus:border-cta/50 focus:outline-none overflow-y-auto custom-scrollbar"
+				class="custom-scrollbar flex-1 resize-none overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 font-sans text-base text-white transition-colors placeholder:text-muted-foreground focus:border-cta/50 focus:outline-none"
 				style="min-height: 40px; max-height: 168px;"
 			></textarea>
 			<button
@@ -1691,7 +1911,7 @@
 				onclick={handleSendMessage}
 				disabled={!textDraft.trim() || sending}
 				aria-label="Send message"
-				class="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border border-cta/30 bg-cta/15 text-cta transition-all duration-200 active:scale-90 disabled:opacity-40 disabled:pointer-events-none hover:bg-cta/25"
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-cta/30 bg-cta/15 text-cta transition-all duration-200 hover:bg-cta/25 active:scale-90 disabled:pointer-events-none disabled:opacity-40"
 			>
 				{#if sending}
 					<Loader2 size={16} class="animate-spin" />
