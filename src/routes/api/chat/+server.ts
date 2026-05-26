@@ -56,6 +56,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		// gemini-2.5-flash-image via the Gemini API. Independent of the
 		// agent pill — though only AGY (Gemini-class) currently supports it.
 		const imageMode: boolean = body && body.image === true;
+		// Talkback flag: forces chat tier (Flash-lite) regardless of thread tier
+		// per §2D.3 Step C / §2F decision 7. Hard-locked on the server so clients
+		// cannot accidentally use a deep-tier model in the high-frequency loop.
+		const isTalkback: boolean = body && body.talkback === true;
 
 		if (!message || !message.trim()) {
 			return json({ error: 'Message content is required.' }, { status: 400 });
@@ -216,7 +220,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					{ role: 'user' as const, content: message.trim() }
 				].slice(-20);
 
-				const result = await routeChat(currentTier, routerMessages, 'gemini');
+				const result = await routeChat(isTalkback ? 'chat' : currentTier, routerMessages, 'gemini');
 				addChatMessage('agy', result.reply, null, null, null, 'sent', threadId);
 				upsertThreadTier(threadId, currentTier, result.model_used);
 				routerMeta = { provider_used: result.provider_used, model_used: result.model_used };
