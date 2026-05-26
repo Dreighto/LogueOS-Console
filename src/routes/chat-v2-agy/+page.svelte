@@ -352,6 +352,10 @@
 	// Send text message
 	// ─────────────────────────────────────────────────────────────────────
 	async function sendMessage() {
+		// Slash command takes precedence — if the draft is /<known-command>
+		// we run it locally instead of dispatching to /api/chat.
+		if (await runSlashFromDraft()) return;
+
 		const text = textDraft.trim();
 		// Allow sending an attachment-only message (no text body), but require
 		// at least one of the two so we don't post empty rows.
@@ -1103,6 +1107,138 @@
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
+	// Slash commands. Operator types `/` at the start of the composer →
+	// autocomplete popup lists matching commands. Submit (Enter / Send /
+	// click on row) runs the command's handler instead of sending the
+	// literal text to the LLM.
+	// ─────────────────────────────────────────────────────────────────────
+	type SlashCmd = {
+		key: string; // text after the slash, e.g. 'clear'
+		usage: string; // display form: '/clear' or '/new <name>'
+		description: string;
+		run: (rest: string) => Promise<void> | void;
+	};
+
+	function addLocalSystemMessage(text: string) {
+		messages = [
+			...messages,
+			{
+				id: Date.now(),
+				sender: 'system',
+				message: text,
+				timestamp: new Date().toISOString()
+			}
+		];
+	}
+
+	const SLASH_COMMANDS: SlashCmd[] = [
+		{
+			key: 'clear',
+			usage: '/clear',
+			description: 'Reset conversation context (server slices history at this marker)',
+			run: async () => {
+				// Persist a system marker — /api/chat and /api/chat/stream slice
+				// thread history at the latest `--- NEW CONVERSATION ---` line,
+				// so this drops the LLM's working memory without deleting prior
+				// messages from the operator's view.
+				await fetch(resolve('/api/chat'), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						sender: 'system',
+						message: '--- NEW CONVERSATION ---',
+						thread: activeThread,
+						agent: 'silent'
+					})
+				}).catch(() => null);
+				await pollMessages();
+				toasts.add('Conversation context reset', 'success');
+			}
+		},
+		{
+			key: 'new',
+			usage: '/new <name>',
+			description: 'Create + switch to a new thread',
+			run: async (rest) => {
+				const slug = slugifyThreadName(rest);
+				if (!slug || slug === 'thread') {
+					toasts.add('Thread name required: /new my-feature', 'error');
+					return;
+				}
+				if (!threads.some((t) => t.thread_id === slug)) {
+					threads = [{ thread_id: slug, message_count: 0, latest_ts: '' }, ...threads];
+				}
+				await switchThread(slug);
+				toasts.add(`Switched to thread "${slug}"`, 'success');
+			}
+		},
+		{
+			key: 'regen',
+			usage: '/regen',
+			description: 'Regenerate the most recent assistant reply',
+			run: async () => {
+				// Walk backwards for the last non-operator, non-system reply
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (messages[i].sender !== 'operator' && messages[i].sender !== 'system') {
+						await regenerateReply(messages[i]);
+						return;
+					}
+				}
+				toasts.add('No assistant reply to regenerate', 'error');
+			}
+		},
+		{
+			key: 'help',
+			usage: '/help',
+			description: 'Show available slash commands',
+			run: () => {
+				const body = SLASH_COMMANDS.map((c) => `- \`${c.usage}\` — ${c.description}`).join('\n');
+				addLocalSystemMessage(`**Slash commands**\n\n${body}`);
+			}
+		}
+	];
+
+	const slashQuery = $derived(
+		textDraft.startsWith('/') ? textDraft.slice(1).split(/\s/)[0].toLowerCase() : null
+	);
+	const slashMatches = $derived(
+		slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.key.startsWith(slashQuery))
+	);
+	const slashMode = $derived(
+		textDraft.startsWith('/') && !textDraft.includes('\n') && slashMatches.length > 0
+	);
+
+	async function runSlashFromDraft(): Promise<boolean> {
+		if (!textDraft.startsWith('/')) return false;
+		const trimmed = textDraft.trim();
+		const spaceIdx = trimmed.indexOf(' ');
+		const key = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).toLowerCase();
+		const rest = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+		const cmd = SLASH_COMMANDS.find((c) => c.key === key);
+		if (!cmd) return false;
+		textDraft = '';
+		attachments = [];
+		try {
+			await cmd.run(rest);
+		} catch (e) {
+			toasts.add(`Command failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+		}
+		return true;
+	}
+
+	async function pickSlash(cmd: SlashCmd) {
+		// If the command takes args (usage has < >), prefill the composer
+		// instead of running immediately so the operator can type the arg.
+		if (cmd.usage.includes('<')) {
+			textDraft = `/${cmd.key} `;
+			textareaEl?.focus();
+			return;
+		}
+		textDraft = `/${cmd.key}`;
+		await runSlashFromDraft();
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
 	// Lifecycle
 	// ─────────────────────────────────────────────────────────────────────
 	let pollTimer: ReturnType<typeof setInterval>;
@@ -1661,6 +1797,32 @@
 						>
 							Cancel
 						</button>
+					</div>
+				{/if}
+
+				<!-- Slash-command autocomplete. Appears when the draft starts with
+				     `/` and matches at least one known command. Submit/Send
+				     intercepts the literal text and runs the command handler. -->
+				{#if slashMode}
+					<div
+						class="mb-1 flex flex-col gap-1 rounded-2xl border border-cyan-500/20 bg-[#0a1416] p-1.5"
+						role="listbox"
+						aria-label="Slash commands"
+					>
+						{#each slashMatches as cmd (cmd.key)}
+							<button
+								type="button"
+								onclick={() => pickSlash(cmd)}
+								class="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-cyan-500/10"
+								role="option"
+								aria-selected="false"
+							>
+								<span class="flex flex-col leading-tight">
+									<span class="font-mono text-xs text-cyan-300">{cmd.usage}</span>
+									<span class="text-[10px] text-zinc-400">{cmd.description}</span>
+								</span>
+							</button>
+						{/each}
 					</div>
 				{/if}
 
