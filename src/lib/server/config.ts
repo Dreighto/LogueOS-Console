@@ -107,8 +107,7 @@ export const serverConfig = {
 	// listener Just Works.
 	dispatchListenerUrl: getEnv('LOGUEOS_DISPATCH_LISTENER_URL', 'http://127.0.0.1:19100'),
 	dispatchListenerHmacSecret:
-		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') ||
-		getEnv('W4_LISTENER_HMAC_SECRET', ''),
+		getEnv('LOGUEOS_LISTENER_HMAC_SECRET', '') || getEnv('W4_LISTENER_HMAC_SECRET', ''),
 	// LogueOS Gateway address (Console -> gateway for /api/v1/* read+dispatch).
 	// Same machine in production; configurable for dev. The gateway gates
 	// every /api/v1/* call behind is_trusted_origin (localhost / Tailscale

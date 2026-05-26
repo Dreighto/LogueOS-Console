@@ -109,12 +109,14 @@ export function emitObservation(params: ObservationParams): {
 			`tier:${params.tier_at_emit}`
 		];
 
-		db.prepare(`
+		db.prepare(
+			`
 			INSERT INTO observations (
 				observation_id, project_id, observation_kind, text, task_shape, timestamp,
 				source, chat_thread_id, tier_at_emit, models_used
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`).run(
+		`
+		).run(
 			observation_id,
 			params.project_id,
 			params.observation_kind ?? 'what-worked',

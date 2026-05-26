@@ -24,10 +24,7 @@ function parseEnvFile(raw: string): Map<string, string> {
 		const key = trimmed.slice(0, eqIdx).trim();
 		let val = trimmed.slice(eqIdx + 1).trim();
 		// Strip surrounding single or double quotes (common .env convention).
-		if (
-			(val.startsWith('"') && val.endsWith('"')) ||
-			(val.startsWith("'") && val.endsWith("'"))
-		) {
+		if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
 			val = val.slice(1, -1);
 		}
 		// Skip trivially short values (true/false/none/0/1/yes/no) — these would

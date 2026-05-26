@@ -18,7 +18,13 @@ export const DELETE: RequestHandler = async ({ params }) => {
 				return json({ error: 'not_found' }, { status: 404 });
 			}
 			if (result.reason === 'not_chat_sourced') {
-				return json({ error: 'forbidden', message: 'Only chat-sourced observations may be deleted via this endpoint.' }, { status: 403 });
+				return json(
+					{
+						error: 'forbidden',
+						message: 'Only chat-sourced observations may be deleted via this endpoint.'
+					},
+					{ status: 403 }
+				);
 			}
 			return json({ error: result.reason }, { status: 500 });
 		}

@@ -105,9 +105,9 @@ async function emitArchiveObservation(thread_id: string): Promise<void> {
 			summaryBody = result.reply.trim().slice(0, 500);
 		} catch {
 			summaryBody =
-				(threadMeta?.title && threadMeta.title !== 'New thread'
+				threadMeta?.title && threadMeta.title !== 'New thread'
 					? `Thread "${threadMeta.title}" archived.`
-					: `Thread "${thread_id}" archived.`);
+					: `Thread "${thread_id}" archived.`;
 		}
 
 		const tier = threadState.current_tier ?? 'chat';
