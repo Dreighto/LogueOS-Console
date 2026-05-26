@@ -15,7 +15,16 @@ const ALLOWED_MIME = new Set([
 	'image/jpg',
 	'image/gif',
 	'image/webp',
-	'image/svg+xml'
+	'image/svg+xml',
+	// iPhone defaults — Safari uploads photos as HEIC/HEIF unless the user has
+	// switched the Camera setting to "Most Compatible". Accept both so the
+	// operator's phone uploads don't 415. Note: HEIC won't render inline in
+	// non-Safari browsers; the markdown image link will show broken on
+	// desktop until we add a transcode step.
+	'image/heic',
+	'image/heif',
+	'image/heic-sequence',
+	'image/heif-sequence'
 ]);
 
 // 8 MB. iPhone screenshots are typically 1-3 MB; this leaves headroom for
@@ -35,6 +44,12 @@ function extFromMime(mime: string): string {
 			return 'webp';
 		case 'image/svg+xml':
 			return 'svg';
+		case 'image/heic':
+		case 'image/heic-sequence':
+			return 'heic';
+		case 'image/heif':
+		case 'image/heif-sequence':
+			return 'heif';
 		default:
 			return 'bin';
 	}
