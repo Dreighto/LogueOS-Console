@@ -130,13 +130,6 @@
 					: '🪶'
 	);
 
-	const TIER_LABELS: Record<Tier, string> = {
-		chat: '🪶 Quick (Chat)',
-		planning: '⚖️ Planning',
-		deep: '🧠 Deep',
-		local: '🔧 Local'
-	};
-
 	// ─────────────────────────────────────────────────────────────────────
 	// Draft Persist Effect
 	// ─────────────────────────────────────────────────────────────────────
@@ -176,6 +169,7 @@
 			if (r.ok) {
 				const b = await r.json();
 				if (b.current_tier) currentTier = b.current_tier as Tier;
+				providerOverride = (b.provider_override ?? null) as ProviderPref;
 				lastModelUsed = b.last_model_used || '';
 			}
 		} catch {
@@ -183,22 +177,95 @@
 		}
 	}
 
-	async function setTierOverride(tier: Tier | null) {
+	type ProviderPref = 'anthropic' | 'gemini' | null;
+	let providerOverride = $state<ProviderPref>(null);
+
+	// Concrete model picker — operator picks a specific model and we
+	// translate it to a (tier, provider) pair that the router will pin.
+	// 'auto' = no overrides (smart routing).
+	type ModelChoice = {
+		id: string;
+		label: string;
+		sublabel: string;
+		tier: Tier | null;
+		provider: ProviderPref;
+	};
+	const MODEL_CHOICES: ModelChoice[] = [
+		{ id: 'auto', label: 'Auto', sublabel: 'smart tier routing', tier: null, provider: null },
+		{
+			id: 'claude-haiku',
+			label: 'Claude Haiku 4.5',
+			sublabel: 'fast · chat tier',
+			tier: 'chat',
+			provider: 'anthropic'
+		},
+		{
+			id: 'claude-sonnet',
+			label: 'Claude Sonnet 4.6',
+			sublabel: 'planning',
+			tier: 'planning',
+			provider: 'anthropic'
+		},
+		{
+			id: 'claude-opus',
+			label: 'Claude Opus 4.7',
+			sublabel: 'deep',
+			tier: 'deep',
+			provider: 'anthropic'
+		},
+		{
+			id: 'gemini-flash-lite',
+			label: 'Gemini 2.5 Flash-lite',
+			sublabel: 'fast · chat tier',
+			tier: 'chat',
+			provider: 'gemini'
+		},
+		{
+			id: 'gemini-flash',
+			label: 'Gemini 2.5 Flash',
+			sublabel: 'planning',
+			tier: 'planning',
+			provider: 'gemini'
+		},
+		{
+			id: 'gemini-pro',
+			label: 'Gemini 2.5 Pro',
+			sublabel: 'deep',
+			tier: 'deep',
+			provider: 'gemini'
+		},
+		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: null }
+	];
+
+	const selectedModelChoice = $derived(
+		MODEL_CHOICES.find(
+			(c) =>
+				(c.tier ?? null) === (currentTier === 'chat' && !providerOverride ? null : currentTier) &&
+				c.provider === providerOverride
+		) ?? MODEL_CHOICES[0]
+	);
+
+	async function setModelChoice(choice: ModelChoice) {
 		showModelOverrideModal = false;
 		try {
 			const resp = await fetch(resolve('/api/chat/tier'), {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ thread_id: activeThread, tier })
+				body: JSON.stringify({
+					thread_id: activeThread,
+					tier: choice.tier,
+					provider: choice.provider
+				})
 			});
 			if (resp.ok) {
 				const body = await resp.json();
 				if (body.current_tier) currentTier = body.current_tier as Tier;
+				providerOverride = (body.provider_override ?? null) as ProviderPref;
 				await loadTier(activeThread);
-				toasts.add(tier ? `Locked loop tier to ${tier}` : 'Reset tier to Auto', 'success');
+				toasts.add(`Model set to ${choice.label}`, 'success');
 			}
 		} catch {
-			toasts.add('Failed to update tier override', 'error');
+			toasts.add('Failed to update model preference', 'error');
 		}
 	}
 
@@ -1209,19 +1276,15 @@
 						type="button"
 						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
 						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
-						aria-label="Model routing tier"
-						title="Override default classification routing"
+						aria-label="Model picker"
+						title="Pick a specific model or leave on Auto"
 					>
 						<span>{tierEmoji}</span>
-						{#if lastModelUsed}
-							<span class="max-w-[100px] truncate font-mono text-[10px] tracking-wide text-zinc-400"
-								>{lastModelUsed}</span
-							>
-						{:else}
-							<span class="font-mono text-[10px] tracking-wide text-zinc-400 capitalize"
-								>{currentTier}</span
-							>
-						{/if}
+						<span class="max-w-[120px] truncate font-mono text-[10px] tracking-wide text-zinc-400"
+							>{selectedModelChoice.id === 'auto'
+								? lastModelUsed || 'Auto'
+								: selectedModelChoice.label}</span
+						>
 						<ChevronDown size={10} class="text-zinc-500" />
 					</button>
 
@@ -1234,35 +1297,29 @@
 							tabindex="-1"
 						></button>
 						<div
-							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
+							class="absolute top-full right-0 z-50 mt-2 min-w-56 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
 							<div
 								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
 							>
-								Routing Tier Lock
+								Model
 							</div>
-							{#each ['chat', 'planning', 'deep', 'local'] as Tier[] as t}
+							{#each MODEL_CHOICES as choice (choice.id)}
 								<button
 									type="button"
-									onclick={() => setTierOverride(t)}
-									class="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-zinc-900
-										{currentTier === t ? 'font-medium text-purple-400' : 'text-zinc-400'}"
+									onclick={() => setModelChoice(choice)}
+									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-900
+										{selectedModelChoice.id === choice.id ? 'font-medium text-purple-400' : 'text-zinc-300'}"
 								>
-									<span>{TIER_LABELS[t]}</span>
-									{#if currentTier === t}
-										<Check size={11} />
+									<span class="flex flex-col leading-tight">
+										<span class="text-xs">{choice.label}</span>
+										<span class="font-mono text-[9px] text-zinc-500">{choice.sublabel}</span>
+									</span>
+									{#if selectedModelChoice.id === choice.id}
+										<Check size={11} class="shrink-0" />
 									{/if}
 								</button>
 							{/each}
-							<div class="mt-1.5 border-t border-zinc-800/50 pt-1.5">
-								<button
-									type="button"
-									onclick={() => setTierOverride(null)}
-									class="flex w-full items-center px-3 py-2 text-left text-xs text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-300"
-								>
-									🔄 Auto-classify (Reset)
-								</button>
-							</div>
 						</div>
 					{/if}
 				</div>
