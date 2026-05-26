@@ -168,7 +168,7 @@
 		if (!textareaEl) return;
 		textareaEl.style.height = 'auto';
 		const max = composerMaxHeight();
-		const target = Math.min(Math.max(textareaEl.scrollHeight, 140), max);
+		const target = Math.min(Math.max(textareaEl.scrollHeight, 80), max);
 		textareaEl.style.height = `${target}px`;
 	});
 
@@ -2135,113 +2135,118 @@
 				<!-- Text input area + icons. items-end so buttons sit at the bottom
 				     as the textarea grows; min-h on the wrapper preserves the
 				     hero-pill height even when the textarea collapses to 1 row. -->
-				<div class="flex min-h-[140px] items-end gap-2">
-					<!-- Attach File -->
-					<button
-						type="button"
-						onclick={triggerUpload}
-						class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
-						aria-label="Attach File"
-						title="Attach image"
-					>
-						<Paperclip size={15} />
-					</button>
+				<div class="flex flex-col gap-2">
+					<!-- Row 1: Textarea only (full width) -->
+					<div class="w-full">
+						<textarea
+							bind:this={textareaEl}
+							bind:value={textDraft}
+							onkeypress={handleKey}
+							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
+							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
+							rows="2"
+							placeholder={composerMode === 'recording'
+								? 'Listening dictation… press stop when done.'
+								: composerMode === 'talkback'
+									? 'Continuously monitoring stream… hands free.'
+									: imageMode
+										? 'Describe the image you want to generate…'
+										: 'Ask or command loops…'}
+							autocomplete="off"
+							autocapitalize="sentences"
+							spellcheck="false"
+							disabled={composerMode === 'recording' || composerMode === 'talkback'}
+							class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
+							style="min-height: 80px; max-height: 480px;"
+						></textarea>
+					</div>
 
-					<!-- Text Area. rows=3 so the composer reads as a writing
-					     surface, not a single-line search bar. Auto-grows up to
-					     max-height via the $effect below; then scrolls. -->
-					<textarea
-						bind:this={textareaEl}
-						bind:value={textDraft}
-						onkeypress={handleKey}
-						onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
-						onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-						rows="5"
-						placeholder={composerMode === 'recording'
-							? 'Listening dictation… press stop when done.'
-							: composerMode === 'talkback'
-								? 'Continuously monitoring stream… hands free.'
-								: imageMode
-									? 'Describe the image you want to generate…'
-									: 'Ask or command loops…'}
-						autocomplete="off"
-						autocapitalize="sentences"
-						spellcheck="false"
-						disabled={composerMode === 'recording' || composerMode === 'talkback'}
-						class="flex-1 resize-none self-stretch bg-transparent px-1 py-2 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-						style="min-height: 140px; max-height: 480px;"
-					></textarea>
+					<!-- Row 2: Utility buttons left, Send button right -->
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-1.5">
+							<!-- Attach File -->
+							<button
+								type="button"
+								onclick={triggerUpload}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
+								aria-label="Attach File"
+								title="Attach image"
+							>
+								<Paperclip size={15} />
+							</button>
 
-					<!-- Sparkles Image Toggle -->
-					<button
-						type="button"
-						onclick={() => (imageMode = !imageMode)}
-						disabled={composerMode === 'recording' || composerMode === 'talkback'}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
-							{imageMode
-							? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
-							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-						aria-label="Toggle Image Gen Mode"
-						title="Image Generation Mode"
-					>
-						<Sparkles size={15} />
-					</button>
+							<!-- Sparkles Image Toggle -->
+							<button
+								type="button"
+								onclick={() => (imageMode = !imageMode)}
+								disabled={composerMode === 'recording' || composerMode === 'talkback'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{imageMode
+									? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label="Toggle Image Gen Mode"
+								title="Image Generation Mode"
+							>
+								<Sparkles size={15} />
+							</button>
 
-					<!-- Voice Dictation Mic -->
-					<button
-						type="button"
-						onclick={toggleRecord}
-						disabled={composerMode === 'talkback'}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
-							{composerMode === 'recording'
-							? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
-							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-						aria-label={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
-						title={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
-					>
-						{#if composerMode === 'recording'}
-							<Square size={14} />
-						{:else}
-							<Mic size={15} />
-						{/if}
-					</button>
+							<!-- Voice Dictation Mic -->
+							<button
+								type="button"
+								onclick={toggleRecord}
+								disabled={composerMode === 'talkback'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{composerMode === 'recording'
+									? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
+								title={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
+							>
+								{#if composerMode === 'recording'}
+									<Square size={14} />
+								{:else}
+									<Mic size={15} />
+								{/if}
+							</button>
 
-					<!-- Talkback Continuous -->
-					<button
-						type="button"
-						onclick={toggleTalkback}
-						disabled={composerMode === 'recording'}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
-							{composerMode === 'talkback'
-							? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
-							: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-						aria-label="Hands-free continuous Talkback"
-						title="Hands-free continuous Talkback"
-					>
-						{#if composerMode === 'talkback'}
-							<Square size={14} />
-						{:else}
-							<Headphones size={15} />
-						{/if}
-					</button>
+							<!-- Talkback Continuous -->
+							<button
+								type="button"
+								onclick={toggleTalkback}
+								disabled={composerMode === 'recording'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{composerMode === 'talkback'
+									? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label="Hands-free continuous Talkback"
+								title="Hands-free continuous Talkback"
+							>
+								{#if composerMode === 'talkback'}
+									<Square size={14} />
+								{:else}
+									<Headphones size={15} />
+								{/if}
+							</button>
+						</div>
 
-					<!-- Send Button -->
-					<button
-						type="button"
-						onclick={sendMessage}
-						disabled={(!textDraft.trim() && !imageMode) ||
-							sending ||
-							composerMode === 'recording' ||
-							composerMode === 'talkback'}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
-						aria-label="Send Message"
-						title="Send (Enter)"
-						style={textDraft.trim() && !sending && composerMode === 'idle'
-							? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
-							: ''}
-					>
-						<Send size={14} />
-					</button>
+						<!-- Send Button -->
+						<button
+							type="button"
+							onclick={sendMessage}
+							disabled={(!textDraft.trim() && !imageMode) ||
+								sending ||
+								composerMode === 'recording' ||
+								composerMode === 'talkback'}
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
+							aria-label="Send Message"
+							title="Send (Enter)"
+							style={textDraft.trim() && !sending && composerMode === 'idle'
+								? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
+								: ''}
+						>
+							<Send size={14} />
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
