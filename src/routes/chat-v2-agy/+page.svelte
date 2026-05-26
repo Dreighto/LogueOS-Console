@@ -27,7 +27,8 @@
 		Plus,
 		Pin,
 		MessageSquare,
-		Check
+		Check,
+		Copy
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 
@@ -348,6 +349,21 @@
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			void sendMessage();
+		}
+	}
+
+	// Set of message ids currently showing the "Copied" check on their copy
+	// button. Cleared 1500ms after copy fires.
+	let copiedIds = $state(new Set<number>());
+	async function copyMessage(m: ChatMessage) {
+		try {
+			await navigator.clipboard.writeText(m.message);
+			copiedIds = new Set([...copiedIds, m.id]);
+			setTimeout(() => {
+				copiedIds = new Set([...copiedIds].filter((i) => i !== m.id));
+			}, 1500);
+		} catch {
+			toasts.add('Clipboard unavailable — long-press to copy manually', 'error');
 		}
 	}
 
@@ -1320,9 +1336,29 @@
 							{m.message}
 						</div>
 
-						<!-- Time footer -->
-						<div class="px-1 font-mono text-[9px] text-zinc-600 select-none">
-							{fmtTime(m.timestamp)}
+						<!-- Time + actions footer. Copy button on assistant replies
+						     only — operator's own bubbles already echo their input. -->
+						<div class="flex items-center gap-2 px-1 select-none">
+							{#if m.sender !== 'operator' && m.message}
+								<button
+									type="button"
+									onclick={() => copyMessage(m)}
+									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300"
+									aria-label="Copy reply"
+									title={copiedIds.has(m.id) ? 'Copied' : 'Copy reply'}
+								>
+									{#if copiedIds.has(m.id)}
+										<Check size={10} class="text-emerald-400" />
+										<span class="text-emerald-400">Copied</span>
+									{:else}
+										<Copy size={10} />
+										<span>Copy</span>
+									{/if}
+								</button>
+							{/if}
+							<div class="font-mono text-[9px] text-zinc-600">
+								{fmtTime(m.timestamp)}
+							</div>
 						</div>
 					</div>
 				{/each}
