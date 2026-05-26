@@ -37,9 +37,7 @@ export function getChatMessages(limit = 100, threadId = 'default'): ChatMessage[
 	const db = getDb();
 	try {
 		const rows = db
-			.prepare(
-				'SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC LIMIT ?'
-			)
+			.prepare('SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC LIMIT ?')
 			.all(threadId, limit) as any[];
 
 		return rows.map(parseRow);
@@ -94,7 +92,11 @@ export function setActiveThread(threadId: string): void {
  * List distinct threads in chat_messages with a count + latest activity.
  * Used by the chat tab's thread switcher.
  */
-export function listChatThreads(): { thread_id: string; message_count: number; latest_ts: string }[] {
+export function listChatThreads(): {
+	thread_id: string;
+	message_count: number;
+	latest_ts: string;
+}[] {
 	if (!fs.existsSync(serverConfig.memoryDbPath)) return [];
 	const db = getDb();
 	try {
@@ -149,6 +151,23 @@ export function addChatMessage(
 	}
 }
 
+// Delete a single chat message by id. Used by the regenerate flow to remove
+// the old assistant reply before re-streaming a new one. Returns true if a
+// row was actually deleted, false otherwise — caller can decide whether a
+// missing id is an error.
+export function deleteChatMessage(messageId: number): boolean {
+	const db = getDb();
+	try {
+		const info = db.prepare('DELETE FROM chat_messages WHERE id = ?').run(messageId);
+		return info.changes > 0;
+	} catch (e: unknown) {
+		console.error('deleteChatMessage error:', e);
+		return false;
+	} finally {
+		db.close();
+	}
+}
+
 export function updateActionStatus(messageId: number, status: 'approved' | 'denied'): boolean {
 	const db = getDb();
 	try {
@@ -168,9 +187,12 @@ export function updateActionStatus(messageId: number, status: 'approved' | 'deni
 		if (interactive_action) {
 			interactive_action.status = status;
 			const actionStr = JSON.stringify(interactive_action);
-			
-			db.prepare('UPDATE chat_messages SET status = ?, interactive_action = ? WHERE id = ?')
-				.run(status, actionStr, messageId);
+
+			db.prepare('UPDATE chat_messages SET status = ?, interactive_action = ? WHERE id = ?').run(
+				status,
+				actionStr,
+				messageId
+			);
 			return true;
 		}
 

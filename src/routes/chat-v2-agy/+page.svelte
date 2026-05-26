@@ -28,7 +28,8 @@
 		Pin,
 		MessageSquare,
 		Check,
-		Copy
+		Copy,
+		RefreshCw
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 
@@ -421,6 +422,43 @@
 
 	// Set of message ids currently showing the "Copied" check on their copy
 	// button. Cleared 1500ms after copy fires.
+	// Regenerate flow — operator clicks "Regenerate" on an AGY reply. We
+	// find the prior operator message in the same thread, delete the
+	// existing reply, then re-stream a new one. Old reply gets replaced
+	// rather than stacking up.
+	let regeneratingIds = $state(new Set<number>());
+	async function regenerateReply(m: ChatMessage) {
+		if (sending || regeneratingIds.has(m.id)) return;
+		// Find the most recent operator message before this reply.
+		const idx = messages.findIndex((x) => x.id === m.id);
+		if (idx < 0) return;
+		let priorOperator: ChatMessage | null = null;
+		for (let i = idx - 1; i >= 0; i--) {
+			if (messages[i].sender === 'operator') {
+				priorOperator = messages[i];
+				break;
+			}
+		}
+		if (!priorOperator) {
+			toasts.add('No prior message to regenerate from', 'error');
+			return;
+		}
+		regeneratingIds = new Set([...regeneratingIds, m.id]);
+		sending = true;
+		try {
+			// Drop the old reply server-side + optimistically from the feed so
+			// the streamed replacement lands in the right place.
+			await fetch(resolve(`/api/chat?id=${m.id}`), { method: 'DELETE' }).catch(() => null);
+			messages = messages.filter((x) => x.id !== m.id);
+			await runStreamingSend(priorOperator.message);
+		} catch (e) {
+			toasts.add(`Regenerate failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+		} finally {
+			sending = false;
+			regeneratingIds = new Set([...regeneratingIds].filter((i) => i !== m.id));
+		}
+	}
+
 	let copiedIds = $state(new Set<number>());
 	async function copyMessage(m: ChatMessage) {
 		try {
@@ -1459,8 +1497,9 @@
 							{m.message}
 						</div>
 
-						<!-- Time + actions footer. Copy button on assistant replies
-						     only — operator's own bubbles already echo their input. -->
+						<!-- Time + actions footer. Copy + Regenerate on assistant
+						     replies only — operator's own bubbles already echo
+						     their input and can't be re-rolled. -->
 						<div class="flex items-center gap-2 px-1 select-none">
 							{#if m.sender !== 'operator' && m.message}
 								<button
@@ -1477,6 +1516,17 @@
 										<Copy size={10} />
 										<span>Copy</span>
 									{/if}
+								</button>
+								<button
+									type="button"
+									onclick={() => regenerateReply(m)}
+									disabled={sending || regeneratingIds.has(m.id)}
+									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+									aria-label="Regenerate reply"
+									title={regeneratingIds.has(m.id) ? 'Regenerating…' : 'Regenerate reply'}
+								>
+									<RefreshCw size={10} class={regeneratingIds.has(m.id) ? 'animate-spin' : ''} />
+									<span>{regeneratingIds.has(m.id) ? 'Regen…' : 'Regen'}</span>
 								</button>
 							{/if}
 							<div class="font-mono text-[9px] text-zinc-600">
