@@ -124,10 +124,20 @@ export const POST: RequestHandler = async ({ request }) => {
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 			};
 			try {
+				// Provider preference order:
+				//   1. Operator's persisted provider_override (if set via the
+				//      model picker) — pin to that provider.
+				//   2. Default to 'gemini' (AGY chat lock) since this endpoint
+				//      serves the conversational path AGY is responsible for.
+				const providerPref =
+					threadState.provider_override === 'anthropic' ||
+					threadState.provider_override === 'gemini'
+						? threadState.provider_override
+						: 'gemini';
 				for await (const evt of routeChatStream(
 					currentTier,
 					routerMessages,
-					'gemini',
+					providerPref,
 					upstreamAbort.signal,
 					buildSystemPrompt({ targetRepo, currentTier, threadId })
 				)) {

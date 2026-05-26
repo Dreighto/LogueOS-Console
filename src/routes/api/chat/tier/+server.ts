@@ -1,9 +1,17 @@
 // GET  /api/chat/tier?thread_id=<id>  — return current tier + override
-// PUT  /api/chat/tier                 — set operator override for a thread
+// PUT  /api/chat/tier                 — set operator overrides for a thread.
+//                                       Body may include { tier } and/or
+//                                       { provider } — only the fields
+//                                       present are updated.
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getThreadState, setOperatorOverride } from '$lib/server/thread_state';
+import {
+	getThreadState,
+	setOperatorOverride,
+	setProviderOverride,
+	type ProviderPreference
+} from '$lib/server/thread_state';
 import type { Tier } from '$lib/server/phase_classifier';
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -14,6 +22,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			thread_id: threadId,
 			current_tier: state.current_tier,
 			operator_override: state.operator_override,
+			provider_override: state.provider_override,
 			last_model_used: state.last_model_used
 		});
 	} catch (e) {
@@ -23,20 +32,34 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 const VALID_TIERS: Tier[] = ['chat', 'planning', 'deep', 'local'];
+const VALID_PROVIDERS: ProviderPreference[] = ['anthropic', 'gemini'];
 
 export const PUT: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
 		const threadId = (typeof body.thread_id === 'string' ? body.thread_id.trim() : '') || 'default';
-		const override: Tier | null = VALID_TIERS.includes(body.tier as Tier) ? (body.tier as Tier) : null;
 
-		setOperatorOverride(threadId, override);
+		if ('tier' in body) {
+			const override: Tier | null = VALID_TIERS.includes(body.tier as Tier)
+				? (body.tier as Tier)
+				: null;
+			setOperatorOverride(threadId, override);
+		}
+		if ('provider' in body) {
+			const provider: ProviderPreference = VALID_PROVIDERS.includes(
+				body.provider as ProviderPreference
+			)
+				? (body.provider as ProviderPreference)
+				: null;
+			setProviderOverride(threadId, provider);
+		}
 
 		const state = getThreadState(threadId);
 		return json({
 			thread_id: threadId,
 			current_tier: state.current_tier,
-			operator_override: state.operator_override
+			operator_override: state.operator_override,
+			provider_override: state.provider_override
 		});
 	} catch (e) {
 		console.error('PUT /api/chat/tier error:', e);

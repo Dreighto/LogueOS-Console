@@ -53,6 +53,8 @@ type Provider = 'anthropic' | 'gemini' | 'openai' | 'ollama';
 const DEFAULT_ORDER: Provider[] = ['anthropic', 'gemini', 'openai', 'ollama'];
 // When operator selects the 'agy' agent lock, Gemini goes first.
 const GEMINI_FIRST_ORDER: Provider[] = ['gemini', 'anthropic', 'openai', 'ollama'];
+// When operator pins Anthropic explicitly via the model picker.
+const ANTHROPIC_FIRST_ORDER: Provider[] = ['anthropic', 'gemini', 'openai', 'ollama'];
 
 export interface RouterMessage {
 	role: 'user' | 'assistant';
@@ -92,15 +94,22 @@ function getStatus(err: unknown): number {
 export async function routeChat(
 	tier: Tier,
 	messages: RouterMessage[],
-	/** 'gemini' to prefer Gemini (agy lock), undefined for Anthropic-first. */
-	preference?: 'gemini',
+	/** Force a provider preference. 'gemini' or 'anthropic' pins that provider
+	 * to the front of the fall-forward order. undefined = default
+	 * (Anthropic-first). */
+	preference?: 'gemini' | 'anthropic',
 	signal?: AbortSignal,
 	/** Optional system prompt — formatted per-provider (system param for
 	 * Anthropic, systemInstruction for Gemini, leading system message for
 	 * OpenAI/Ollama). Pass undefined for a bare conversation. */
 	system?: string
 ): Promise<RouterResult> {
-	const order = preference === 'gemini' ? GEMINI_FIRST_ORDER : DEFAULT_ORDER;
+	const order =
+		preference === 'gemini'
+			? GEMINI_FIRST_ORDER
+			: preference === 'anthropic'
+				? ANTHROPIC_FIRST_ORDER
+				: DEFAULT_ORDER;
 
 	// For 'local' tier, only Ollama is in the map.
 	const filteredOrder: Provider[] = tier === 'local' ? ['ollama'] : order;
@@ -190,11 +199,16 @@ export type RouterStreamEvent =
 export async function* routeChatStream(
 	tier: Tier,
 	messages: RouterMessage[],
-	preference?: 'gemini',
+	preference?: 'gemini' | 'anthropic',
 	signal?: AbortSignal,
 	system?: string
 ): AsyncGenerator<RouterStreamEvent> {
-	const order = preference === 'gemini' ? GEMINI_FIRST_ORDER : DEFAULT_ORDER;
+	const order =
+		preference === 'gemini'
+			? GEMINI_FIRST_ORDER
+			: preference === 'anthropic'
+				? ANTHROPIC_FIRST_ORDER
+				: DEFAULT_ORDER;
 	const filteredOrder: Provider[] = tier === 'local' ? ['ollama'] : order;
 
 	let fell_forward = false;

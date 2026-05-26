@@ -15,10 +15,13 @@ import type { Tier } from './phase_classifier';
 
 export type { Tier };
 
+export type ProviderPreference = 'anthropic' | 'gemini' | null;
+
 export interface ThreadState {
 	thread_id: string;
 	current_tier: Tier;
 	operator_override: string | null;
+	provider_override: ProviderPreference;
 	last_model_used: string | null;
 	updated_at: string;
 }
@@ -47,6 +50,14 @@ function ensureTables(db: Database.Database): void {
 			UNIQUE(date, provider)
 		);
 	`);
+	// Idempotent column add for provider_override — older DBs predate this
+	// column. SQLite ALTER TABLE ADD COLUMN throws if the column already
+	// exists; swallow that one specific error.
+	try {
+		db.exec(`ALTER TABLE chat_thread_state ADD COLUMN provider_override TEXT NULL`);
+	} catch (e) {
+		if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+	}
 	ensuredPaths.add(key);
 }
 
@@ -60,39 +71,60 @@ function dbExists(): boolean {
 
 export function getThreadState(threadId: string): ThreadState {
 	if (!dbExists()) {
-		return { thread_id: threadId, current_tier: 'chat', operator_override: null, last_model_used: null, updated_at: '' };
+		return {
+			thread_id: threadId,
+			current_tier: 'chat',
+			operator_override: null,
+			provider_override: null,
+			last_model_used: null,
+			updated_at: ''
+		};
 	}
 	const db = getDb();
 	try {
 		ensureTables(db);
-		const row = db
-			.prepare('SELECT * FROM chat_thread_state WHERE thread_id = ?')
-			.get(threadId) as ThreadState | undefined;
-		return row ?? { thread_id: threadId, current_tier: 'chat', operator_override: null, last_model_used: null, updated_at: '' };
+		const row = db.prepare('SELECT * FROM chat_thread_state WHERE thread_id = ?').get(threadId) as
+			| ThreadState
+			| undefined;
+		return (
+			row ?? {
+				thread_id: threadId,
+				current_tier: 'chat',
+				operator_override: null,
+				provider_override: null,
+				last_model_used: null,
+				updated_at: ''
+			}
+		);
 	} catch {
-		return { thread_id: threadId, current_tier: 'chat', operator_override: null, last_model_used: null, updated_at: '' };
+		return {
+			thread_id: threadId,
+			current_tier: 'chat',
+			operator_override: null,
+			provider_override: null,
+			last_model_used: null,
+			updated_at: ''
+		};
 	} finally {
 		db.close();
 	}
 }
 
-export function upsertThreadTier(
-	threadId: string,
-	tier: Tier,
-	modelUsed?: string | null
-): void {
+export function upsertThreadTier(threadId: string, tier: Tier, modelUsed?: string | null): void {
 	if (!dbExists()) return;
 	const db = getDb();
 	try {
 		ensureTables(db);
-		db.prepare(`
+		db.prepare(
+			`
 			INSERT INTO chat_thread_state (thread_id, current_tier, last_model_used, updated_at)
 			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 			ON CONFLICT(thread_id) DO UPDATE SET
 				current_tier = excluded.current_tier,
 				last_model_used = COALESCE(excluded.last_model_used, last_model_used),
 				updated_at = CURRENT_TIMESTAMP
-		`).run(threadId, tier, modelUsed ?? null);
+		`
+		).run(threadId, tier, modelUsed ?? null);
 	} catch (e) {
 		console.error('upsertThreadTier error:', e);
 	} finally {
@@ -105,15 +137,38 @@ export function setOperatorOverride(threadId: string, override: Tier | null): vo
 	const db = getDb();
 	try {
 		ensureTables(db);
-		db.prepare(`
+		db.prepare(
+			`
 			INSERT INTO chat_thread_state (thread_id, current_tier, operator_override, updated_at)
 			VALUES (?, COALESCE((SELECT current_tier FROM chat_thread_state WHERE thread_id = ?), 'chat'), ?, CURRENT_TIMESTAMP)
 			ON CONFLICT(thread_id) DO UPDATE SET
 				operator_override = excluded.operator_override,
 				updated_at = CURRENT_TIMESTAMP
-		`).run(threadId, threadId, override);
+		`
+		).run(threadId, threadId, override);
 	} catch (e) {
 		console.error('setOperatorOverride error:', e);
+	} finally {
+		db.close();
+	}
+}
+
+export function setProviderOverride(threadId: string, provider: ProviderPreference): void {
+	if (!dbExists()) return;
+	const db = getDb();
+	try {
+		ensureTables(db);
+		db.prepare(
+			`
+			INSERT INTO chat_thread_state (thread_id, current_tier, provider_override, updated_at)
+			VALUES (?, COALESCE((SELECT current_tier FROM chat_thread_state WHERE thread_id = ?), 'chat'), ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(thread_id) DO UPDATE SET
+				provider_override = excluded.provider_override,
+				updated_at = CURRENT_TIMESTAMP
+		`
+		).run(threadId, threadId, provider);
+	} catch (e) {
+		console.error('setProviderOverride error:', e);
 	} finally {
 		db.close();
 	}
@@ -163,13 +218,15 @@ export function addTokenUsage(provider: string, tokens: number): void {
 	const db = getDb();
 	try {
 		ensureTables(db);
-		db.prepare(`
+		db.prepare(
+			`
 			INSERT INTO chat_token_usage (date, provider, tokens_used)
 			VALUES (?, ?, ?)
 			ON CONFLICT(date, provider) DO UPDATE SET
 				tokens_used = tokens_used + excluded.tokens_used,
 				updated_at = CURRENT_TIMESTAMP
-		`).run(today, provider, tokens);
+		`
+		).run(today, provider, tokens);
 	} catch (e) {
 		console.error('addTokenUsage error:', e);
 	} finally {
