@@ -66,4 +66,17 @@ describe('workspace_context helpers', () => {
 		setWorkspaceContext('LogueOS-Console', 'second');
 		expect(getWorkspaceContext('LogueOS-Console')).toBe('second');
 	});
+
+	// CR (PR #140) — ensureTable cache was keyed by path; if the DB file at
+	// that path is removed and recreated, the cache thinks the table is
+	// ensured when it isn't. Switched to WeakSet keyed by db instance so a
+	// fresh handle (always created in getDb()) always re-runs CREATE TABLE
+	// IF NOT EXISTS. This test simulates the failure mode.
+	it('survives DB-file recreation at the same path (path-cache regression)', () => {
+		setWorkspaceContext('LogueOS-Console', 'first-incarnation');
+		expect(getWorkspaceContext('LogueOS-Console')).toBe('first-incarnation');
+		fs.unlinkSync(tmpDbPath);
+		setWorkspaceContext('LogueOS-Console', 'second-incarnation');
+		expect(getWorkspaceContext('LogueOS-Console')).toBe('second-incarnation');
+	});
 });
