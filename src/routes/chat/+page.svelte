@@ -1537,10 +1537,6 @@
 
 	async function deleteThreadById(t: { thread_id: string; archived: boolean }) {
 		threadMenuOpenFor = null;
-		if (t.thread_id === 'default') {
-			toasts.add('Cannot delete the Default Space', 'error');
-			return;
-		}
 		// Backend requires archived=true before delete. Auto-archive if needed.
 		if (!t.archived) {
 			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
@@ -1560,7 +1556,10 @@
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);
 			threads = threads.filter((x) => x.thread_id !== t.thread_id);
 			if (activeThread === t.thread_id) {
-				await switchThread('default');
+				// Switch to the next available thread, or a fresh one if list is empty.
+				const next = threads[0]?.thread_id;
+				if (next) await switchThread(next);
+				else await newThread();
 			}
 			toasts.add(`Deleted "${t.thread_id}"`, 'success');
 		} catch (e) {
@@ -1570,12 +1569,11 @@
 
 	async function clearAllSessions() {
 		const ok = window.confirm(
-			'Archive and delete every thread except Default Space? This cannot be undone.'
+			'Archive and delete every thread? This cannot be undone. A fresh thread will be created after.'
 		);
 		if (!ok) return;
-		const targets = threads.filter((t) => t.thread_id !== 'default');
 		let removed = 0;
-		for (const t of targets) {
+		for (const t of threads) {
 			try {
 				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
 					method: 'PATCH',
@@ -1590,9 +1588,10 @@
 				/* skip */
 			}
 		}
-		threads = threads.filter((t) => t.thread_id === 'default');
-		if (activeThread !== 'default') await switchThread('default');
+		threads = [];
 		toasts.add(`Cleared ${removed} thread${removed === 1 ? '' : 's'}`, 'success');
+		// Hand the operator a fresh thread instead of an empty surface.
+		await newThread();
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -1845,13 +1844,13 @@
 		<button
 			type="button"
 			onclick={() => (sidebarOpen = false)}
-			class="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+			class="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm lg:hidden"
 			aria-label="Close sidebar"
 		></button>
 	{/if}
 
 	<aside
-		class="fixed top-0 bottom-0 left-0 z-40 flex w-72 flex-col border-r border-zinc-800/60 bg-[#090909]/98 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out lg:static lg:translate-x-0
+		class="fixed top-0 bottom-0 left-0 z-[60] flex w-72 flex-col border-r border-zinc-800/60 bg-[#090909]/98 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out lg:static lg:z-auto lg:translate-x-0
 			{sidebarOpen
 			? 'translate-x-0 lg:w-72 lg:opacity-100'
 			: '-translate-x-full lg:pointer-events-none lg:w-0 lg:opacity-0'}"
@@ -1902,7 +1901,7 @@
 					type="button"
 					onclick={clearAllSessions}
 					class="flex items-center gap-1 rounded font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:text-red-400"
-					title="Archive and delete every non-default thread"
+					title="Archive and delete every thread"
 				>
 					<Eraser size={10} />
 					<span>Clear all</span>
@@ -2014,7 +2013,6 @@
 									<button
 										type="button"
 										onclick={() => openRename(t)}
-										disabled={t.thread_id === 'default'}
 										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
 									>
 										<Edit3 size={11} class="text-zinc-500" />
@@ -2023,7 +2021,6 @@
 									<button
 										type="button"
 										onclick={() => toggleArchive(t)}
-										disabled={t.thread_id === 'default'}
 										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
 									>
 										{#if t.archived}
@@ -2037,7 +2034,6 @@
 									<button
 										type="button"
 										onclick={() => deleteThreadById(t)}
-										disabled={t.thread_id === 'default'}
 										class="flex w-full items-center gap-2 border-t border-zinc-800/50 px-3 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-40"
 									>
 										<Trash2 size={11} />
