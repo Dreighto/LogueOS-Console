@@ -6,10 +6,11 @@ import { listThreadMeta, upsertThreadMeta } from '$lib/server/thread_meta';
 export const GET: RequestHandler = async () => {
 	try {
 		// Raw message-based thread list (gives us message counts + latest ts).
+		// We used to force-insert a `default` thread when missing — that made
+		// "delete default" feel broken (it'd reappear on next refresh). The
+		// client now creates a fresh thread on demand instead, so the list
+		// reflects reality.
 		const rawThreads = listChatThreads();
-		if (!rawThreads.some((t) => t.thread_id === 'default')) {
-			rawThreads.push({ thread_id: 'default', message_count: 0, latest_ts: '' });
-		}
 
 		// Ensure every known thread has a meta row so the UI always has a title.
 		for (const t of rawThreads) {

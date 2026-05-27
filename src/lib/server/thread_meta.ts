@@ -192,11 +192,14 @@ export function touchLastActivity(threadId: string): void {
 /**
  * Delete a thread and all its associated data. Only allowed when the thread
  * is already archived — returns false if the thread is active.
- * Protected: 'default' thread cannot be deleted.
  * Cascade: chat_messages + chat_drafts + chat_thread_state + chat_thread_meta + observations.
+ *
+ * Previously protected 'default' from deletion. Operator directive 2026-05-27:
+ * default is a thread like any other. If the operator deletes everything,
+ * sending a message creates a fresh thread on the fly — no special-case row
+ * needs to exist on the server.
  */
 export function deleteThread(threadId: string): { ok: boolean; reason?: string } {
-	if (threadId === 'default') return { ok: false, reason: 'protected_thread' };
 	if (!dbExists()) return { ok: false, reason: 'db_not_found' };
 	const db = getDb();
 	try {

@@ -113,16 +113,10 @@ export const load: PageServerLoad = async ({ url }) => {
 			latest_ts: m.last_activity_at
 		});
 	}
-	if (!rows.some((t) => t.thread_id === 'default')) {
-		rows.push({
-			thread_id: 'default',
-			title: 'default',
-			archived: false,
-			pinned: false,
-			message_count: 0,
-			latest_ts: ''
-		});
-	}
+	// (Removed: forced 'default' thread insert. Operator directive 2026-05-27 —
+	// the list should reflect reality so "delete default" doesn't feel broken.
+	// If the operator deletes everything, sending creates a fresh thread on
+	// the fly via newThread() on the client.)
 	const threads = rows;
 
 	let allWorkspaces: Workspace[] = FALLBACK_WORKSPACES;
