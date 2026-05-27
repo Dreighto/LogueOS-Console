@@ -13,10 +13,16 @@
 // SENSITIVE_PREFIXES in hooks.server.ts — Funnel requests get 401.
 // Tailnet-direct passes through as the operator.
 //
-// Provider routing (PR 1 baseline — to be expanded in PR 2/3):
-//   - Anthropic: LOGUEOS_ROUTING_KEY → MIRU_ROUTING_KEY (back-compat)
-//                → ANTHROPIC_API_KEY (last resort). Canonical env name
-//                is LOGUEOS_ROUTING_KEY post de-Miru rename.
+// Provider routing (PR 1.5 — Anthropic OAuth via Max subscription):
+//   - Anthropic OAuth (FREE — Claude Max quota): CLAUDE_CODE_OAUTH_TOKEN
+//                via `authToken` provider option. Sends `Authorization:
+//                Bearer ...` instead of `x-api-key`. Calls bill against
+//                the operator's $200/mo Claude Max subscription, NOT
+//                pay-per-token API. Verified against api.anthropic.com
+//                2026-05-26.
+//   - Anthropic API key fallback (BILLED): LOGUEOS_ROUTING_KEY →
+//                MIRU_ROUTING_KEY → ANTHROPIC_API_KEY. Only used when
+//                OAuth token is missing/expired.
 //   - Google:    GEMINI_API_KEY → GOOGLE_API_KEY fallback (API-key path
 //                only; OAuth via ~/.gemini/oauth_creds.json comes in PR 2
 //                where it gets the custom HttpClient wiring it needs).
@@ -33,13 +39,18 @@ const DEFAULT_MODELS: Record<Provider, string> = {
 	google: 'gemini-2.5-flash-lite'
 };
 
-function getAnthropicKey(): string {
-	return (
+function getAnthropicAuth(): { authToken?: string; apiKey?: string } {
+	// Prefer OAuth (Claude Max quota — free). Fall back to API key (billed).
+	// See [[reference_claude_max_oauth_direct_api]] for the discovery story.
+	const oauth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+	if (oauth) return { authToken: oauth };
+	const apiKey =
 		process.env.LOGUEOS_ROUTING_KEY ||
 		process.env.MIRU_ROUTING_KEY ||
 		process.env.ANTHROPIC_API_KEY ||
-		''
-	);
+		'';
+	if (apiKey) return { apiKey };
+	return {};
 }
 
 function getGoogleKey(): string {
@@ -49,9 +60,11 @@ function getGoogleKey(): string {
 function pickModel(provider: Provider, requested?: string) {
 	const modelId = requested || DEFAULT_MODELS[provider];
 	if (provider === 'anthropic') {
-		const apiKey = getAnthropicKey();
-		if (!apiKey) throw new Error('Anthropic credential unavailable');
-		return createAnthropic({ apiKey })(modelId);
+		const auth = getAnthropicAuth();
+		if (!auth.authToken && !auth.apiKey) {
+			throw new Error('Anthropic credential unavailable');
+		}
+		return createAnthropic(auth)(modelId);
 	}
 	const apiKey = getGoogleKey();
 	if (!apiKey) throw new Error('Google credential unavailable');
