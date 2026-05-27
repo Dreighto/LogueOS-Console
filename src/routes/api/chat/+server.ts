@@ -10,6 +10,7 @@ import { routeChat } from '$lib/server/llm_router';
 import type { RouterMessage } from '$lib/server/llm_router';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
 import { emitDispatchLinkObservation, maybeMarkDeepCandidate } from '$lib/server/observation_emit';
+import { buildMultimodalContent } from '$lib/server/multimodal';
 
 const GATEWAY_TIMEOUT_MS = 10_000;
 
@@ -298,15 +299,18 @@ export const POST: RequestHandler = async ({ request }) => {
 					0,
 					-1
 				);
-				const routerMessages: RouterMessage[] = [
-					...slice
-						.filter((r) => r.sender !== 'system')
-						.map((r) => ({
-							role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
-							content: r.message
-						})),
-					{ role: 'user' as const, content: message.trim() }
-				].slice(-20);
+				const routerMessages: RouterMessage[] = slice
+					.filter((r) => r.sender !== 'system')
+					.map((r) => ({
+						role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
+						content: r.message
+					}));
+				const lastContent = await buildMultimodalContent(message.trim());
+				routerMessages.push({ role: 'user', content: lastContent });
+
+				if (routerMessages.length > 20) {
+					routerMessages.splice(0, routerMessages.length - 20);
+				}
 
 				const result = await routeChat(
 					isTalkback ? 'chat' : currentTier,

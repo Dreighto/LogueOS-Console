@@ -1,9 +1,11 @@
 // OpenAI provider — OPENAI_API_KEY, no OAuth path.
 // Fallback path only (Anthropic and Gemini are preferred).
 
+import type { ContentPart } from '../llm_router';
+
 export interface ProviderMessage {
 	role: 'user' | 'assistant';
-	content: string;
+	content: string | ContentPart[];
 }
 
 export interface ProviderChatOptions {
@@ -34,6 +36,24 @@ interface OpenAIResponse {
 	error?: { message: string };
 }
 
+function roleMessageToOpenAI(msg: ProviderMessage) {
+	if (typeof msg.content === 'string') {
+		return { role: msg.role, content: msg.content };
+	}
+	return {
+		role: msg.role,
+		content: msg.content.map(part => {
+			if (part.type === 'text') {
+				return { type: 'text', text: part.text };
+			}
+			return {
+				type: 'image_url',
+				image_url: { url: `data:${part.mimeType};base64,${part.base64}` }
+			};
+		})
+	};
+}
+
 export async function chat(options: ProviderChatOptions): Promise<ProviderChatResult> {
 	const key = getApiKey();
 	if (!key) throw new Error('OpenAI: OPENAI_API_KEY not configured');
@@ -47,8 +67,8 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		body: JSON.stringify({
 			model: options.model,
 			messages: options.system
-				? [{ role: 'system', content: options.system }, ...options.messages]
-				: options.messages,
+				? [{ role: 'system', content: options.system }, ...options.messages.map(roleMessageToOpenAI)]
+				: options.messages.map(roleMessageToOpenAI),
 			max_tokens: 4096
 		}),
 		signal: options.signal
