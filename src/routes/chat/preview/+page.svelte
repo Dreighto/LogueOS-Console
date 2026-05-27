@@ -117,24 +117,7 @@
 
 	<!-- Feed -->
 	<main class="relative z-10 flex flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3">
-		{#if chat.status === 'error'}
-			<!-- Error state — surfaces when the SDK transport reports a failure
-			     (network error, upstream LLM rejection, auth failure). The next
-			     send transitions chat.status back to 'submitted'/'streaming' so
-			     this view is transient by design — sending again retries. -->
-			<div
-				class="flex flex-1 flex-col items-center justify-center gap-2 text-center select-none"
-				data-testid="error-state"
-			>
-				<AlertTriangle size={20} class="text-red-400" aria-hidden="true" />
-				<div class="font-mono text-[11px] tracking-wider text-red-400 uppercase">
-					Stream failed
-				</div>
-				<div class="max-w-xs text-sm text-zinc-500">
-					Send again to retry. Check provider credentials if it keeps failing.
-				</div>
-			</div>
-		{:else if chat.messages.length === 0}
+		{#if chat.messages.length === 0 && chat.status !== 'error'}
 			<div
 				class="flex flex-1 flex-col items-center justify-center gap-2 text-center select-none"
 			>
@@ -174,6 +157,28 @@
 				</div>
 			{/each}
 		{/if}
+
+		{#if chat.status === 'error'}
+			<!-- Error notice — appears inline below the messages so the operator's
+			     send isn't lost from view. The next send transitions chat.status
+			     back to 'submitted'/'streaming' so this notice is transient by
+			     design — sending again retries. -->
+			<div
+				class="flex items-start gap-2.5 rounded-2xl border border-red-500/30 bg-red-500/[0.04] px-3.5 py-2.5"
+				data-testid="error-state"
+			>
+				<AlertTriangle size={14} class="mt-0.5 shrink-0 text-red-400" aria-hidden="true" />
+				<div class="flex flex-col gap-0.5">
+					<div class="font-mono text-[10px] tracking-wider text-red-400 uppercase">
+						Stream failed
+					</div>
+					<div class="text-[12px] text-zinc-400">
+						Send again to retry. Check provider credentials if it keeps failing.
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div bind:this={scrollSentinel} class="h-0 w-full shrink-0"></div>
 	</main>
 
