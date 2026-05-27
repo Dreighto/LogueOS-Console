@@ -17,11 +17,15 @@ export interface WorkspaceContext {
 	updated_at: string;
 }
 
-const ensuredPaths = new Set<string>();
+// Cache by db instance, not path. CR (PR #140): keying by path goes stale if
+// the file at that path is recreated — the cache reports "ensured" against a
+// brand-new file. WeakSet keyed on the Database object is correct: a new
+// db instance always re-runs CREATE TABLE IF NOT EXISTS (cheap) and entries
+// drop out automatically when the handle is closed and garbage-collected.
+const ensuredDbs = new WeakSet<Database.Database>();
 
 function ensureTable(db: Database.Database): void {
-	const key = serverConfig.memoryDbPath;
-	if (ensuredPaths.has(key)) return;
+	if (ensuredDbs.has(db)) return;
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS workspace_context (
 			workspace TEXT PRIMARY KEY,
@@ -29,7 +33,7 @@ function ensureTable(db: Database.Database): void {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 	`);
-	ensuredPaths.add(key);
+	ensuredDbs.add(db);
 }
 
 function getDb(): Database.Database {
