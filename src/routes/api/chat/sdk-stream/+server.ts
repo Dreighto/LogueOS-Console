@@ -1,47 +1,70 @@
 // SDK-native streaming endpoint — Vercel AI SDK 6 / `streamText` +
-// `toUIMessageStreamResponse()`. Side-by-side with the legacy custom-SSE
-// `/api/chat/stream` route. The client will migrate to this once PR 2 wires
-// `useChat()` into the surface.
+// `toUIMessageStreamResponse()`. Feature-parity replacement for the legacy
+// custom-SSE `/api/chat/stream` route, ready for PR 2b client cutover.
 //
-// PR 1 scope (this file): the endpoint exists, accepts the SDK 6 request
-// shape (`{ messages: UIMessage[], provider?, model? }`), returns the SDK
-// Data Stream Protocol via `result.toUIMessageStreamResponse()`. NO client
-// changes, NO persistence — that's PR 2. The existing legacy endpoint stays
-// untouched so the live chat surface keeps working unchanged.
+// PR 2b.1 (this file): the endpoint accepts the SDK 6 client shape
+// (`{ messages: UIMessage[], thread, target_repo, provider?, model? }`)
+// AND handles all the legacy responsibilities:
+//   - persist operator message + assistant reply to chat_messages
+//   - upsert chat_thread_meta + chat_thread_state
+//   - classify tier from the latest user message
+//   - pick provider via thread_state.provider_override OR explicit body
+//   - default to Gemini for chat tier (matches legacy AGY-chat-lock UX)
+//   - emit the SDK Data Stream Protocol so useChat() consumes natively
 //
-// Auth: the route is under `/api/chat/*` which is already in
-// SENSITIVE_PREFIXES in hooks.server.ts — Funnel requests get 401.
-// Tailnet-direct passes through as the operator.
+// What's intentionally NOT here yet (PR 2b.2 / 2b.3 / PR 4):
+//   - multi-provider fall-forward (SDK middleware can add later)
+//   - image-gen mode (separate dispatch path)
+//   - @cc / @agy dispatch routing (separate non-streaming path)
+//   - slash commands (client-side intercept before send)
+//   - Ollama / local routing (task #11)
 //
-// Provider routing (PR 1.5 — Anthropic OAuth via Max subscription):
-//   - Anthropic OAuth (FREE — Claude Max quota): CLAUDE_CODE_OAUTH_TOKEN
-//                via `authToken` provider option. Sends `Authorization:
-//                Bearer ...` instead of `x-api-key`. Calls bill against
-//                the operator's $200/mo Claude Max subscription, NOT
-//                pay-per-token API. Verified against api.anthropic.com
-//                2026-05-26.
-//   - Anthropic API key fallback (BILLED): LOGUEOS_ROUTING_KEY →
-//                MIRU_ROUTING_KEY → ANTHROPIC_API_KEY. Only used when
-//                OAuth token is missing/expired.
-//   - Google:    GEMINI_API_KEY → GOOGLE_API_KEY fallback (API-key path
-//                only; OAuth via ~/.gemini/oauth_creds.json comes in PR 2
-//                where it gets the custom HttpClient wiring it needs).
+// Auth: route falls under /api/chat/* so hooks.server.ts SENSITIVE_PREFIXES
+// already covers it. Tailnet-direct passes; Funnel requests 401.
+//
+// Provider auth (Anthropic OAuth via Claude Max quota — FREE — is preferred
+// to billed API key; Gemini API key only for now):
+//   Anthropic: CLAUDE_CODE_OAUTH_TOKEN (Bearer) → LOGUEOS_ROUTING_KEY /
+//              MIRU_ROUTING_KEY / ANTHROPIC_API_KEY (x-api-key fallback)
+//   Google:    GEMINI_API_KEY → GOOGLE_API_KEY
 
 import type { RequestHandler } from './$types';
-import { streamText, convertToModelMessages, type UIMessage } from 'ai';
+import { streamText, convertToModelMessages, generateId, type UIMessage } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { addChatMessage, getChatMessages } from '$lib/server/chat';
+import { classifyTier, type Tier } from '$lib/server/phase_classifier';
+import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
+import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
 
 type Provider = 'anthropic' | 'google';
 
-const DEFAULT_MODELS: Record<Provider, string> = {
-	anthropic: 'claude-haiku-4-5-20251001',
-	google: 'gemini-2.5-flash-lite'
+// Tier × provider → model id. Mirrors src/lib/server/llm_router.ts so
+// behaviour stays aligned; we keep a local copy to avoid pulling in the
+// fall-forward routing logic (PR 2b.2 ships single-provider per request;
+// SDK middleware can layer fall-forward later if needed).
+const TIER_MODELS: Record<Tier, Record<Provider, string>> = {
+	chat: {
+		anthropic: 'claude-haiku-4-5-20251001',
+		google: 'gemini-2.5-flash-lite'
+	},
+	planning: {
+		anthropic: 'claude-sonnet-4-6',
+		google: 'gemini-2.5-flash'
+	},
+	deep: {
+		anthropic: 'claude-opus-4-7',
+		google: 'gemini-2.5-pro'
+	},
+	local: {
+		// Local tier doesn't have an SDK provider wired yet — falls back to
+		// Anthropic chat-tier until task #11 (Ollama via openai-compatible).
+		anthropic: 'claude-haiku-4-5-20251001',
+		google: 'gemini-2.5-flash-lite'
+	}
 };
 
 function getAnthropicAuth(): { authToken?: string; apiKey?: string } {
-	// Prefer OAuth (Claude Max quota — free). Fall back to API key (billed).
-	// See [[reference_claude_max_oauth_direct_api]] for the discovery story.
 	const oauth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
 	if (oauth) return { authToken: oauth };
 	const apiKey =
@@ -57,36 +80,89 @@ function getGoogleKey(): string {
 	return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 }
 
-function pickModel(provider: Provider, requested?: string) {
-	const modelId = requested || DEFAULT_MODELS[provider];
+function pickModel(provider: Provider, tier: Tier, requestedModel?: string) {
+	const modelId = requestedModel || TIER_MODELS[tier][provider];
 	if (provider === 'anthropic') {
 		const auth = getAnthropicAuth();
 		if (!auth.authToken && !auth.apiKey) {
 			throw new Error('Anthropic credential unavailable');
 		}
-		return createAnthropic(auth)(modelId);
+		return { model: createAnthropic(auth)(modelId), modelId };
 	}
 	const apiKey = getGoogleKey();
 	if (!apiKey) throw new Error('Google credential unavailable');
-	return createGoogleGenerativeAI({ apiKey })(modelId);
+	return { model: createGoogleGenerativeAI({ apiKey })(modelId), modelId };
 }
 
-function buildSystemPrompt(): string {
-	// Smaller prompt than the legacy endpoint while PR 1 is just plumbing —
-	// the full system prompt + per-thread context land in PR 2 alongside the
-	// useChat() client integration.
-	return [
-		'You are the operator dreighto’s planning partner inside LogueOS Console.',
-		'',
-		'Style:',
-		'- Plain English. Operator is not a coder.',
-		'- Direct, no preamble, no “Great question!”.',
-		'- Brief — operator is often on iPhone; walls of text feel like noise.'
-	].join('\n');
+function buildSystemPrompt(ctx: {
+	targetRepo: string;
+	currentTier: Tier;
+	threadId: string;
+}): string {
+	// Same prompt shape as the legacy endpoint — keeps behaviour parity for
+	// the SDK cutover. Future PR can tune.
+	return `You are the operator's planning partner inside LogueOS Console.
+
+Operator profile — Captain (dreighto):
+- Not a coder. Plain English first, technical detail only when it adds value.
+- Direct tone. No "Great question!" openers, no preamble, no recapping the question back.
+- Hates being lectured. Don't restate your role unless asked.
+
+LogueOS context (background — don't lecture about it):
+- Kernel: LogueOS-Orchestrator. Project payloads: LogueOS-Console, project-miru, NASDOOM.
+- Workers: CC (Claude Code) and AGY (Antigravity / Gemini-class). Both ship code via dispatched sessions.
+- This surface is for conversation, not execution. The operator dispatches real work by typing @cc / @agy in the chat, or pressing workflow buttons (Critique / Build / Verify / Retry) on a previous reply.
+- Active workspace: ${ctx.targetRepo} · Tier: ${ctx.currentTier} · Thread: ${ctx.threadId}
+
+Rules:
+- Answer the actual question briefly. Operator is often on iPhone — long replies become walls.
+- If a task needs files edited, commands run, tests written, PRs opened, or services restarted, say "that's a @cc job" (or @agy) — don't pretend you can do it from this chat.
+- Never claim to have done something you didn't.
+- If you're uncertain, say so plainly.`;
+}
+
+// Repo selection from message text — same keyword-scan heuristic as the
+// legacy endpoint. Client may also pass an explicit `target_repo`.
+function detectTargetRepo(message: string, hint?: string): string {
+	if (hint) return hint;
+	const text = message.toLowerCase();
+	if (text.includes('miru')) return 'project-miru';
+	if (
+		text.includes('orchestrator') ||
+		text.includes('kernel') ||
+		text.includes('logueos-orchestrator')
+	) {
+		return 'LogueOS-Orchestrator';
+	}
+	if (text.includes('nasdoom')) return 'NASDOOM';
+	return 'LogueOS-Console';
+}
+
+// Pull the latest user message's plain-text content from a UIMessage[] —
+// needed for tier classification + persistence. The SDK ships UIMessage
+// with a `parts` array; only `type: "text"` parts are concatenated here.
+function latestUserText(messages: UIMessage[]): string {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const m = messages[i];
+		if (m.role !== 'user') continue;
+		const parts = m.parts || [];
+		const txt = parts
+			.filter((p) => p.type === 'text')
+			.map((p) => (p as { type: 'text'; text: string }).text)
+			.join('');
+		if (txt) return txt;
+	}
+	return '';
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	let body: { messages?: UIMessage[]; provider?: Provider; model?: string };
+	let body: {
+		messages?: UIMessage[];
+		thread?: string;
+		target_repo?: string;
+		provider?: Provider;
+		model?: string;
+	};
 	try {
 		body = await request.json();
 	} catch {
@@ -104,11 +180,53 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	}
 
-	const provider: Provider = body.provider === 'google' ? 'google' : 'anthropic';
+	const threadId =
+		typeof body.thread === 'string' && body.thread.trim() ? body.thread.trim() : 'default';
+	const userText = latestUserText(messages);
+	if (!userText) {
+		return new Response(JSON.stringify({ error: 'no_text_content' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
 
-	let model;
+	// Persist the operator's message immediately so /api/chat polls see it,
+	// the audit JSONL records reflect reality, and other clients (sidebar
+	// counts, regen helpers) can pick it up. This matches the legacy
+	// endpoint's behaviour.
+	addChatMessage('operator', userText, null, null, null, 'sent', threadId);
+	upsertThreadMeta(threadId, {});
+	touchLastActivity(threadId);
+
+	const threadState = getThreadState(threadId);
+	const allForClassify = getChatMessages(30, threadId);
+	const recentForClassify = allForClassify.slice(0, -1);
+	const currentTier = classifyTier({
+		userMessage: userText,
+		recentMessages: recentForClassify,
+		currentTier: threadState.current_tier,
+		operatorOverride: threadState.operator_override
+	});
+	upsertThreadTier(threadId, currentTier, null);
+
+	const targetRepo = detectTargetRepo(userText, body.target_repo);
+
+	// Provider preference:
+	//   1. Explicit body.provider (client just chose a model)
+	//   2. thread_state.provider_override (persisted via model picker)
+	//   3. Default 'google' (matches legacy AGY-chat-lock UX). Operator can
+	//      flip to Anthropic via picker; Anthropic-via-OAuth is free.
+	const overrideFromState =
+		threadState.provider_override === 'anthropic'
+			? 'anthropic'
+			: threadState.provider_override === 'gemini'
+				? 'google'
+				: null;
+	const provider: Provider = body.provider ?? overrideFromState ?? 'google';
+
+	let modelHandle: { model: ReturnType<ReturnType<typeof createAnthropic>>; modelId: string };
 	try {
-		model = pickModel(provider, body.model);
+		modelHandle = pickModel(provider, currentTier, body.model);
 	} catch (err) {
 		return new Response(
 			JSON.stringify({ error: 'credential_unavailable', detail: (err as Error).message }),
@@ -116,11 +234,33 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 
+	const systemPrompt = buildSystemPrompt({ targetRepo, currentTier, threadId });
+
 	const result = streamText({
-		model,
-		system: buildSystemPrompt(),
+		model: modelHandle.model,
+		system: systemPrompt,
 		messages: await convertToModelMessages(messages)
 	});
 
-	return result.toUIMessageStreamResponse();
+	return result.toUIMessageStreamResponse({
+		originalMessages: messages,
+		generateMessageId: () => generateId(),
+		onFinish: ({ responseMessage }) => {
+			// Concatenate every text part of the response into a single string
+			// for the chat_messages row. Matches the legacy `addChatMessage`
+			// call shape for backwards compatibility with existing readers.
+			const replyText = (responseMessage.parts || [])
+				.filter((p) => p.type === 'text')
+				.map((p) => (p as { type: 'text'; text: string }).text)
+				.join('');
+			if (replyText) {
+				const senderLabel = provider === 'anthropic' ? 'cc' : 'agy';
+				addChatMessage(senderLabel, replyText, null, null, null, 'sent', threadId);
+			}
+			// Persist model_used so the picker chip can show "Claude Haiku 4.5"
+			// instead of "Auto" on next render.
+			upsertThreadTier(threadId, currentTier, modelHandle.modelId);
+			touchLastActivity(threadId);
+		}
+	});
 };
