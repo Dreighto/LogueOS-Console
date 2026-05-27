@@ -29,13 +29,41 @@
 //   Google:    GEMINI_API_KEY → GOOGLE_API_KEY
 
 import type { RequestHandler } from './$types';
-import { streamText, convertToModelMessages, generateId, type UIMessage } from 'ai';
+import { streamText, convertToModelMessages, generateId, tool, type UIMessage } from 'ai';
+import { z } from 'zod';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { addChatMessage, getChatMessages } from '$lib/server/chat';
+import { addChatMessage, getChatMessages, listChatThreads } from '$lib/server/chat';
 import { classifyTier, type Tier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
+
+// LogueOS-on-SDK tools — read-only operator-context fetches the LLM can call
+// when answering. First cut (PR 10a): one tool. Future PRs layer more
+// (linear_create_issue, git_local_status, service_restart with operator
+// approval, MCP-gateway pass-through, etc.). See task #10.
+const tools = {
+	list_chat_threads: tool({
+		description:
+			"Lists the operator's chat threads with message counts and latest activity. Use when the operator asks about their threads, history, or what conversations exist.",
+		inputSchema: z.object({
+			limit: z.number().int().min(1).max(50).default(10).describe('How many threads to return (default 10, max 50)')
+		}),
+		execute: async ({ limit }: { limit?: number }) => {
+			const all = listChatThreads();
+			const n = Math.min(Math.max(limit ?? 10, 1), 50);
+			return {
+				count: all.length,
+				returned: Math.min(all.length, n),
+				threads: all.slice(0, n).map((t) => ({
+					thread_id: t.thread_id,
+					message_count: t.message_count,
+					latest_ts: t.latest_ts
+				}))
+			};
+		}
+	})
+};
 
 type Provider = 'anthropic' | 'google';
 
@@ -239,7 +267,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	const result = streamText({
 		model: modelHandle.model,
 		system: systemPrompt,
-		messages: await convertToModelMessages(messages)
+		messages: await convertToModelMessages(messages),
+		tools,
+		// Cap multi-step tool loops — keeps a runaway "call → reflect → call"
+		// chain from consuming Max quota / API budget.
+		stopWhen: ({ steps }) => steps.length >= 5
 	});
 
 	return result.toUIMessageStreamResponse({

@@ -160,6 +160,29 @@
 						{#each message.parts as part, i (i)}
 							{#if part.type === 'text'}
 								<span class="whitespace-pre-wrap">{part.text}</span>
+							{:else if part.type?.startsWith('tool-')}
+								<!-- Tool-call chip: shows what the LLM is doing on the
+								     operator's behalf. PR 10a renders a compact one-liner
+								     per state — later PRs can expand to show args/output
+								     inline and add an approval gate for write-tools. -->
+								<div
+									class="my-1 flex flex-col gap-0.5 rounded-lg border border-purple-500/30 bg-purple-500/[0.04] px-2.5 py-1.5 font-mono text-[11px]"
+								>
+									<div class="flex items-center gap-1.5 text-purple-300">
+										<Sparkles size={11} aria-hidden="true" />
+										<span class="font-semibold tracking-wide">
+											{part.type.replace(/^tool-/, '')}
+										</span>
+										<span class="ml-auto text-[9px] tracking-wider text-purple-400/70 uppercase">
+											{(part as { state?: string }).state ?? 'pending'}
+										</span>
+									</div>
+									{#if (part as { state?: string }).state === 'output-error'}
+										<div class="text-[10px] text-red-400">
+											{(part as { errorText?: string }).errorText ?? 'tool error'}
+										</div>
+									{/if}
+								</div>
 							{/if}
 						{/each}
 					</div>
