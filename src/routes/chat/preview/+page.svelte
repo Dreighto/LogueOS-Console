@@ -18,8 +18,8 @@
 	// replacing the legacy custom-streaming code, and deletes the preview.
 
 	import { Chat } from '@ai-sdk/svelte';
-	import { resolve, base } from '$app/paths';
-	import { Send, ArrowLeft, Sparkles } from 'lucide-svelte';
+	import { resolve } from '$app/paths';
+	import { Send, ArrowLeft, Sparkles, AlertTriangle } from 'lucide-svelte';
 
 	type Provider = 'anthropic' | 'google';
 
@@ -117,7 +117,7 @@
 
 	<!-- Feed -->
 	<main class="relative z-10 flex flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3">
-		{#if chat.messages.length === 0}
+		{#if chat.messages.length === 0 && chat.status !== 'error'}
 			<div
 				class="flex flex-1 flex-col items-center justify-center gap-2 text-center select-none"
 			>
@@ -157,6 +157,28 @@
 				</div>
 			{/each}
 		{/if}
+
+		{#if chat.status === 'error'}
+			<!-- Error notice — appears inline below the messages so the operator's
+			     send isn't lost from view. The next send transitions chat.status
+			     back to 'submitted'/'streaming' so this notice is transient by
+			     design — sending again retries. -->
+			<div
+				class="flex items-start gap-2.5 rounded-2xl border border-red-500/30 bg-red-500/[0.04] px-3.5 py-2.5"
+				data-testid="error-state"
+			>
+				<AlertTriangle size={14} class="mt-0.5 shrink-0 text-red-400" aria-hidden="true" />
+				<div class="flex flex-col gap-0.5">
+					<div class="font-mono text-[10px] tracking-wider text-red-400 uppercase">
+						Stream failed
+					</div>
+					<div class="text-[12px] text-zinc-400">
+						Send again to retry. Check provider credentials if it keeps failing.
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<div bind:this={scrollSentinel} class="h-0 w-full shrink-0"></div>
 	</main>
 
@@ -171,7 +193,11 @@
 				bind:value={input}
 				onkeypress={handleKey}
 				rows="2"
-				placeholder={chat.status === 'streaming' ? 'Streaming reply…' : 'Ask the SDK preview…'}
+				placeholder={chat.status === 'error'
+					? 'Last send failed — try again'
+					: chat.status === 'streaming'
+						? 'Streaming reply…'
+						: 'Ask the SDK preview…'}
 				autocomplete="off"
 				autocapitalize="sentences"
 				spellcheck="false"
@@ -182,8 +208,18 @@
 			></textarea>
 
 			<div class="flex items-center justify-between">
-				<div class="font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none">
-					{chat.status === 'streaming' ? '· streaming ·' : chat.status === 'submitted' ? '· submitted ·' : 'enter to send'}
+				<div
+					class="font-mono text-[9px] tracking-wider uppercase select-none {chat.status === 'error'
+						? 'text-red-400'
+						: 'text-zinc-600'}"
+				>
+					{chat.status === 'streaming'
+						? '· streaming ·'
+						: chat.status === 'submitted'
+							? '· submitted ·'
+							: chat.status === 'error'
+								? '· error · retry to send ·'
+								: 'enter to send'}
 				</div>
 
 				<button
