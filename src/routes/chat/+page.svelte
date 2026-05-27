@@ -207,9 +207,12 @@
 		}, 400);
 	});
 
-	// Auto-grow the composer textarea with the draft. Resting state is rows=5
-	// (~140px — a real writing surface, not a snippet). Expands up to roughly
-	// half the viewport (capped 480px) then scrolls internally.
+	// Auto-grow the composer textarea with the draft. Resting state is one
+	// line (~40px — feels like a real input, not an essay block). Grows
+	// smoothly past one line up to roughly half the viewport (capped 480px)
+	// then scrolls internally. Audit 2026-05-27 + operator feedback flagged
+	// the previous 80px floor as too tall for the empty state.
+	const COMPOSER_MIN_PX = 40;
 	function composerMaxHeight(): number {
 		if (typeof window === 'undefined') return 360;
 		return Math.min(Math.round(window.innerHeight * 0.5), 480);
@@ -220,7 +223,7 @@
 		if (!textareaEl) return;
 		textareaEl.style.height = 'auto';
 		const max = composerMaxHeight();
-		const target = Math.min(Math.max(textareaEl.scrollHeight, 80), max);
+		const target = Math.min(Math.max(textareaEl.scrollHeight, COMPOSER_MIN_PX), max);
 		textareaEl.style.height = `${target}px`;
 	});
 
@@ -2304,7 +2307,7 @@
 							onpaste={handlePaste}
 							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
 							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-							rows="2"
+							rows="1"
 							placeholder={composerMode === 'recording'
 								? 'Listening dictation… press stop when done.'
 								: composerMode === 'talkback'
@@ -2317,7 +2320,7 @@
 							spellcheck="false"
 							disabled={composerMode === 'recording' || composerMode === 'talkback'}
 							class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-							style="min-height: 80px; max-height: 480px;"
+							style="min-height: 40px; max-height: 480px;"
 						></textarea>
 					</div>
 

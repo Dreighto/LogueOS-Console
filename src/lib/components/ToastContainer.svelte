@@ -11,33 +11,48 @@
 		error: AlertCircle
 	};
 
-	const colors = {
-		info: 'bg-background border-border text-foreground',
-		success: 'bg-status-green border-status-green/50 text-status-green',
-		warning: 'bg-status-amber border-status-amber/50 text-status-amber',
-		error: 'bg-status-red border-status-red/50 text-status-red'
+	// Status-colored TINTED background + neutral readable text + status-colored
+	// icon + border. The previous palette set background AND text to the same
+	// status color, rendering the message invisible (red text on a red panel —
+	// surfaced during the 2026-05-27 audit as "empty red bars on mic failure").
+	const panel = {
+		info: 'bg-zinc-950/90 border-zinc-800/80',
+		success: 'bg-status-green/[0.08] border-status-green/40',
+		warning: 'bg-status-amber/[0.08] border-status-amber/40',
+		error: 'bg-status-red/[0.08] border-status-red/40'
+	};
+	const iconColor = {
+		info: 'text-zinc-300',
+		success: 'text-status-green',
+		warning: 'text-status-amber',
+		error: 'text-status-red'
 	};
 </script>
 
-<div class="fixed top-4 left-1/2 z-[100] flex w-full max-w-[400px] -translate-x-1/2 flex-col gap-2 px-4 pointer-events-none">
+<div
+	class="pointer-events-none fixed top-4 left-1/2 z-[100] flex w-full max-w-[400px] -translate-x-1/2 flex-col gap-2 px-4"
+>
 	{#each $toasts as toast (toast.id)}
 		{@const Icon = icons[toast.type]}
 		<div
 			animate:flip={{ duration: 300 }}
 			in:fly={{ y: -20, duration: 300 }}
 			out:fly={{ y: -20, duration: 200 }}
-			class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 shadow-xl backdrop-blur-md {colors[toast.type]}"
+			data-toast
+			data-toast-type={toast.type}
+			class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 text-zinc-100 shadow-xl backdrop-blur-md {panel[toast.type]}"
 		>
-			<Icon size={18} class="mt-0.5 shrink-0" />
+			<Icon size={18} class="mt-0.5 shrink-0 {iconColor[toast.type]}" aria-hidden="true" />
 			<div class="flex-1 text-sm font-medium leading-tight">
 				{toast.message}
 			</div>
-			<button 
-				type="button" 
+			<button
+				type="button"
 				onclick={() => toasts.remove(toast.id)}
-				class="rounded-md p-1 opacity-60 hover:opacity-100 transition-opacity"
+				aria-label="Dismiss notification"
+				class="rounded-md p-1 text-zinc-400 opacity-60 transition-opacity hover:opacity-100"
 			>
-				<X size={14} />
+				<X size={14} aria-hidden="true" />
 			</button>
 		</div>
 	{/each}
