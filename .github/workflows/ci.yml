@@ -50,12 +50,12 @@ jobs:
       - name: Production build
         run: npm run build
 
-      # Gate on the chat regression suite specifically — it passes green and
-      # IS the chat-surface merge gate (task #2 payoff). The other e2e specs
+      # Gate on the chat + chat/preview regression suites — both surfaces are
+      # operator-facing and must stay green. The other e2e specs
       # (status-board.spec.ts, example.spec.ts) carry pre-existing failures
       # and would need stabilization before joining the gate.
-      - name: E2E tests (Playwright — chat regression suite)
-        run: npx playwright test tests/e2e/chat.spec.ts --reporter=list
+      - name: E2E tests (Playwright — chat regression suites)
+        run: npx playwright test tests/e2e/chat.spec.ts tests/e2e/chat-preview.spec.ts --reporter=list
         env:
           CI: 'true'
 
