@@ -38,6 +38,7 @@ import { addChatMessage, getChatMessages, listChatThreads } from '$lib/server/ch
 import { classifyTier, type Tier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
+import { getWorkspaceContext } from '$lib/server/workspace_context';
 
 // LogueOS-on-SDK tools — read-only operator-context fetches the LLM can call
 // when answering. PR 10a shipped the first tool; PR 10c (this commit) adds
@@ -217,9 +218,7 @@ function buildSystemPrompt(ctx: {
 	currentTier: Tier;
 	threadId: string;
 }): string {
-	// Same prompt shape as the legacy endpoint — keeps behaviour parity for
-	// the SDK cutover. Future PR can tune.
-	return `You are the operator's planning partner inside LogueOS Console.
+	const base = `You are the operator's planning partner inside LogueOS Console.
 
 Operator profile — Captain (dreighto):
 - Not a coder. Plain English first, technical detail only when it adds value.
@@ -237,6 +236,17 @@ Rules:
 - If a task needs files edited, commands run, tests written, PRs opened, or services restarted, say "that's a @cc job" (or @agy) — don't pretend you can do it from this chat.
 - Never claim to have done something you didn't.
 - If you're uncertain, say so plainly.`;
+
+	// Workspace-specific addendum (task #22 — Projects-light). Operator types
+	// this once per workspace via the chip's "Edit context" link; auto-
+	// injects into every chat send within that workspace. Saves retyping
+	// project-specific instructions every new thread.
+	const addendum = getWorkspaceContext(ctx.targetRepo);
+	if (!addendum) return base;
+	return `${base}
+
+Workspace-specific context for ${ctx.targetRepo} (operator-authored):
+${addendum}`;
 }
 
 // Repo selection from message text — same keyword-scan heuristic as the
