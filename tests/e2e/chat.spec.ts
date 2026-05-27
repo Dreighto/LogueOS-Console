@@ -221,6 +221,42 @@ test.describe('chat — composer', () => {
 	});
 });
 
+test.describe('chat — popover dismissal (regression #14)', () => {
+	// The popover content carries `data-popover`; the "Model" / "Target
+	// Directory" header inside is the only text that renders ONLY while the
+	// popover is open (the chip's own label shows "Auto" / "Console" even
+	// when closed, so we can't gate on those).
+	test('Escape closes the model picker', async ({ page }) => {
+		await mockChatApis(page);
+		await page.goto(ROUTE);
+
+		await page.getByRole('button', { name: 'Model picker' }).click();
+		await expect(page.getByText('Model', { exact: true })).toBeVisible();
+
+		await page.keyboard.press('Escape');
+		await expect(page.getByText('Model', { exact: true })).toHaveCount(0);
+	});
+
+	test('clicking the repo chip while model picker is open swaps popovers (no double-tap)', async ({
+		page
+	}) => {
+		// The previous backdrop-button pattern made the first click hit the
+		// backdrop (closing the model picker) but never reached the repo chip,
+		// requiring a second tap. Regression guards against that.
+		await mockChatApis(page);
+		await page.goto(ROUTE);
+
+		await page.getByRole('button', { name: 'Model picker' }).click();
+		await expect(page.getByText('Model', { exact: true })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Target repository' }).click();
+		// Model popover closed (its header gone) and repo popover opened
+		// (its header now visible) — all from a SINGLE tap.
+		await expect(page.getByText('Model', { exact: true })).toHaveCount(0);
+		await expect(page.getByText('Target Directory').first()).toBeVisible();
+	});
+});
+
 test.describe('chat — pickers', () => {
 	test('Model picker opens and lists all 8 choices (Auto + 6 cloud + 1 local)', async ({
 		page
