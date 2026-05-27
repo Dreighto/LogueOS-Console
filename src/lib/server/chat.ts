@@ -63,7 +63,33 @@ export function getActiveThread(): string {
 		const row = db
 			.prepare("SELECT last_thread FROM chat_user_state WHERE user_id = 'operator'")
 			.get() as { last_thread?: string } | undefined;
-		return row?.last_thread || 'default';
+		const cached = row?.last_thread;
+		if (!cached || cached === 'default') return 'default';
+
+		// Reconcile against reality. The cached last_thread can point at a
+		// thread that no longer has messages OR was never persisted (operator
+		// typed /new in a thread that errored out before its first message
+		// landed). Audit 2026-05-27 caught a phantom "testing" thread that
+		// pointed at nothing — page-reload landed on an empty fantasy thread.
+		// Fall back to the most-recently-active real thread, or 'default'.
+		const existsRow = db
+			.prepare(
+				`SELECT
+					EXISTS(SELECT 1 FROM chat_messages WHERE thread_id = ?) AS in_msg,
+					EXISTS(SELECT 1 FROM chat_thread_meta WHERE thread_id = ?) AS in_meta`
+			)
+			.get(cached, cached) as { in_msg: number; in_meta: number } | undefined;
+		if (existsRow && (existsRow.in_msg || existsRow.in_meta)) return cached;
+
+		const latest = db
+			.prepare(
+				`SELECT thread_id FROM chat_messages
+				 GROUP BY thread_id
+				 ORDER BY MAX(timestamp) DESC
+				 LIMIT 1`
+			)
+			.get() as { thread_id?: string } | undefined;
+		return latest?.thread_id || 'default';
 	} catch (e: unknown) {
 		console.error('getActiveThread error:', e);
 		return 'default';
