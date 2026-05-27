@@ -35,7 +35,8 @@
 		Archive,
 		ArchiveRestore,
 		Trash2,
-		Eraser
+		Eraser,
+		Loader2
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import Markdown from '$lib/components/Markdown.svelte';
@@ -117,7 +118,7 @@
 	// composer rather than getting injected as markdown into the textarea.
 	// On send, each attachment's markdown link is appended to the outgoing
 	// message body so the server-side rendering stays unchanged.
-	type Attachment = { id: string; filename: string; url: string; mime: string; size: number };
+	type Attachment = { id: string; filename: string; url: string; mime: string; size: number; uploading?: boolean };
 	let attachments = $state<Attachment[]>([]);
 
 	// Scroll state
@@ -383,6 +384,10 @@
 		// at least one of the two so we don't post empty rows.
 		if (!text && attachments.length === 0) return;
 		if (sending) return;
+		if (attachments.some(a => a.uploading)) {
+			toasts.add('Wait for image upload to finish', 'info');
+			return;
+		}
 		unlockAudio();
 		sending = true;
 
@@ -437,6 +442,19 @@
 			textDraft = text; // restore
 		} finally {
 			sending = false;
+		}
+	}
+
+	function handlePaste(e: ClipboardEvent) {
+		const items = Array.from(e.clipboardData?.items ?? []);
+		const imageFiles = items
+			.filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+			.map((it) => it.getAsFile())
+			.filter((f): f is File => f !== null);
+		if (imageFiles.length === 0) return; // let default paste happen
+		e.preventDefault();
+		for (const f of imageFiles) {
+			void uploadOneFile(f);
 		}
 	}
 
@@ -518,56 +536,69 @@
 			}
 		];
 
-		const resp = await fetch(resolve('/api/chat/stream'), {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				message: messageBody,
-				thread: activeThread,
-				target_repo: selectedRepo
-			})
-		});
-		if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
-
-		const reader = resp.body.getReader();
-		const decoder = new TextDecoder('utf-8');
-		let buf = '';
-		let assembled = '';
+		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 		let errored = false;
+		let streamCompleteOk = false;
 
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			buf += decoder.decode(value, { stream: true });
-			let sep: number;
-			while ((sep = buf.indexOf('\n\n')) !== -1) {
-				const raw = buf.slice(0, sep);
-				buf = buf.slice(sep + 2);
-				const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
-				if (!dataLine) continue;
-				try {
-					const evt = JSON.parse(dataLine.slice(6)) as
-						| { type: 'token'; text: string }
-						| { type: 'done'; provider_used: string; model_used: string }
-						| { type: 'error'; message: string };
-					if (evt.type === 'token') {
-						assembled += evt.text;
-						messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
-						if (userAtBottom) {
-							queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
-						}
-					} else if (evt.type === 'done') {
-						upsertThreadTier_local(evt.model_used);
-					} else if (evt.type === 'error') {
-						errored = true;
-						toasts.add(`LLM stream failed: ${evt.message}`, 'error');
-						messages = messages.map((m) =>
-							m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
-						);
-					}
-				} catch {
-					/* skip malformed */
+		try {
+			const resp = await fetch(resolve('/api/chat/stream'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					message: messageBody,
+					thread: activeThread,
+					target_repo: selectedRepo
+				})
+			});
+			if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
+
+			reader = resp.body.getReader();
+			const decoder = new TextDecoder('utf-8');
+			let buf = '';
+			let assembled = '';
+
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) {
+					streamCompleteOk = true;
+					break;
 				}
+				buf += decoder.decode(value, { stream: true });
+				let sep: number;
+				while ((sep = buf.indexOf('\n\n')) !== -1) {
+					const raw = buf.slice(0, sep);
+					buf = buf.slice(sep + 2);
+					const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
+					if (!dataLine) continue;
+					try {
+						const evt = JSON.parse(dataLine.slice(6)) as
+							| { type: 'token'; text: string }
+							| { type: 'done'; provider_used: string; model_used: string }
+							| { type: 'error'; message: string };
+						if (evt.type === 'token') {
+							assembled += evt.text;
+							messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
+							if (userAtBottom) {
+								queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+							}
+						} else if (evt.type === 'done') {
+							upsertThreadTier_local(evt.model_used);
+						} else if (evt.type === 'error') {
+							errored = true;
+							toasts.add(`LLM stream failed: ${evt.message}`, 'error');
+							messages = messages.map((m) =>
+								m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
+							);
+						}
+					} catch {
+						/* skip malformed */
+					}
+				}
+			}
+		} finally {
+			if (reader) reader.cancel().catch(() => {});
+			if (errored || !streamCompleteOk) {
+				messages = messages.filter((m) => m.id !== STREAM_ID);
 			}
 		}
 
@@ -999,6 +1030,18 @@
 	// drag-and-drop handler. Errors surface via toast; success is silent
 	// because the chip itself is the success indicator.
 	async function uploadOneFile(file: File): Promise<void> {
+		const tempId = crypto.randomUUID();
+		attachments = [
+			...attachments,
+			{
+				id: tempId,
+				filename: file.name,
+				url: '',
+				mime: file.type,
+				size: file.size,
+				uploading: true
+			}
+		];
 		const fd = new FormData();
 		fd.append('file', file);
 		fd.append('target_repo', selectedRepo);
@@ -1014,18 +1057,21 @@
 			}
 			const body = await r.json();
 			if (body.url) {
-				attachments = [
-					...attachments,
-					{
-						id: body.filename || crypto.randomUUID(),
-						filename: file.name,
-						url: body.url,
-						mime: body.mime || file.type,
-						size: body.size || file.size
-					}
-				];
+				attachments = attachments.map((a) =>
+					a.id === tempId
+						? {
+								...a,
+								id: body.filename || tempId,
+								url: body.url,
+								mime: body.mime || file.type,
+								size: body.size || file.size,
+								uploading: false
+							}
+						: a
+				);
 			}
 		} catch (err) {
+			attachments = attachments.filter((a) => a.id !== tempId);
 			toasts.add(`Upload failed: ${err instanceof Error ? err.message : 'unknown'}`, 'error');
 		}
 	}
@@ -1761,7 +1807,7 @@
 		     QUIET HEADER
 		     ═════════════════════════════════════════════════════════════════ -->
 		<header
-			class="relative z-10 flex shrink-0 items-center justify-between px-4 pt-3 pb-2 select-none"
+			class="relative z-50 flex shrink-0 items-center justify-between px-4 pt-3 pb-2 select-none"
 		>
 			<div class="flex items-center gap-1.5">
 				<!-- Sidebar toggle button -->
@@ -2160,19 +2206,26 @@
 							<div
 								class="group relative flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 py-1 pr-1 pl-2 text-xs text-zinc-200 shadow-sm"
 							>
-								{#if att.mime?.startsWith('image/')}
-									<img
-										src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
-										alt={att.filename}
-										class="h-8 w-8 shrink-0 rounded-md object-cover"
-									/>
-								{:else}
-									<div
-										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-zinc-500"
-									>
-										<Paperclip size={14} />
-									</div>
-								{/if}
+								<div class="relative h-8 w-8 shrink-0">
+									{#if att.mime?.startsWith('image/') && att.url}
+										<img
+											src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
+											alt={att.filename}
+											class="h-full w-full rounded-md object-cover"
+										/>
+									{:else}
+										<div
+											class="flex h-full w-full items-center justify-center rounded-md bg-zinc-800 text-zinc-500"
+										>
+											<Paperclip size={14} />
+										</div>
+									{/if}
+									{#if att.uploading}
+										<div class="absolute inset-0 flex items-center justify-center rounded-md bg-zinc-950/60 backdrop-blur-sm">
+											<Loader2 class="animate-spin text-white" size={14} />
+										</div>
+									{/if}
+								</div>
 								<div class="flex flex-col leading-tight">
 									<span class="max-w-[160px] truncate font-medium text-zinc-200"
 										>{att.filename}</span
@@ -2203,6 +2256,7 @@
 							bind:this={textareaEl}
 							bind:value={textDraft}
 							onkeypress={handleKey}
+							onpaste={handlePaste}
 							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
 							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
 							rows="2"
@@ -2294,10 +2348,11 @@
 						<button
 							type="button"
 							onclick={sendMessage}
-							disabled={(!textDraft.trim() && !imageMode) ||
+							disabled={(!textDraft.trim() && !imageMode && attachments.length === 0) ||
 								sending ||
 								composerMode === 'recording' ||
-								composerMode === 'talkback'}
+								composerMode === 'talkback' ||
+								attachments.some((a) => a.uploading)}
 							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
 							aria-label="Send Message"
 							title="Send (Enter)"
