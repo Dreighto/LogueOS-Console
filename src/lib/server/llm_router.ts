@@ -56,9 +56,13 @@ const GEMINI_FIRST_ORDER: Provider[] = ['gemini', 'anthropic', 'openai', 'ollama
 // When operator pins Anthropic explicitly via the model picker.
 const ANTHROPIC_FIRST_ORDER: Provider[] = ['anthropic', 'gemini', 'openai', 'ollama'];
 
+export type ContentPart =
+	| { type: 'text'; text: string }
+	| { type: 'image'; mimeType: string; base64: string };
+
 export interface RouterMessage {
 	role: 'user' | 'assistant';
-	content: string;
+	content: string | ContentPart[];
 }
 
 export interface RouterResult {

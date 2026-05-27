@@ -7,9 +7,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { ContentPart } from '../llm_router';
+
 export interface ProviderMessage {
 	role: 'user' | 'assistant';
-	content: string;
+	content: string | ContentPart[];
 }
 
 export interface ProviderChatOptions {
@@ -110,7 +112,25 @@ export function isAvailable(): boolean {
 
 interface GeminiContent {
 	role: 'user' | 'model';
-	parts: { text: string }[];
+	parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
+}
+
+function roleMessageToGemini(msg: ProviderMessage): GeminiContent {
+	if (typeof msg.content === 'string') {
+		return {
+			role: msg.role === 'user' ? 'user' : 'model',
+			parts: [{ text: msg.content }]
+		};
+	}
+	return {
+		role: msg.role === 'user' ? 'user' : 'model',
+		parts: msg.content.map(part => {
+			if (part.type === 'text') {
+				return { text: part.text };
+			}
+			return { inlineData: { mimeType: part.mimeType, data: part.base64 } };
+		})
+	};
 }
 
 interface GeminiResponse {
@@ -144,10 +164,7 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		urlKey = `?key=${key}`;
 	}
 
-	const contents: GeminiContent[] = options.messages.map((m) => ({
-		role: m.role === 'user' ? 'user' : 'model',
-		parts: [{ text: m.content }]
-	}));
+	const contents: GeminiContent[] = options.messages.map(roleMessageToGemini);
 
 	const resp = await fetch(`${GEMINI_BASE}/models/${options.model}:generateContent${urlKey}`, {
 		method: 'POST',
@@ -225,10 +242,7 @@ export async function* streamChat(options: ProviderChatOptions): AsyncGenerator<
 	}
 	if (!urlKey) urlKey = '?alt=sse';
 
-	const contents: GeminiContent[] = options.messages.map((m) => ({
-		role: m.role === 'user' ? 'user' : 'model',
-		parts: [{ text: m.content }]
-	}));
+	const contents: GeminiContent[] = options.messages.map(roleMessageToGemini);
 
 	const resp = await fetch(
 		`${GEMINI_BASE}/models/${options.model}:streamGenerateContent${urlKey}`,

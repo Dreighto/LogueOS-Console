@@ -20,6 +20,7 @@ import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { routeChatStream } from '$lib/server/llm_router';
 import type { RouterMessage } from '$lib/server/llm_router';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
+import { buildMultimodalContent } from '$lib/server/multimodal';
 
 function buildSystemPrompt(ctx: {
 	targetRepo: string;
@@ -107,15 +108,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 	}
 	const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory).slice(0, -1);
-	const routerMessages: RouterMessage[] = [
-		...slice
-			.filter((r) => r.sender !== 'system')
-			.map((r) => ({
-				role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
-				content: r.message
-			})),
-		{ role: 'user' as const, content: message.trim() }
-	].slice(-20);
+	const routerMessages: RouterMessage[] = slice
+		.filter((r) => r.sender !== 'system')
+		.map((r) => ({
+			role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
+			content: r.message
+		}));
+	const lastContent = await buildMultimodalContent(message.trim());
+	routerMessages.push({ role: 'user', content: lastContent });
+
+	// Cap at last 20
+	if (routerMessages.length > 20) {
+		routerMessages.splice(0, routerMessages.length - 20);
+	}
 
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream<Uint8Array>({

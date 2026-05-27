@@ -1,9 +1,11 @@
 // Ollama provider — local socket, no auth.
 // Used for the 'local' tier (operator override only).
 
+import type { ContentPart } from '../llm_router';
+
 export interface ProviderMessage {
 	role: 'user' | 'assistant';
-	content: string;
+	content: string | ContentPart[];
 }
 
 export interface ProviderChatOptions {
@@ -32,6 +34,19 @@ interface OllamaResponse {
 	error?: string;
 }
 
+function roleMessageToOllama(msg: ProviderMessage) {
+	if (typeof msg.content === 'string') {
+		return { role: msg.role, content: msg.content };
+	}
+	const textParts = msg.content.filter(p => p.type === 'text').map(p => (p as {type:'text', text:string}).text).join('\n');
+	const images = msg.content.filter(p => p.type === 'image').map(p => (p as {type:'image', base64:string}).base64);
+	return {
+		role: msg.role,
+		content: textParts,
+		...(images.length > 0 ? { images } : {})
+	};
+}
+
 export async function chat(options: ProviderChatOptions): Promise<ProviderChatResult> {
 	const resp = await fetch(`${OLLAMA_BASE.replace(/\/$/, '')}/api/chat`, {
 		method: 'POST',
@@ -39,8 +54,8 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		body: JSON.stringify({
 			model: options.model,
 			messages: options.system
-				? [{ role: 'system', content: options.system }, ...options.messages]
-				: options.messages,
+				? [{ role: 'system', content: options.system }, ...options.messages.map(roleMessageToOllama)]
+				: options.messages.map(roleMessageToOllama),
 			stream: false,
 			options: { num_predict: 4096, temperature: 0.7 }
 		}),

@@ -2,9 +2,11 @@
 // No fallback key: MIRU_ROUTING_KEY IS the subscription path.
 // On 402 billing error, caller should rotate credential (not downgrade tier).
 
+import type { ContentPart } from '../llm_router';
+
 export interface ProviderMessage {
 	role: 'user' | 'assistant';
-	content: string;
+	content: string | ContentPart[];
 }
 
 export interface ProviderChatOptions {
@@ -12,6 +14,24 @@ export interface ProviderChatOptions {
 	model: string;
 	system?: string;
 	signal?: AbortSignal;
+}
+
+function roleMessageToAnthropic(msg: ProviderMessage) {
+	if (typeof msg.content === 'string') {
+		return { role: msg.role, content: msg.content };
+	}
+	return {
+		role: msg.role,
+		content: msg.content.map(part => {
+			if (part.type === 'text') {
+				return { type: 'text', text: part.text };
+			}
+			return {
+				type: 'image',
+				source: { type: 'base64', media_type: part.mimeType, data: part.base64 }
+			};
+		})
+	};
 }
 
 export interface ProviderChatResult {
@@ -50,7 +70,7 @@ export async function chat(options: ProviderChatOptions): Promise<ProviderChatRe
 		body: JSON.stringify({
 			model: options.model,
 			max_tokens: 4096,
-			messages: options.messages,
+			messages: options.messages.map(roleMessageToAnthropic),
 			...(options.system ? { system: options.system } : {})
 		}),
 		signal: options.signal
@@ -102,7 +122,7 @@ export async function* streamChat(options: ProviderChatOptions): AsyncGenerator<
 		body: JSON.stringify({
 			model: options.model,
 			max_tokens: 4096,
-			messages: options.messages,
+			messages: options.messages.map(roleMessageToAnthropic),
 			stream: true,
 			...(options.system ? { system: options.system } : {})
 		}),
