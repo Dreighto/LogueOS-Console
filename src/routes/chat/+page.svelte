@@ -504,10 +504,10 @@
 		attachments = [];
 		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
 
-		// Routing decision (mirrors /api/chat server logic): if the message
-		// looks like an explicit worker dispatch or it's an image-gen request,
-		// use the non-streaming /api/chat endpoint. Otherwise stream tokens
-		// via /api/chat/stream so the reply renders live.
+		// Routing decision: if the message looks like an explicit worker
+		// dispatch or it's an image-gen request, use the non-streaming
+		// /api/chat endpoint. Otherwise stream tokens via the SDK (which
+		// hits /api/chat/sdk-stream — see runStreamingSend below).
 		const lower = messageBody.toLowerCase();
 		const isDispatch = lower.includes('@cc') || lower.includes('@agy') || lower.includes('@gemini');
 		const useStream = !isDispatch && !isGenImage;
@@ -609,11 +609,11 @@
 		}
 	}
 
-	// Streaming send — opens an SSE connection to /api/chat/stream, inserts
-	// a placeholder AGY bubble, then appends token text as it arrives. The
-	// server persists the final assembled reply to DB before closing the
-	// stream, so pollMessages() at the end reconciles the optimistic bubble
-	// with the persisted row (replaces it with the canonical numeric-id row).
+	// Streaming send via @ai-sdk/svelte's Chat against /api/chat/sdk-stream.
+	// Inserts a placeholder assistant bubble (sender derived from active
+	// provider), the SDK transport handles the token stream, and the server's
+	// onFinish callback persists the canonical row. pollMessages() at the
+	// end reconciles the placeholder against the canonical numeric-id row.
 	// Mirror SDK chat's streaming text into the placeholder bubble so the rest
 	// of the chat surface keeps a single render path off `messages`. While a
 	// stream is active, the last assistant message in chat.messages carries
@@ -1463,10 +1463,10 @@
 			usage: '/clear',
 			description: 'Reset conversation context (server slices history at this marker)',
 			run: async () => {
-				// Persist a system marker — /api/chat and /api/chat/stream slice
-				// thread history at the latest `--- NEW CONVERSATION ---` line,
-				// so this drops the LLM's working memory without deleting prior
-				// messages from the operator's view.
+				// Persist a system marker — /api/chat and /api/chat/sdk-stream
+				// slice thread history at the latest `--- NEW CONVERSATION ---`
+				// line, so this drops the LLM's working memory without deleting
+				// prior messages from the operator's view.
 				await fetch(resolve('/api/chat'), {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
