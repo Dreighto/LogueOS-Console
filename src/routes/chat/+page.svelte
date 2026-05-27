@@ -65,6 +65,12 @@
 	let textDraft = $state('');
 	let selectedRepo = $state('LogueOS-Console');
 	let currentTier = $state<Tier>('chat');
+	// Operator's explicit tier override, separate from the classifier-driven
+	// `currentTier`. We need this for chip display: when the operator picks
+	// e.g. Local, the server keeps `current_tier='chat'` (classifier untouched)
+	// but `operator_override='local'`. The chip should reflect what the
+	// operator picked, not what the classifier thinks.
+	let operatorOverride = $state<Tier | null>(null);
 	let lastModelUsed = $state('');
 	let sending = $state(false);
 
@@ -302,6 +308,7 @@
 			if (r.ok) {
 				const b = await r.json();
 				if (b.current_tier) currentTier = b.current_tier as Tier;
+				operatorOverride = (b.operator_override ?? null) as Tier | null;
 				providerOverride = (b.provider_override ?? null) as ProviderPref;
 				lastModelUsed = b.last_model_used || '';
 			}
@@ -370,11 +377,19 @@
 		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: 'local' }
 	];
 
+	// Chip-display tier: prefer the operator's explicit override over the
+	// classifier-driven `currentTier`. Server keeps current_tier untouched
+	// when an override is set (override doesn't retrain the classifier),
+	// so without this we'd display the classifier's tier even though the
+	// operator manually chose a different one.
+	const effectiveTier = $derived(operatorOverride ?? currentTier);
 	const selectedModelChoice = $derived(
 		MODEL_CHOICES.find(
 			(c) =>
-				(c.tier ?? null) === (currentTier === 'chat' && !providerOverride ? null : currentTier) &&
-				c.provider === providerOverride
+				(c.tier ?? null) ===
+					(effectiveTier === 'chat' && !providerOverride && !operatorOverride
+						? null
+						: effectiveTier) && c.provider === providerOverride
 		) ?? MODEL_CHOICES[0]
 	);
 
@@ -451,6 +466,7 @@
 			if (resp.ok) {
 				const body = await resp.json();
 				if (body.current_tier) currentTier = body.current_tier as Tier;
+				operatorOverride = (body.operator_override ?? null) as Tier | null;
 				providerOverride = (body.provider_override ?? null) as ProviderPref;
 				await loadTier(activeThread);
 				toasts.add(`Model set to ${choice.label}`, 'success');
