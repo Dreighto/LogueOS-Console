@@ -68,6 +68,12 @@
 	let sending = $state(false);
 
 	let showModelOverrideModal = $state(false);
+
+	// Workspace-context editor (task #22 — Projects-light borrow).
+	let workspaceContextOpen = $state(false);
+	let workspaceContextDraft = $state('');
+	let workspaceContextSaving = $state(false);
+	const WORKSPACE_CONTEXT_MAX = 4000;
 	let sidebarOpen = $state(false);
 	let imageMode = $state(false);
 
@@ -355,6 +361,48 @@
 				c.provider === providerOverride
 		) ?? MODEL_CHOICES[0]
 	);
+
+	async function openWorkspaceContextEditor() {
+		closeAllPopovers();
+		workspaceContextOpen = true;
+		workspaceContextDraft = '';
+		try {
+			const r = await fetch(
+				resolve('/api/chat/workspaces/' + encodeURIComponent(selectedRepo) + '/context')
+			);
+			if (r.ok) {
+				const body = (await r.json()) as { addendum?: string };
+				workspaceContextDraft = body.addendum ?? '';
+			}
+		} catch {
+			/* network error — operator sees empty editor */
+		}
+	}
+
+	async function saveWorkspaceContext() {
+		if (workspaceContextSaving) return;
+		workspaceContextSaving = true;
+		try {
+			const r = await fetch(
+				resolve('/api/chat/workspaces/' + encodeURIComponent(selectedRepo) + '/context'),
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ addendum: workspaceContextDraft })
+				}
+			);
+			if (r.ok) {
+				toasts.add(`Context saved for ${selectedRepo}`, 'success');
+				workspaceContextOpen = false;
+			} else {
+				toasts.add('Save failed', 'error');
+			}
+		} catch {
+			toasts.add('Save failed — network error', 'error');
+		} finally {
+			workspaceContextSaving = false;
+		}
+	}
 
 	async function setModelChoice(choice: ModelChoice) {
 		showModelOverrideModal = false;
@@ -2058,6 +2106,17 @@
 									{/if}
 								</button>
 							{/each}
+							<!-- Projects-light: edit per-workspace system-prompt addendum.
+							     Auto-injects into every chat send for this workspace.
+							     Task #22. -->
+							<button
+								type="button"
+								onclick={() => openWorkspaceContextEditor()}
+								class="mt-1 flex w-full items-center gap-2 border-t border-zinc-800/50 px-3 py-2 text-left text-[11px] text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-300"
+							>
+								<Edit3 size={11} aria-hidden="true" />
+								<span>Edit context for {selectedWorkspace?.display_name ?? selectedRepo}</span>
+							</button>
 						</div>
 					{/if}
 				</div>
@@ -2601,6 +2660,71 @@
 		</div>
 	</main>
 </div>
+
+{#if workspaceContextOpen}
+	<div
+		class="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) workspaceContextOpen = false;
+		}}
+		role="presentation"
+	>
+		<div
+			class="flex w-full max-w-[520px] flex-col gap-3 rounded-t-2xl border border-zinc-800 bg-[#0e0e0e] p-4 shadow-2xl sm:rounded-2xl"
+			style="padding-bottom: max(1rem, env(safe-area-inset-bottom));"
+		>
+			<div class="flex items-center gap-2">
+				<Edit3 size={14} class="text-purple-400" aria-hidden="true" />
+				<div class="flex-1 font-mono text-[11px] tracking-wider text-zinc-400 uppercase">
+					Workspace context · {selectedWorkspace?.display_name ?? selectedRepo}
+				</div>
+				<button
+					type="button"
+					onclick={() => (workspaceContextOpen = false)}
+					class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-white"
+					aria-label="Close"
+				>
+					<X size={14} aria-hidden="true" />
+				</button>
+			</div>
+			<p class="text-[12px] text-zinc-500">
+				Auto-injects into every chat send within
+				<span class="font-mono text-zinc-300">{selectedRepo}</span>. Keep it focused —
+				project intent, key files, gotchas. Saves retyping every new thread.
+			</p>
+			<textarea
+				bind:value={workspaceContextDraft}
+				maxlength={WORKSPACE_CONTEXT_MAX}
+				rows="8"
+				placeholder="e.g. Chat surface at src/routes/chat/+page.svelte. SDK endpoint /api/chat/sdk-stream. Test framework Playwright."
+				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[13px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none"
+				style="min-height: 160px;"
+			></textarea>
+			<div class="flex items-center justify-between gap-2">
+				<div class="font-mono text-[10px] text-zinc-600">
+					{workspaceContextDraft.length} / {WORKSPACE_CONTEXT_MAX}
+				</div>
+				<div class="flex items-center gap-1.5">
+					<button
+						type="button"
+						onclick={() => (workspaceContextOpen = false)}
+						class="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 font-mono text-[10px] tracking-wider text-zinc-400 uppercase transition-colors hover:bg-zinc-900 hover:text-white"
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						onclick={saveWorkspaceContext}
+						disabled={workspaceContextSaving}
+						class="rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 px-3 py-1.5 font-mono text-[10px] tracking-wider text-white uppercase shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
+					>
+						{workspaceContextSaving ? 'Saving…' : 'Save'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	@keyframes fade-in {
