@@ -11,9 +11,7 @@
 	//   - 100% wired controls (Mic dictation, Paperclip uploads, Sparkles image mode, Talkback loop).
 
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import { page } from '$app/state';
 	import { base, resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
 	import {
@@ -189,10 +187,12 @@
 			})
 		})
 	});
-	// The placeholder bubble's id while a stream is active — null when idle.
-	// Used by the $effect below to mirror chat.messages into the local
-	// `messages` feed so the rest of the surface keeps a single render path.
-	let streamPlaceholderId = $state<number | null>(null);
+	// While an SDK stream is active, this carries the placeholder bubble's
+	// id AND the owning thread's id. Tracking the thread is critical: if the
+	// operator switches threads mid-stream, pollMessages for the NEW thread
+	// must NOT be suppressed — only the old thread's poll race needs gating.
+	// Per CR review on PR #129.
+	let streamState = $state<{ placeholderId: number; threadId: string } | null>(null);
 
 	// Pending attachments — uploads stage here as removable chips above the
 	// composer rather than getting injected as markdown into the textarea.
@@ -379,7 +379,9 @@
 		// stream's own finally{} block calls pollMessages once after the
 		// stream completes, so the canonical row lands then. Audit 2026-05-27
 		// caught this race live as "operator's send disappears from the UI".
-		if (streamPlaceholderId !== null && requestedThread === activeThread) return;
+		// Only suppress when the in-flight stream is for THIS same thread.
+		// Switching threads mid-stream must allow the new thread's poll to land.
+		if (streamState && streamState.threadId === requestedThread) return;
 		try {
 			const r = await fetch(
 				resolve('/api/chat') + `?thread=${encodeURIComponent(requestedThread)}`
@@ -622,7 +624,7 @@
 	// effect_update_depth_exceeded guard. We only want the effect to re-run
 	// when sdkChat.messages changes, not when our own write lands.
 	$effect(() => {
-		if (streamPlaceholderId === null) return;
+		if (streamState === null) return;
 		const list = sdkChat.messages;
 		const lastIdx = list.length - 1;
 		if (lastIdx < 0) return;
@@ -633,7 +635,7 @@
 			.map((p) => (p as { type: 'text'; text: string }).text)
 			.join('');
 		if (!txt) return;
-		const id = streamPlaceholderId;
+		const id = streamState.placeholderId;
 		untrack(() => {
 			messages = messages.map((m) => (m.id === id ? { ...m, message: txt } : m));
 		});
@@ -660,7 +662,7 @@
 				timestamp: new Date().toISOString()
 			} as ChatMessage
 		];
-		streamPlaceholderId = STREAM_ID;
+		streamState = { placeholderId: STREAM_ID, threadId: activeThread };
 
 		// Reset SDK chat history before each send — the server assembles the
 		// real context from chat_messages DB. We use sdkChat strictly as a
@@ -681,7 +683,7 @@
 				m.id === STREAM_ID ? { ...m, message: `⚠️ ${msg}` } : m
 			);
 		} finally {
-			streamPlaceholderId = null;
+			streamState = null;
 			if (errored) {
 				messages = messages.filter((m) => m.id !== STREAM_ID);
 			}

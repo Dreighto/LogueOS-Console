@@ -84,7 +84,7 @@
 	<title>Chat (SDK preview) · LogueOS</title>
 </svelte:head>
 
-<div class="relative flex h-[100dvh] flex-col bg-[#050505] text-white">
+<div class="relative flex h-[100dvh] flex-col bg-background text-white">
 	<!-- Radial atmosphere -->
 	<div
 		class="pointer-events-none absolute inset-0 -z-0"
