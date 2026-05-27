@@ -281,10 +281,22 @@
 		}
 	}
 
-	async function pollMessages() {
+	async function pollMessages(forThread?: string) {
+		// Capture the thread the caller intended at the moment of the request.
+		// Without this guard a slow in-flight poll for the previous thread can
+		// land after switchThread() has flipped activeThread and clobber the
+		// new thread's (empty) messages with the previous thread's content —
+		// exact symptom the operator reported: "old thread shows up instead
+		// of a clean slate."
+		const requestedThread = forThread ?? activeThread;
 		try {
-			const r = await fetch(resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`);
+			const r = await fetch(
+				resolve('/api/chat') + `?thread=${encodeURIComponent(requestedThread)}`
+			);
 			if (!r.ok) return;
+			// Drop the response if the operator switched threads while the
+			// fetch was in flight. The 3s poll will re-fire with the new thread.
+			if (requestedThread !== activeThread) return;
 			const b = await r.json();
 			const newMessages: ChatMessage[] = b.messages || [];
 			if (
@@ -1086,7 +1098,9 @@
 		activeThread = threadId;
 		sidebarOpen = false;
 		messages = [];
-		await pollMessages();
+		// Pass the target thread explicitly so pollMessages can drop the
+		// response if another switch happens before this fetch returns.
+		await pollMessages(threadId);
 		await loadTier(threadId);
 	}
 
@@ -1106,23 +1120,67 @@
 		);
 	}
 
-	function newThread() {
+	// Resolve a guaranteed-clean slug for a new thread. Checks both the local
+	// sidebar list AND the DB for residual messages — covers three cases the
+	// operator hit:
+	//   (1) name collides with an active thread → suffix -2, -3, ...
+	//   (2) name collides with an archived-and-hidden thread → suffix
+	//   (3) name collides with orphan chat_messages rows left behind by a
+	//       Clear-All / Delete that didn't fully cascade → suffix
+	// Without this, switchThread() would re-open the existing/orphan thread
+	// and pollMessages() would surface the old content — which is exactly
+	// what the operator described as "the old thread shows up instead of a
+	// clean slate."
+	async function findUniqueSlug(baseSlug: string): Promise<string> {
+		const localUsed = new Set(threads.map((t) => t.thread_id));
+		let slug = baseSlug;
+		let i = 1;
+		while (i < 200) {
+			if (!localUsed.has(slug)) {
+				// Probe the DB — orphan rows survive a failed delete.
+				try {
+					const r = await fetch(
+						resolve('/api/chat') + `?thread=${encodeURIComponent(slug)}&limit=1`
+					);
+					if (r.ok) {
+						const b = await r.json();
+						if (!Array.isArray(b.messages) || b.messages.length === 0) return slug;
+					} else {
+						return slug; // assume free if probe failed
+					}
+				} catch {
+					return slug; // offline → assume free
+				}
+			}
+			i++;
+			slug = `${baseSlug}-${i}`;
+		}
+		return `${baseSlug}-${Date.now()}`; // safety net — shouldn't reach here
+	}
+
+	async function newThread() {
 		const raw = window.prompt('New thread name (letters, numbers, dashes):');
 		if (!raw) return;
-		const slug = slugifyThreadName(raw);
-		if (!threads.some((t) => t.thread_id === slug)) {
-			threads = [
-				{
-					thread_id: slug,
-					title: raw.trim() || slug,
-					archived: false,
-					pinned: false,
-					message_count: 0,
-					latest_ts: ''
-				},
-				...threads
-			];
+		const baseSlug = slugifyThreadName(raw);
+		const slug = await findUniqueSlug(baseSlug);
+		// When the slug got suffixed (collision), the sidebar title needs to
+		// reflect the unique slug too — otherwise the operator sees two rows
+		// with the same visible name and can't tell which is which.
+		const title = slug === baseSlug ? raw.trim() || slug : slug;
+		if (slug !== baseSlug) {
+			toasts.add(`"${baseSlug}" was taken — created "${slug}" for a clean slate.`, 'info');
 		}
+		threads = [
+			{
+				thread_id: slug,
+				title,
+				archived: false,
+				pinned: false,
+				message_count: 0,
+				latest_ts: ''
+			},
+			...threads
+		];
 		void switchThread(slug);
 	}
 
@@ -1291,24 +1349,27 @@
 			usage: '/new <name>',
 			description: 'Create + switch to a new thread',
 			run: async (rest) => {
-				const slug = slugifyThreadName(rest);
-				if (!slug || slug === 'thread') {
+				const baseSlug = slugifyThreadName(rest);
+				if (!baseSlug || baseSlug === 'thread') {
 					toasts.add('Thread name required: /new my-feature', 'error');
 					return;
 				}
-				if (!threads.some((t) => t.thread_id === slug)) {
-					threads = [
-						{
-							thread_id: slug,
-							title: rest.trim() || slug,
-							archived: false,
-							pinned: false,
-							message_count: 0,
-							latest_ts: ''
-						},
-						...threads
-					];
+				const slug = await findUniqueSlug(baseSlug);
+				const title = slug === baseSlug ? rest.trim() || slug : slug;
+				if (slug !== baseSlug) {
+					toasts.add(`"${baseSlug}" was taken — created "${slug}" for a clean slate.`, 'info');
 				}
+				threads = [
+					{
+						thread_id: slug,
+						title,
+						archived: false,
+						pinned: false,
+						message_count: 0,
+						latest_ts: ''
+					},
+					...threads
+				];
 				await switchThread(slug);
 				toasts.add(`Switched to thread "${slug}"`, 'success');
 			}
