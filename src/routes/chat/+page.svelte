@@ -1436,6 +1436,22 @@
 		}
 	}
 
+	async function togglePin(t: { thread_id: string; pinned: boolean }) {
+		threadMenuOpenFor = null;
+		const pinned = !t.pinned;
+		threads = threads.map((x) => (x.thread_id === t.thread_id ? { ...x, pinned } : x));
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ pinned })
+			});
+			toasts.add(pinned ? `Pinned "${t.thread_id}"` : `Unpinned "${t.thread_id}"`, 'success');
+		} catch {
+			toasts.add('Pin update failed', 'error');
+		}
+	}
+
 	async function deleteThreadById(t: { thread_id: string; archived: boolean }) {
 		threadMenuOpenFor = null;
 		if (t.thread_id === 'default') {
@@ -1813,7 +1829,10 @@
 				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">No sessions yet</div>
 			{:else}
 				<div class="space-y-1">
-					{#each threads.filter((t) => showArchived || !t.archived) as t (t.thread_id)}
+					{#each threads
+						.filter((t) => showArchived || !t.archived)
+						.slice()
+						.sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)) as t (t.thread_id)}
 						<div class="relative">
 							{#if renamingFor === t.thread_id}
 								<!-- Rename input replaces the row in-place. -->
@@ -1900,6 +1919,14 @@
 									data-popover
 									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-800 bg-[#0e0e0e] py-1 shadow-2xl"
 								>
+									<button
+										type="button"
+										onclick={() => togglePin(t)}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900"
+									>
+										<Pin size={11} class="text-zinc-500" />
+										<span>{t.pinned ? 'Unpin' : 'Pin to top'}</span>
+									</button>
 									<button
 										type="button"
 										onclick={() => openRename(t)}
