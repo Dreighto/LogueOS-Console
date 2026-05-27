@@ -15,7 +15,7 @@ import type { Tier } from './phase_classifier';
 
 export type { Tier };
 
-export type ProviderPreference = 'anthropic' | 'gemini' | null;
+export type ProviderPreference = 'anthropic' | 'gemini' | 'local' | null;
 
 export interface ThreadState {
 	thread_id: string;

@@ -288,7 +288,7 @@
 		}
 	}
 
-	type ProviderPref = 'anthropic' | 'gemini' | null;
+	type ProviderPref = 'anthropic' | 'gemini' | 'local' | null;
 	let providerOverride = $state<ProviderPref>(null);
 
 	// Concrete model picker — operator picks a specific model and we
@@ -345,7 +345,7 @@
 			tier: 'deep',
 			provider: 'gemini'
 		},
-		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: null }
+		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: 'local' }
 	];
 
 	const selectedModelChoice = $derived(
@@ -701,7 +701,11 @@
 		// matches what the SDK endpoint will persist. pollMessages reconciles
 		// to the canonical DB row after the stream completes.
 		const placeholderSender: ChatMessage['sender'] =
-			providerOverride === 'anthropic' ? 'cc' : 'agy';
+			providerOverride === 'anthropic'
+				? 'cc'
+				: providerOverride === 'local'
+					? 'local'
+					: 'agy';
 		messages = [
 			...messages,
 			{
@@ -2159,6 +2163,10 @@
 				</div>
 			{:else}
 				{#each messages as m (m.id)}
+					<!-- Skip rendering the empty stream-placeholder bubble while the
+					     thinking-dots block represents it. Once any token text
+					     arrives, m.message is non-empty and the bubble re-renders. -->
+					{#if !(streamState?.placeholderId === m.id && m.message === '')}
 					<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}">
 						<!-- Custom Labeling / Bubble Headers -->
 						{#if m.sender !== 'operator'}
@@ -2224,6 +2232,7 @@
 							</div>
 						</div>
 					</div>
+					{/if}
 				{/each}
 
 				<!-- Thinking indicator — renders an AGY-style bubble with three
@@ -2245,7 +2254,7 @@
 							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
 						>
 							<Sparkles size={10} class="shrink-0 text-cyan-400" />
-							<span>{providerOverride === 'anthropic' ? 'CC' : 'AGY'}</span>
+							<span>{providerOverride === 'anthropic' ? 'CC' : providerOverride === 'local' ? 'LOCAL' : 'AGY'}</span>
 						</div>
 						<div
 							class="flex items-center gap-1.5 rounded-2xl border border-zinc-900 bg-zinc-950/40 px-4 py-3.5"

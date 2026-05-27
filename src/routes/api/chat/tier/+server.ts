@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 const VALID_TIERS: Tier[] = ['chat', 'planning', 'deep', 'local'];
-const VALID_PROVIDERS: ProviderPreference[] = ['anthropic', 'gemini'];
+const VALID_PROVIDERS: ProviderPreference[] = ['anthropic', 'gemini', 'local'];
 
 export const PUT: RequestHandler = async ({ request }) => {
 	try {
