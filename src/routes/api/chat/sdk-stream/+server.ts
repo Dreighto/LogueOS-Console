@@ -339,7 +339,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			? 'anthropic'
 			: threadState.provider_override === 'gemini'
 				? 'google'
-				: null;
+				: threadState.provider_override === 'local'
+					? 'local'
+					: null;
 	// Tier 'local' implicitly selects the local provider unless the operator
 	// has explicitly overridden. Lets the existing "Local (Ollama)" model
 	// picker option route through Ollama without per-thread setup.
@@ -380,7 +382,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				.map((p) => (p as { type: 'text'; text: string }).text)
 				.join('');
 			if (replyText) {
-				const senderLabel = provider === 'anthropic' ? 'cc' : 'agy';
+				const senderLabel: 'cc' | 'agy' | 'local' =
+					provider === 'anthropic' ? 'cc' : provider === 'local' ? 'local' : 'agy';
 				addChatMessage(senderLabel, replyText, null, null, null, 'sent', threadId);
 			}
 			// Persist model_used so the picker chip can show "Claude Haiku 4.5"

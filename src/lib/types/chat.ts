@@ -8,7 +8,7 @@ export interface InteractiveAction {
 
 export interface ChatMessage {
 	id: number;
-	sender: 'operator' | 'cc' | 'agy' | 'hermes' | 'system';
+	sender: 'operator' | 'cc' | 'agy' | 'local' | 'hermes' | 'system';
 	message: string;
 	trace_id: string | null;
 	ticket_id: string | null;
