@@ -260,6 +260,7 @@
 	// Draft Persist Effect
 	// ─────────────────────────────────────────────────────────────────────
 	let draftDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let draftPersistFailing = $state(false); // shown as a subtle inline indicator
 	$effect(() => {
 		const text = textDraft;
 		if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
@@ -269,7 +270,35 @@
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ body: text })
-			}).catch(() => {});
+			})
+				.then((r) => {
+					// Surface persistent failures so the operator knows their draft
+					// is in volatile memory only. Previously we swallowed the error
+					// entirely — operator would lose work on tab close without ever
+					// seeing a warning. Audit 2026-05-27.
+					if (!r.ok) {
+						if (!draftPersistFailing) {
+							console.warn('[draft] persist failed:', r.status);
+							toasts.add(
+								`Draft autosave failing (${r.status}) — finish your message before closing the tab.`,
+								'error'
+							);
+							draftPersistFailing = true;
+						}
+					} else if (draftPersistFailing) {
+						draftPersistFailing = false;
+					}
+				})
+				.catch((err) => {
+					if (!draftPersistFailing) {
+						console.warn('[draft] network error:', err);
+						toasts.add(
+							'Draft autosave failing — finish your message before closing the tab.',
+							'error'
+						);
+						draftPersistFailing = true;
+					}
+				});
 		}, 400);
 	});
 
@@ -810,10 +839,28 @@
 			await sdkChat.sendMessage({ text: messageBody });
 		} catch (err) {
 			errored = true;
-			const msg = err instanceof Error ? err.message : 'unknown';
-			toasts.add(`LLM stream failed: ${msg}`, 'error');
+			const rawMsg = err instanceof Error ? err.message : 'unknown';
+			// Classify the error so the operator gets an actionable toast
+			// instead of a generic "LLM stream failed: unknown". Audit
+			// 2026-05-27 — expired OAuth used to look identical to a real outage.
+			const lower = rawMsg.toLowerCase();
+			let toastBody = `LLM stream failed: ${rawMsg}`;
+			if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('expired')) {
+				toastBody = 'Auth expired — log in again (Anthropic/Gemini OAuth).';
+			} else if (
+				lower.includes('credential') ||
+				lower.includes('not configured') ||
+				lower.includes('503')
+			) {
+				toastBody = `Provider unreachable: ${rawMsg}. Check the upstream service or fall back to another provider.`;
+			} else if (lower.includes('429') || lower.includes('rate limit')) {
+				toastBody = 'Rate limited by provider. Wait a moment and retry, or switch model.';
+			} else if (lower.includes('aborted') || lower.includes('canceled')) {
+				toastBody = 'Stream cancelled.';
+			}
+			toasts.add(toastBody, 'error');
 			messages = messages.map((m) =>
-				m.id === STREAM_ID ? { ...m, message: `⚠️ ${msg}` } : m
+				m.id === STREAM_ID ? { ...m, message: `⚠️ ${rawMsg}` } : m
 			);
 		} finally {
 			streamState = null;
