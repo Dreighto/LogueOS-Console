@@ -387,14 +387,37 @@ export const POST: RequestHandler = async ({ request }) => {
 			// Concatenate every text part of the response into a single string
 			// for the chat_messages row. Matches the legacy `addChatMessage`
 			// call shape for backwards compatibility with existing readers.
-			const replyText = (responseMessage.parts || [])
+			const parts = responseMessage.parts || [];
+			const replyText = parts
 				.filter((p) => p.type === 'text')
 				.map((p) => (p as { type: 'text'; text: string }).text)
 				.join('');
-			if (replyText) {
+
+			// Capture tool errors that fired mid-stream. The streaming UI shows
+			// these as ephemeral chips that vanish when sdkChat.messages resets,
+			// so without persisting them here the operator never finds out a
+			// tool failed silently. Audit 2026-05-27.
+			const toolErrors = parts
+				.filter((p) => {
+					const t = p as { type?: string; state?: string };
+					return t.type?.startsWith('tool-') && t.state === 'output-error';
+				})
+				.map((p) => {
+					const t = p as { type?: string; errorText?: string };
+					return `⚠️ Tool '${t.type?.replace(/^tool-/, '') ?? 'unknown'}' failed: ${
+						t.errorText ?? 'unknown error'
+					}`;
+				});
+
+			const finalText =
+				toolErrors.length > 0
+					? [replyText, ...toolErrors].filter(Boolean).join('\n\n')
+					: replyText;
+
+			if (finalText) {
 				const senderLabel: 'cc' | 'agy' | 'local' =
 					provider === 'anthropic' ? 'cc' : provider === 'local' ? 'local' : 'agy';
-				addChatMessage(senderLabel, replyText, null, null, null, 'sent', threadId);
+				addChatMessage(senderLabel, finalText, null, null, null, 'sent', threadId);
 			}
 			// Persist model_used so the picker chip can show "Claude Haiku 4.5"
 			// instead of "Auto" on next render.
