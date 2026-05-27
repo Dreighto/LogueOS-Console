@@ -23,9 +23,15 @@ const ROUTE = 'chat-v2-agy/';
 
 type RouteHandler = (route: Route) => Promise<void> | void;
 
-const json = (body: unknown): RouteHandler => async (route) => {
-	await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-};
+const json =
+	(body: unknown): RouteHandler =>
+	async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(body)
+		});
+	};
 
 async function mockChatApis(page: Page) {
 	// Polled — initial + 3s loop. Empty by default; specific tests override.
@@ -34,7 +40,11 @@ async function mockChatApis(page: Page) {
 	await page.route(/\/api\/chat\/tier/, async (route) => {
 		if (route.request().method() === 'PUT') {
 			const post = route.request().postDataJSON() as { tier?: string; provider?: string };
-			return json({ current_tier: post?.tier ?? 'chat', provider_override: post?.provider ?? null, last_model_used: '' })(route);
+			return json({
+				current_tier: post?.tier ?? 'chat',
+				provider_override: post?.provider ?? null,
+				last_model_used: ''
+			})(route);
 		}
 		return json({ current_tier: 'chat', provider_override: null, last_model_used: '' })(route);
 	});
@@ -87,10 +97,14 @@ test.describe('chat-v2-agy — page load', () => {
 		await expect(page.getByRole('button', { name: 'Attach File' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Toggle Image Gen Mode' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Voice Dictation' })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Hands-free continuous Talkback' })).toBeVisible();
+		await expect(
+			page.getByRole('button', { name: 'Hands-free continuous Talkback' })
+		).toBeVisible();
 	});
 
-	test('Send button is disabled while draft + image-mode + attachments are all empty', async ({ page }) => {
+	test('Send button is disabled while draft + image-mode + attachments are all empty', async ({
+		page
+	}) => {
 		await mockChatApis(page);
 		await page.goto(ROUTE);
 		await expect(page.getByRole('button', { name: 'Send Message' })).toBeDisabled();
@@ -99,7 +113,9 @@ test.describe('chat-v2-agy — page load', () => {
 	test('logs no uncaught console errors during initial load + 2s settle', async ({ page }) => {
 		const errors: string[] = [];
 		page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-		page.on('console', (m) => { if (m.type() === 'error') errors.push(`console.error: ${m.text()}`); });
+		page.on('console', (m) => {
+			if (m.type() === 'error') errors.push(`console.error: ${m.text()}`);
+		});
 
 		await mockChatApis(page);
 		await page.goto(ROUTE);
@@ -124,12 +140,16 @@ test.describe('chat-v2-agy — sidebar', () => {
 
 		await page.getByRole('button', { name: 'Toggle Sessions Sidebar' }).click();
 		// Open: aside has `translate-x-0`, so x ≈ 0 (allow for tiny browser rounding).
-		await expect.poll(async () => (await aside.boundingBox())?.x ?? -999).toBeGreaterThanOrEqual(-1);
+		await expect
+			.poll(async () => (await aside.boundingBox())?.x ?? -999)
+			.toBeGreaterThanOrEqual(-1);
 	});
 });
 
 test.describe('chat-v2-agy — composer', () => {
-	test('typing enables Send and persists a draft (PUT /api/chat/drafts fires)', async ({ page }) => {
+	test('typing enables Send and persists a draft (PUT /api/chat/drafts fires)', async ({
+		page
+	}) => {
 		await mockChatApis(page);
 
 		let draftPutCount = 0;
@@ -144,7 +164,9 @@ test.describe('chat-v2-agy — composer', () => {
 
 		await expect(page.getByRole('button', { name: 'Send Message' })).toBeEnabled();
 		await page.waitForTimeout(700); // debounce is 400ms — wait past it
-		expect(draftPutCount, 'draft autosave should have fired at least once').toBeGreaterThanOrEqual(1);
+		expect(draftPutCount, 'draft autosave should have fired at least once').toBeGreaterThanOrEqual(
+			1
+		);
 	});
 
 	test('image-mode toggle changes the composer placeholder', async ({ page }) => {
@@ -182,7 +204,11 @@ test.describe('chat-v2-agy — composer', () => {
 				message: m,
 				timestamp: new Date().toISOString()
 			}));
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ messages }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ messages })
+			});
 		});
 
 		await page.goto(ROUTE);
@@ -196,7 +222,9 @@ test.describe('chat-v2-agy — composer', () => {
 });
 
 test.describe('chat-v2-agy — pickers', () => {
-	test('Model picker opens and lists all 8 choices (Auto + 6 cloud + 1 local)', async ({ page }) => {
+	test('Model picker opens and lists all 8 choices (Auto + 6 cloud + 1 local)', async ({
+		page
+	}) => {
 		await mockChatApis(page);
 		await page.goto(ROUTE);
 
@@ -214,7 +242,10 @@ test.describe('chat-v2-agy — pickers', () => {
 			'Gemini 2.5 Pro',
 			'Local (Ollama)'
 		]) {
-			await expect(page.getByText(label, { exact: true }).first(), `model choice "${label}" missing`).toBeVisible();
+			await expect(
+				page.getByText(label, { exact: true }).first(),
+				`model choice "${label}" missing`
+			).toBeVisible();
 		}
 	});
 

@@ -1,0 +1,91 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs when a PR pushes a new commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Cache the Playwright browser binaries by lockfile hash so most runs
+      # skip the ~150MB download.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # ── Required gates (block merge on failure) ──────────────────────
+      # These three pass cleanly on main today. They're the real merge gate.
+
+      - name: Unit tests (vitest)
+        run: npm run test:unit
+
+      # Build first — playwright runs against `npm run preview` (built output)
+      # in CI, not `npm run dev`. Production build avoids the SvelteKit dev-mode
+      # hydration race where clicks fire before Svelte event handlers attach.
+      - name: Production build
+        run: npm run build
+
+      # Gate on the chat-v2-agy regression suite specifically — it passes
+      # green and IS the chat-surface merge gate (task #2 payoff). The other
+      # e2e specs (status-board.spec.ts, example.spec.ts) carry pre-existing
+      # failures and would need stabilization before joining the gate.
+      - name: E2E tests (Playwright — chat-v2-agy regression suite)
+        run: npx playwright test tests/e2e/chat-v2-agy.spec.ts --reporter=list
+        env:
+          CI: 'true'
+
+      # ── Advisory gates (run + report, but do NOT block merge yet) ────
+      # Each carries baseline failures on main today; flipping any of these
+      # to required requires a separate cleanup PR first. Kept visible so
+      # regression direction is monitored.
+      #
+      #   lint   — 66 prettier warnings (formatting drift)
+      #   check  — 3 TypeScript errors in src/routes/settings (TS version drift)
+      #   drift  — 278 hardcoded colour findings in src/**/*.svelte (LOS-115 backfill)
+
+      - name: Lint (advisory)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Typecheck (advisory — svelte-check)
+        run: npm run check
+        continue-on-error: true
+
+      - name: Design-token drift (advisory)
+        run: npm run check:drift
+        continue-on-error: true
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -7,3 +7,16 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Untracked debug artifacts at repo root (pre-existing debris from earlier
+# sessions — kept out of CI's view so they don't trip the lint gate).
+/test_*.ts
+/test_*.js
+/fix_*.js
+/rewrite_*.js
+/verify_*.js
+/verify_*.png
+/fake.png
+/find_brace.py
+/svelte_lines.txt
+

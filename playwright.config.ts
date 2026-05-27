@@ -36,7 +36,10 @@ export default defineConfig({
 		}
 	],
 	webServer: {
-		command: 'npm run dev',
+		// In CI, run against the production build (no HMR, no hydration race).
+		// Local dev uses `vite dev` so HMR keeps working when iterating on tests.
+		// The workflow runs `npm run build` BEFORE test:e2e so preview has output.
+		command: process.env.CI ? 'npm run preview' : 'npm run dev',
 		url: HEALTH_URL,
 		reuseExistingServer: !process.env.CI,
 		timeout: 60_000,
