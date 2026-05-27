@@ -12,6 +12,7 @@
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { base, resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
 	import {
@@ -1238,6 +1239,21 @@
 		// response if another switch happens before this fetch returns.
 		await pollMessages(threadId);
 		await loadTier(threadId);
+		// Sync the URL's ?thread= query param to the newly-active thread.
+		// Without this, the +page.server.ts load() reads the OLD thread on
+		// reload (it falls back to the query param, then getActiveThread()),
+		// bouncing the operator back to the wrong thread. Audit task #23.
+		// replaceState avoids polluting browser history with every switch;
+		// noScroll keeps the current scroll position.
+		try {
+			await goto(resolve('/chat') + '?thread=' + encodeURIComponent(threadId), {
+				replaceState: true,
+				noScroll: true,
+				keepFocus: true
+			});
+		} catch {
+			/* navigation failure shouldn't break the in-page switch */
+		}
 	}
 
 	function switchRepo(name: string) {
