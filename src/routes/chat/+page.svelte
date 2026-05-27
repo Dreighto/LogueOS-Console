@@ -78,6 +78,57 @@
 	let composerMode = $state<'idle' | 'focused' | 'recording' | 'talkback'>('idle');
 	let openChip = $state<null | 'repo' | 'thread'>(null);
 
+	// Sidebar / thread-management state — declared up here (not next to the
+	// rest of thread-management code lower in the file) so the global popover
+	// handler can reference it without forward-declaration issues.
+	let threadMenuOpenFor = $state<string | null>(null);
+
+	// Close every open popover. Used by the global Escape + click-outside
+	// handler below. Replaces the per-popover `fixed inset-0 z-40` backdrop
+	// `<button>` pattern that was trapping clicks on other chrome — see audit
+	// 2026-05-27 and [[reference_chat_app_competitive_borrows]] for the bug
+	// shape.
+	function closeAllPopovers() {
+		openChip = null;
+		showModelOverrideModal = false;
+		threadMenuOpenFor = null;
+	}
+
+	// Global popover dismiss — keyboard Escape + click outside any popover
+	// content closes everything open. Each popover content `<div>` carries
+	// `data-popover` (clicks inside the open popover are left alone), each
+	// opener `<button>` carries `data-popover-trigger`.
+	//
+	// Trigger clicks DO close all popovers via this handler; the trigger's
+	// own onclick fires after (capture vs bubble) and re-opens just its own
+	// popover. Net result: clicking one trigger while another popover is
+	// open swaps the popovers in a single tap.
+	$effect(() => {
+		const anyOpen =
+			openChip !== null || showModelOverrideModal || threadMenuOpenFor !== null;
+		if (!anyOpen) return;
+		function onKey(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				closeAllPopovers();
+			}
+		}
+		function onPointerDown(e: PointerEvent) {
+			const target = e.target as HTMLElement | null;
+			if (!target) return;
+			// Clicks INSIDE an open popover are left alone (let the popover's
+			// own onclick fire — choose a model, switch repo, etc.).
+			if (target.closest('[data-popover]')) return;
+			closeAllPopovers();
+		}
+		window.addEventListener('keydown', onKey);
+		window.addEventListener('pointerdown', onPointerDown, true);
+		return () => {
+			window.removeEventListener('keydown', onKey);
+			window.removeEventListener('pointerdown', onPointerDown, true);
+		};
+	});
+
 	// MediaRecorder for dictation
 	let mediaRecorder: MediaRecorder | null = null;
 	let recordChunks: Blob[] = [];
@@ -1233,8 +1284,9 @@
 	// ─────────────────────────────────────────────────────────────────────
 	// Thread management — rename / archive / delete / clear-all. Backend is
 	// /api/chat/threads/[id] PATCH (title/archived) + DELETE (archived only).
+	// `threadMenuOpenFor` is declared up near the other popover-state vars so
+	// the global Escape / click-outside handler can reference it.
 	// ─────────────────────────────────────────────────────────────────────
-	let threadMenuOpenFor = $state<string | null>(null);
 	let renamingFor = $state<string | null>(null);
 	let renameDraft = $state('');
 	let showArchived = $state(false);
@@ -1727,6 +1779,7 @@
 									</button>
 									<button
 										type="button"
+										data-popover-trigger
 										onclick={(e) => {
 											e.stopPropagation();
 											threadMenuOpenFor = threadMenuOpenFor === t.thread_id ? null : t.thread_id;
@@ -1740,14 +1793,8 @@
 							{/if}
 
 							{#if threadMenuOpenFor === t.thread_id}
-								<button
-									type="button"
-									class="fixed inset-0 z-40 cursor-default"
-									onclick={() => (threadMenuOpenFor = null)}
-									aria-label="Close menu"
-									tabindex="-1"
-								></button>
 								<div
+									data-popover
 									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-800 bg-[#0e0e0e] py-1 shadow-2xl"
 								>
 									<button
@@ -1837,7 +1884,12 @@
 				<div class="relative">
 					<button
 						type="button"
-						onclick={() => (openChip = openChip === 'repo' ? null : 'repo')}
+						data-popover-trigger
+						onclick={() => {
+							const next = openChip === 'repo' ? null : 'repo';
+							closeAllPopovers();
+							openChip = next;
+						}}
 						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
 						aria-label="Target repository"
 					>
@@ -1847,14 +1899,8 @@
 					</button>
 
 					{#if openChip === 'repo'}
-						<button
-							type="button"
-							class="fixed inset-0 z-40 cursor-default"
-							onclick={() => (openChip = null)}
-							aria-label="Close popover"
-							tabindex="-1"
-						></button>
 						<div
+							data-popover
 							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
 							<div
@@ -1886,7 +1932,12 @@
 				<div class="relative">
 					<button
 						type="button"
-						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
+						data-popover-trigger
+						onclick={() => {
+							const next = !showModelOverrideModal;
+							closeAllPopovers();
+							showModelOverrideModal = next;
+						}}
 						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
 						aria-label="Model picker"
 						title="Pick a specific model or leave on Auto"
@@ -1901,14 +1952,8 @@
 					</button>
 
 					{#if showModelOverrideModal}
-						<button
-							type="button"
-							class="fixed inset-0 z-40 cursor-default"
-							onclick={() => (showModelOverrideModal = false)}
-							aria-label="Close popover"
-							tabindex="-1"
-						></button>
 						<div
+							data-popover
 							class="absolute top-full right-0 z-50 mt-2 min-w-56 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
 							<div
