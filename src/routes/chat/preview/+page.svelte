@@ -18,8 +18,8 @@
 	// replacing the legacy custom-streaming code, and deletes the preview.
 
 	import { Chat } from '@ai-sdk/svelte';
-	import { resolve, base } from '$app/paths';
-	import { Send, ArrowLeft, Sparkles } from 'lucide-svelte';
+	import { resolve } from '$app/paths';
+	import { Send, ArrowLeft, Sparkles, AlertTriangle } from 'lucide-svelte';
 
 	type Provider = 'anthropic' | 'google';
 
@@ -117,7 +117,24 @@
 
 	<!-- Feed -->
 	<main class="relative z-10 flex flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3">
-		{#if chat.messages.length === 0}
+		{#if chat.status === 'error'}
+			<!-- Error state — surfaces when the SDK transport reports a failure
+			     (network error, upstream LLM rejection, auth failure). The next
+			     send transitions chat.status back to 'submitted'/'streaming' so
+			     this view is transient by design — sending again retries. -->
+			<div
+				class="flex flex-1 flex-col items-center justify-center gap-2 text-center select-none"
+				data-testid="error-state"
+			>
+				<AlertTriangle size={20} class="text-red-400" aria-hidden="true" />
+				<div class="font-mono text-[11px] tracking-wider text-red-400 uppercase">
+					Stream failed
+				</div>
+				<div class="max-w-xs text-sm text-zinc-500">
+					Send again to retry. Check provider credentials if it keeps failing.
+				</div>
+			</div>
+		{:else if chat.messages.length === 0}
 			<div
 				class="flex flex-1 flex-col items-center justify-center gap-2 text-center select-none"
 			>
@@ -171,7 +188,11 @@
 				bind:value={input}
 				onkeypress={handleKey}
 				rows="2"
-				placeholder={chat.status === 'streaming' ? 'Streaming reply…' : 'Ask the SDK preview…'}
+				placeholder={chat.status === 'error'
+					? 'Last send failed — try again'
+					: chat.status === 'streaming'
+						? 'Streaming reply…'
+						: 'Ask the SDK preview…'}
 				autocomplete="off"
 				autocapitalize="sentences"
 				spellcheck="false"
@@ -182,8 +203,18 @@
 			></textarea>
 
 			<div class="flex items-center justify-between">
-				<div class="font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none">
-					{chat.status === 'streaming' ? '· streaming ·' : chat.status === 'submitted' ? '· submitted ·' : 'enter to send'}
+				<div
+					class="font-mono text-[9px] tracking-wider uppercase select-none {chat.status === 'error'
+						? 'text-red-400'
+						: 'text-zinc-600'}"
+				>
+					{chat.status === 'streaming'
+						? '· streaming ·'
+						: chat.status === 'submitted'
+							? '· submitted ·'
+							: chat.status === 'error'
+								? '· error · retry to send ·'
+								: 'enter to send'}
 				</div>
 
 				<button

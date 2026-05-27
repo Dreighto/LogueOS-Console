@@ -96,3 +96,29 @@ test.describe('chat preview (SDK) — send flow', () => {
 		await expect(composer).toHaveValue('');
 	});
 });
+
+test.describe('chat preview (SDK) — error state', () => {
+	// Mocks /api/chat/sdk-stream to return 500; SDK's Chat class transitions
+	// chat.status to 'error', and the page surfaces the error-state UI per
+	// the coding-guideline "every async surface needs loading/empty/error
+	// states" rule. CR review on PR #122 flagged the missing error UI;
+	// this test gates against the regression.
+	test('error response surfaces the explicit error-state UI', async ({ page }) => {
+		await page.route(/\/api\/chat\/sdk-stream/, async (route: Route) => {
+			await route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'upstream_failed' })
+			});
+		});
+		await page.goto(ROUTE);
+
+		await page.getByTestId('composer').fill('boom');
+		await page.getByTestId('send-button').click();
+
+		// Error-state container renders, with the operator-readable
+		// "Stream failed" label and retry copy.
+		await expect(page.getByTestId('error-state')).toBeVisible();
+		await expect(page.getByText('Stream failed', { exact: true })).toBeVisible();
+	});
+});
