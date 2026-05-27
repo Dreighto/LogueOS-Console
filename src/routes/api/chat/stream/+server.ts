@@ -4,7 +4,7 @@ import { classifyTier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
 
-import { streamText, convertToModelMessages } from 'ai';
+import { streamText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -13,21 +13,23 @@ const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Must mirror llm_router.ts TIER_MODELS — Claude 4 family, NOT Claude 3.
+// AGY's first pass used claude-3-* IDs which silently downgraded every reply.
 const TIER_MODELS: Record<string, Partial<Record<string, string>>> = {
 	chat: {
-		anthropic: 'claude-3-5-haiku-latest', // mapping internal to SDK
+		anthropic: 'claude-haiku-4-5-20251001',
 		gemini: 'gemini-2.5-flash-lite',
-		openai: 'gpt-4o-mini',
+		openai: 'gpt-4o-mini'
 	},
 	planning: {
-		anthropic: 'claude-3-7-sonnet-latest',
+		anthropic: 'claude-sonnet-4-6',
 		gemini: 'gemini-2.5-flash',
-		openai: 'gpt-4o',
+		openai: 'gpt-4o'
 	},
 	deep: {
-		anthropic: 'claude-3-opus-latest',
+		anthropic: 'claude-opus-4-7',
 		gemini: 'gemini-2.5-pro',
-		openai: 'gpt-4o',
+		openai: 'gpt-4o'
 	}
 };
 
@@ -126,21 +128,29 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const selectedModel = resolveModel(currentTier, providerPref);
 
+	// v4 streamText accepts the UIMessage[] shape directly. SDK converts
+	// internally to the provider's native format.
 	const result = streamText({
 		model: selectedModel,
 		system: buildSystemPrompt({ targetRepo, currentTier, threadId }),
-		messages: convertToModelMessages(messages),
-		onFinish: async ({ response }) => {
-			// Persist assistant message with the SDK-generated ID
-			const assistantContent = response.messages.find(m => m.role === 'assistant')?.content;
-			const replyText = typeof assistantContent === 'string' ? assistantContent : 
-				(Array.isArray(assistantContent) ? assistantContent.find((p: any) => p.type === 'text')?.text || '' : '');
-			
-			addChatMessage('agy', replyText, null, null, null, 'sent', threadId);
-			upsertThreadTier(threadId, currentTier, selectedModel.modelId);
+		messages: messages as any,
+		onFinish: async ({ text }) => {
+			// `text` is the assembled assistant reply. Persist as a row keyed by
+			// the thread; the SDK's own id generator is on the client side, the
+			// server-side row uses the auto-incremented chat_messages PK.
+			if (text && text.trim().length > 0) {
+				addChatMessage('agy', text, null, null, null, 'sent', threadId);
+			}
+			upsertThreadTier(threadId, currentTier, (selectedModel as any).modelId ?? null);
+		},
+		onError: (err) => {
+			console.error('[stream] LLM error:', err);
 		}
 	});
 
-	result.consumeStream(); // ← KEY: keeps draining into DB even if client disconnects
+	// Keeps draining into the DB even if the client disconnects mid-stream.
+	// This is what fixes the Funnel-502 class of bugs — operator's phone can
+	// drop the SSE connection and the assistant reply still lands in chat_messages.
+	result.consumeStream();
 	return result.toDataStreamResponse();
 };

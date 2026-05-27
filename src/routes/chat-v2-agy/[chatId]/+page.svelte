@@ -174,20 +174,21 @@
 		}, 400);
 	});
 
-	// Auto-grow the composer textarea with the draft. Resting state is rows=5
-	// (~140px — a real writing surface, not a snippet). Expands up to roughly
-	// half the viewport (capped 480px) then scrolls internally.
+	// Auto-grow the composer textarea. Slim resting state (~44px ≈ single line
+	// with breathing room), grows up to half the viewport, then scrolls.
+	// Operator's preference per Phase 5 brief — flagship "single chip you type
+	// into" feel, not a tall writing surface that dominates the screen.
 	function composerMaxHeight(): number {
 		if (typeof window === 'undefined') return 360;
 		return Math.min(Math.round(window.innerHeight * 0.5), 480);
 	}
 	$effect(() => {
-		const _ = textDraft; // dep — re-run whenever the draft changes
+		const _ = textDraft;
 		void _;
 		if (!textareaEl) return;
 		textareaEl.style.height = 'auto';
 		const max = composerMaxHeight();
-		const target = Math.min(Math.max(textareaEl.scrollHeight, 80), max);
+		const target = Math.min(Math.max(textareaEl.scrollHeight, 44), max);
 		textareaEl.style.height = `${target}px`;
 	});
 
@@ -300,41 +301,12 @@
 		}
 	}
 
-	async function pollMessages(forThread?: string) {
-		// Capture the thread the caller intended at the moment of the request.
-		// Without this guard a slow in-flight poll for the previous thread can
-		// land after switchThread() has flipped activeThread and clobber the
-		// new thread's (empty) messages with the previous thread's content —
-		// exact symptom the operator reported: "old thread shows up instead
-		// of a clean slate."
-		const requestedThread = forThread ?? activeThread;
-		try {
-			const r = await fetch(
-				resolve('/api/chat') + `?thread=${encodeURIComponent(requestedThread)}`
-			);
-			if (!r.ok) return;
-			// Drop the response if the operator switched threads while the
-			// fetch was in flight. The 3s poll will re-fire with the new thread.
-			if (requestedThread !== activeThread) return;
-			const b = await r.json();
-			const newMessages: ChatMessage[] = b.messages || [];
-			if (
-				newMessages.length !== chatMessages.length ||
-					JSON.stringify(newMessages) !== JSON.stringify(chatMessages)
-			) {
-				if (!userAtBottom) {
-					const added = newMessages.length - chatMessages.length;
-					if (added > 0) unseenCount += added;
-				}
-				// // messages = newMessages;
-				if (userAtBottom) {
-					queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
-				}
-			}
-		} catch {
-			/* offline */
-		}
-	}
+	// pollMessages REMOVED in Phase 5 cleanup. The SDK Chat class owns the
+	// messages array via streaming; polling DB on a 3s timer was racing the
+	// stream and silently clobbering tokens mid-flight. Thread switches are
+	// now handled via SvelteKit navigation (see switchThread → goto()) which
+	// reloads page data + creates a fresh Chat instance for the new thread,
+	// no race possible.
 
 	async function pollActivity() {
 		try {
@@ -1010,13 +982,12 @@
 			sidebarOpen = false;
 			return;
 		}
-		activeThread = threadId;
 		sidebarOpen = false;
-		// // messages = [];
-		// Pass the target thread explicitly so pollMessages can drop the
-		// response if another switch happens before this fetch returns.
-		await pollMessages(threadId);
-		await loadTier(threadId);
+		// SvelteKit navigation. The new route's +page.server.ts loads the
+		// thread's messages, and the $derived chatClient is recreated for
+		// the new thread — no in-place mutation, no race with in-flight
+		// streams from the previous thread.
+		await goto(resolve(`/chat-v2-agy/${encodeURIComponent(threadId)}`));
 	}
 
 	function switchRepo(name: string) {
@@ -1349,9 +1320,10 @@
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
-	// Lifecycle
+	// Lifecycle. pollTimer / pollMessages removed in Phase 5 — the SDK Chat
+	// class owns the messages array. activityTimer stays — that polls the
+	// worker-activity log, a separate concern.
 	// ─────────────────────────────────────────────────────────────────────
-	let pollTimer: ReturnType<typeof setInterval>;
 	let activityTimer: ReturnType<typeof setInterval>;
 	let sentinelObs: IntersectionObserver | null = null;
 
@@ -1373,12 +1345,10 @@
 			sentinelObs.observe(scrollSentinel);
 		}
 		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'auto' }));
-		pollTimer = setInterval(pollMessages, 3000);
 		activityTimer = setInterval(pollActivity, 5000);
 	});
 
 	onDestroy(() => {
-		clearInterval(pollTimer);
 		clearInterval(activityTimer);
 		sentinelObs?.disconnect();
 		if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
@@ -1867,10 +1837,43 @@
 								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
 								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
 						>
-							{#if m.role === 'user'}
-								<span class="whitespace-pre-wrap">{m.parts?.find(p => p.type === 'text')?.text || ''}</span>
-							{:else}
-								<Markdown content={m.parts?.find(p => p.type === 'text')?.text || ''} />
+							<!-- Render every part in order: text + images + files. The SDK
+							     delivers messages as ordered `parts[]`. Operator bubbles get
+							     raw text; assistant bubbles get Markdown. Image parts render
+							     inline in BOTH so the operator sees their own attachments. -->
+							{#each m.parts ?? [] as part}
+								{#if part.type === 'text'}
+									{#if m.role === 'user'}
+										<span class="whitespace-pre-wrap">{part.text}</span>
+									{:else}
+										<Markdown content={part.text} />
+									{/if}
+								{:else if part.type === 'image'}
+									<img
+										src={(part as any).url ?? (part as any).image ?? ''}
+										alt={(part as any).alt ?? 'attachment'}
+										class="mt-1.5 max-h-[60vh] max-w-full rounded-lg border border-zinc-800"
+									/>
+								{:else if part.type === 'file'}
+									<a
+										href={(part as any).url}
+										target="_blank"
+										rel="noopener"
+										class="mt-1 inline-flex items-center gap-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+									>
+										<Paperclip size={11} />
+										<span>{(part as any).name ?? 'file'}</span>
+									</a>
+								{/if}
+							{/each}
+							<!-- SDK v4 messages sometimes carry `content` instead of `parts`.
+							     Fall through so nothing renders blank during migration. -->
+							{#if !m.parts?.length && (m as any).content}
+								{#if m.role === 'user'}
+									<span class="whitespace-pre-wrap">{(m as any).content}</span>
+								{:else}
+									<Markdown content={(m as any).content} />
+								{/if}
 							{/if}
 						</div>
 
@@ -2121,7 +2124,7 @@
 							onpaste={handlePaste}
 							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
 							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-							rows="2"
+							rows="1"
 							placeholder={composerMode === 'recording'
 								? 'Listening dictation… press stop when done.'
 								: composerMode === 'talkback'
@@ -2134,7 +2137,7 @@
 							spellcheck="false"
 							disabled={composerMode === 'recording' || composerMode === 'talkback'}
 							class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-							style="min-height: 80px; max-height: 480px;"
+							style="min-height: 44px; max-height: 480px;"
 						></textarea>
 					</div>
 
