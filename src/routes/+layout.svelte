@@ -14,14 +14,10 @@
 		AlertOctagon,
 		Pause,
 		RefreshCw,
-		Power,
-		RotateCcw,
-		PanelLeft
+		Power
 	} from 'lucide-svelte';
 	import { fly, fade } from 'svelte/transition';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
-	import { toasts } from '$lib/utils/toasts';
-	import { goto } from '$app/navigation';
 	import type { LayoutData } from './$types';
 	import type { KillSwitchState } from '$lib/types/kill-switch';
 
@@ -80,105 +76,16 @@
 		};
 	});
 
-	// ── Header style (chat surfaces only) ───────────────────────────────────
+	// ── Header style (chat surface only) ────────────────────────────────────
 	// page.url.pathname includes the SvelteKit paths.base ('/console'), so we
-	// compare against the full path. Three modes:
-	//   'immersive' — /chat-v2: full-bleed, NO global chrome at all. The page
+	// compare against the full path. Two modes:
+	//   'immersive' — /chat: full-bleed, NO global chrome at all. The page
 	//                 owns its own viewport (Conversational OS surface).
-	//   'compact'   — /chat: legacy 32px compact header + sidebar (kept as
-	//                 safety net while V2 stabilizes).
 	//   'full'      — everything else.
 	// .endsWith() is defensive against future base changes.
 	const headerStyle = $derived(
-		page.url.pathname.endsWith('/chat-v2') || page.url.pathname.endsWith('/chat-v2-agy')
-			? 'immersive'
-			: page.url.pathname.endsWith('/chat')
-				? 'compact'
-				: 'full'
+		page.url.pathname.endsWith('/chat') ? 'immersive' : 'full'
 	);
-
-	type ActivityRow = {
-		id: number;
-		trace_id: string;
-		action: string;
-		target: string | null;
-		timestamp: string;
-	};
-	let compactActivity = $state<ActivityRow[]>([]);
-	let compactResetting = $state(false);
-	let compactActiveThread = $state('default');
-
-	function getActiveWorkerInfo(rows: ActivityRow[]): { worker: string; step: string } | null {
-		if (rows.length === 0) return null;
-		const byTrace = new Map<string, ActivityRow>();
-		for (const row of rows) byTrace.set(row.trace_id, row);
-		const cutoff = Date.now() - 5 * 60 * 1000;
-		for (const [traceId, last] of byTrace) {
-			if (new Date(last.timestamp).getTime() < cutoff) continue;
-			if (last.action === 'completed' || last.action === 'failed') continue;
-			const prefix = traceId.split('-')[0]?.toLowerCase() || 'cc';
-			const worker = prefix === 'agy' ? 'AGY' : 'CC';
-			const step = last.target ? `${last.action} '${last.target}'` : last.action;
-			return { worker, step };
-		}
-		return null;
-	}
-
-	const activeWorkerInfo = $derived(getActiveWorkerInfo(compactActivity));
-
-	async function refreshCompactActivity() {
-		try {
-			const resp = await fetch(resolve('/api/chat/activity?limit=20'));
-			if (!resp.ok) return;
-			const body = await resp.json();
-			compactActivity = (body.activity || []) as ActivityRow[];
-		} catch {
-			/* silent — offline or unavailable */
-		}
-	}
-
-	async function refreshCompactThread() {
-		try {
-			const resp = await fetch(resolve('/api/chat/state'));
-			if (!resp.ok) return;
-			const body = await resp.json();
-			if (body.active_thread) compactActiveThread = body.active_thread as string;
-		} catch {
-			/* silent */
-		}
-	}
-
-	async function handleCompactReset() {
-		if (compactResetting) return;
-		compactResetting = true;
-		try {
-			await refreshCompactThread();
-			const resp = await fetch(resolve('/api/chat/reset'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ thread: compactActiveThread })
-			});
-			if (resp.ok) {
-				toasts.add('Context reset. Workers start fresh from this point.', 'success');
-			}
-		} catch {
-			/* silent */
-		} finally {
-			compactResetting = false;
-		}
-	}
-
-	$effect(() => {
-		if (headerStyle !== 'compact') return;
-		void refreshCompactActivity();
-		void refreshCompactThread();
-		const activityInterval = setInterval(refreshCompactActivity, 2000);
-		const threadInterval = setInterval(refreshCompactThread, 5000);
-		return () => {
-			clearInterval(activityInterval);
-			clearInterval(threadInterval);
-		};
-	});
 
 	// ── View transitions ─────────────────────────────────────────────────────
 	// Butter-smooth, hardware-accelerated view transitions for route swaps (native GPU view-transitions)
@@ -212,66 +119,8 @@
 	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
 	style="padding-top: env(safe-area-inset-top, 0px);"
 >
-	{#if headerStyle === 'compact'}
-		<!-- Compact header — chat-only (§2B). 32px tall: saves 84px vs full header
-		     + command bar. Logo anchors identity; thread label is a read-only
-		     indicator (full thread switching lives in the chat page's own header
-		     per PR 7 scope); reset icon fires the same /api/chat/reset call. -->
-		<header
-			class="z-30 flex h-8 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-md"
-		>
-			<img src="{base}/favicon.png" alt="LogueOS" width="28" height="28" class="h-7 w-7 shrink-0" />
-
-			<!-- Mobile Threads button: dispatches logueos:open-threads which the
-			     chat page's onMount listener picks up to open the overlay. Only
-			     visible on mobile (md:hidden); desktop uses the inline sidebar. -->
-			<button
-				type="button"
-				onclick={() => document.dispatchEvent(new CustomEvent('logueos:open-threads'))}
-				class="active-trigger md:hidden flex items-center gap-1 rounded px-2 py-0.5 font-sans text-xs text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-				aria-label="Open thread list"
-				title="Switch or manage threads"
-			>
-				<PanelLeft size={11} aria-hidden="true" />
-				<span>{compactActiveThread === 'default' ? 'Default' : compactActiveThread}</span>
-				<span aria-hidden="true" class="text-[10px]">▾</span>
-			</button>
-
-			<button
-				type="button"
-				onclick={handleCompactReset}
-				disabled={compactResetting}
-				aria-label="Reset context"
-				title="Drop a new-conversation marker so workers start fresh"
-				class="active-trigger flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-40"
-			>
-				<RotateCcw size={14} aria-hidden="true" />
-			</button>
-		</header>
-
-		<!-- Micro-tracker: slides in below compact header when a worker is active.
-		     <16px tall. Shows ⚡ <worker>: <step>... [View Logs]. -->
-		{#if activeWorkerInfo}
-			<div
-				class="z-20 flex h-4 items-center gap-1.5 overflow-hidden border-b border-border/50 bg-surface/20 px-3"
-				in:fade={{ duration: 150 }}
-				out:fade={{ duration: 150 }}
-			>
-				<span class="shrink-0 text-[11px] text-cta" aria-hidden="true">⚡</span>
-				<span class="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground">
-					{activeWorkerInfo.worker}: {activeWorkerInfo.step}...
-				</span>
-				<button
-					type="button"
-					onclick={() => goto(resolve('/activity'))}
-					class="shrink-0 font-mono text-[10px] text-cta transition-colors hover:text-cta/70"
-				>
-					[View Logs]
-				</button>
-			</div>
-		{/if}
-	{:else}
-		<!-- Full header — all non-chat routes. Unchanged. -->
+		<!-- Full header — all non-chat routes. Chat ('/chat') uses the immersive
+		     branch above and renders no global header at all. -->
 		<header
 			class="z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 		>
@@ -357,7 +206,6 @@
 				Restart
 			</button>
 		</div>
-	{/if}
 
 	<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav

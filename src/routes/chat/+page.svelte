@@ -1,485 +1,92 @@
 <script lang="ts">
-	import type { PageData } from './$types';
-	import type { ChatMessage } from '$lib/types/chat';
-	import { onMount, tick } from 'svelte';
-	import { resolve, base } from '$app/paths';
+	// Chat Surface V2 — Conversational OS (AGY Redo).
+	//
+	// Design philosophy:
+	//   - Full-bleed immersive canvas. No global chrome.
+	//   - Conversation IS the interface.
+	//   - Composer is the hero: glowing pill, color-shifting states.
+	//   - Solid, readable menus (no transparent text overlays on gradients).
+	//   - Glowing orange operator outlines & cyan agent labels.
+	//   - Dedicated collapsible left sidebar for threads & pinned sessions.
+	//   - 100% wired controls (Mic dictation, Paperclip uploads, Sparkles image mode, Talkback loop).
+
+	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
+	import { base, resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import {
 		Send,
-		Terminal,
-		User,
-		Cpu,
-		AlertTriangle,
-		Check,
-		X,
-		Loader2,
-		MessageSquare,
-		Play,
-		HelpCircle,
-		BookOpen,
-		Edit3,
-		CheckCircle2,
-		Plus,
+		Mic,
 		Paperclip,
 		Sparkles,
-		RefreshCw,
-		ChevronDown,
-		Mic,
-		Volume2,
 		Headphones,
 		Square,
+		ChevronDown,
+		Menu,
+		X,
+		Plus,
 		Pin,
+		MessageSquare,
+		Check,
+		Copy,
+		RefreshCw,
+		MoreVertical,
+		Edit3,
 		Archive,
+		ArchiveRestore,
 		Trash2,
-		FileText,
-		Brain,
-		MoreHorizontal,
-		ChevronLeft,
-		PanelLeft
+		Eraser,
+		Loader2
 	} from 'lucide-svelte';
-	import type { Workspace } from './+page.server';
 	import { toasts } from '$lib/utils/toasts';
-	import { formatShortTime } from '$lib/utils/format';
-	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
 
-	let { data }: { data: PageData } = $props();
+	let { data } = $props();
 
-	// ─────────────────────────────────────────────────────────────────
-	// Multi-thread state
-	// Each conversation has its own thread_id. The default thread is
-	// "default". Operators create new threads via the switcher dropdown.
-	// All messages, dispatches, and history slices are scoped to the
-	// active thread.
-	// ─────────────────────────────────────────────────────────────────
-	type ThreadInfo = { thread_id: string; message_count: number; latest_ts: string };
-	let activeThread = $state<string>(data.activeThread || 'default');
-	let threads = $state<ThreadInfo[]>(
-		data.threads || [{ thread_id: 'default', message_count: 0, latest_ts: '' }]
-	);
-	let threadSwitcherOpen = $state(false);
-
-	// ─────────────────────────────────────────────────────────────────
-	// Thread management (PR 7): sidebar + pin + archive + rename + auto-title
-	// ─────────────────────────────────────────────────────────────────
-	type ThreadMetaFull = {
-		thread_id: string;
-		title: string;
-		pinned: boolean;
-		archived: boolean;
-		summary: string | null;
-		remember_flag: boolean;
-		created_at: string;
-		last_activity_at: string;
-		message_count: number;
-		latest_ts: string;
-	};
-	let threadMetasActive = $state<ThreadMetaFull[]>([]);
-	let threadMetasArchived = $state<ThreadMetaFull[]>([]);
-	// Sidebar: open by default on desktop, hidden on mobile (overlay instead).
-	let sidebarOpen = $state(true);
-	// Mobile full-screen overlay (opened by Threads button in compact header).
-	let mobileThreadsOpen = $state(false);
-	let kebabOpenThreadId = $state<string | null>(null);
-	let renamingThreadId = $state<string | null>(null);
-	let renameValue = $state('');
-	let showArchivedThreads = $state(false);
-	// Track threads that have already received an auto-title this session
-	// to avoid firing the endpoint on every poll.
-	const autoTitledThreads = new Set<string>();
-
-	// ─────────────────────────────────────────────────────────────────
-	// LLM tier badge (PR 1c). Shows current conversation tier derived
-	// by the server phase classifier. Operator can tap to override.
-	// ─────────────────────────────────────────────────────────────────
+	// ─────────────────────────────────────────────────────────────────────
+	// State Declarations
+	// ─────────────────────────────────────────────────────────────────────
 	type Tier = 'chat' | 'planning' | 'deep' | 'local';
-	let currentTier = $state<Tier>('chat');
-	let tierOverrideOpen = $state(false);
-
-	const TIER_LABELS: Record<Tier, string> = {
-		chat: '🪶 Chat',
-		planning: '⚖️ Planning',
-		deep: '🧠 Deep',
-		local: '🔧 Local'
-	};
-
-	async function fetchTier(threadId: string) {
-		try {
-			const resp = await fetch(resolve(`/api/chat/tier?thread_id=${encodeURIComponent(threadId)}`));
-			if (resp.ok) {
-				const body = await resp.json();
-				if (body.current_tier) currentTier = body.current_tier as Tier;
-			}
-		} catch {
-			/* offline — keep last known tier */
-		}
-	}
-
-	async function setTierOverride(tier: Tier | null) {
-		tierOverrideOpen = false;
-		try {
-			const resp = await fetch(resolve('/api/chat/tier'), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ thread_id: activeThread, tier })
-			});
-			if (resp.ok) {
-				const body = await resp.json();
-				if (body.current_tier) currentTier = body.current_tier as Tier;
-			}
-		} catch {
-			/* silent */
-		}
-	}
-
-	// Active chat state seeded from SSR to ensure zero flicker on load.
-	let messages = $state<ChatMessage[]>(data.messages || []);
-	let textDraft = $state('');
-	let sending = $state(false);
-	// Agent selector pill state. 'auto' falls back to the @-mention heuristic;
-	// 'claude-code' / 'agy' locks every subsequent send to that worker until
-	// the operator picks something else. Persists for the page-load session.
-	// agentLock controls dispatch routing:
-	//   'auto'        — every send fires a worker (gateway role-routes unless @-mentioned)
-	//   'claude-code' — every send goes to CC
-	//   'agy'         — every send goes to AGY
-	//   'hermes'      — every send goes to local Hermes (Qwen via Ollama),
-	//                   free + fast (~1-3s), no file-system access, sounding board
-	//   'silent'      — chat note only, no worker spawns (notes / annotations)
-	let agentLock = $state<'auto' | 'claude-code' | 'agy' | 'hermes' | 'silent'>('auto');
-	// Image-generation mode. Toggle is a button next to the paperclip; when
-	// ON, the next send is treated as a Gemini image-gen prompt instead of
-	// a chat message. Stays sticky until the operator turns it off, so
-	// back-to-back image work doesn't need re-toggling.
-	let imageMode = $state(false);
-	let actionSubmitting = $state<number | null>(null); // messageId of active action being updated
-	let feedContainer = $state<HTMLDivElement | null>(null);
-	let textareaEl = $state<HTMLTextAreaElement | null>(null);
-	let attachInputEl = $state<HTMLInputElement | null>(null);
-	let examplesOpen = $state(false);
-
-	// ─────────────────────────────────────────────────────────────────
-	// Workspace (repo) selector — drives target_repo on all dispatches.
-	// Persisted per-thread in localStorage; PR 1c will move to server.
-	// ─────────────────────────────────────────────────────────────────
-	let selectedRepo = $state('LogueOS-Console');
-	let repoDropdownOpen = $state(false);
-	let showArchivedWorkspaces = $state(false);
-	let workspaceByThread = $state<Record<string, string>>({});
-
-	const selectedWorkspace = $derived<Workspace | undefined>(
-		[...(data.workspaces ?? []), ...(data.archivedWorkspaces ?? [])].find(
-			(w) => w.name === selectedRepo
-		)
-	);
-
-	function selectWorkspace(name: string) {
-		selectedRepo = name;
-		repoDropdownOpen = false;
-		workspaceByThread = { ...workspaceByThread, [activeThread]: name };
-		try {
-			localStorage.setItem('chat_workspaces_v1', JSON.stringify(workspaceByThread));
-		} catch {
-			/* ignore */
-		}
-	}
-
-	// ─────────────────────────────────────────────────────────────────
-	// Cross-device draft sync. localStorage is the offline write-through;
-	// the /api/chat/drafts endpoint is the cross-device source of truth.
-	// ─────────────────────────────────────────────────────────────────
-	let drafts = $state<Map<string, string>>(new Map());
-	let draftDebounceTimer: ReturnType<typeof setTimeout>;
-
-	// Debounce textDraft changes → save to localStorage + PUT to server.
-	$effect(() => {
-		const text = textDraft; // reactive dependency — fires on every keystroke
-		clearTimeout(draftDebounceTimer);
-		draftDebounceTimer = setTimeout(() => {
-			// activeThread captured in callback (not tracked, avoids spurious fires)
-			const tid = activeThread;
-			if (text.trim()) {
-				drafts.set(tid, text);
-			} else {
-				drafts.delete(tid);
-			}
-			try {
-				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-			} catch {
-				/* storage quota exceeded */
-			}
-			// Fire-and-forget server sync for cross-device persistence.
-			void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(tid)}`), {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ body: text })
-			}).catch(() => {
-				/* offline — localStorage copy is the fallback */
-			});
-		}, 300);
-	});
-
-	// Starter prompt library — small, hand-curated. Kept inline so opening
-	// the drawer is zero-fetch. Categories help orient as the list grows.
-	const STARTER_PROMPTS: { category: string; label: string; prompt: string }[] = [
-		{
-			category: 'Brainstorm',
-			label: 'Suggest a feature',
-			prompt:
-				'@agy suggest a new feature for the Console that would speed up my workflow. Be specific and pitch the tradeoffs.'
-		},
-		{
-			category: 'Brainstorm',
-			label: 'Refactor ideas',
-			prompt:
-				'@agy look at the chat tab and suggest 3 refactor ideas, ordered by impact-per-effort.'
-		},
-		{
-			category: 'Review',
-			label: 'Audit recent diff',
-			prompt: '@cc audit the last 5 commits on main for any regressions or rough edges.'
-		},
-		{
-			category: 'Review',
-			label: 'Check theme tokens',
-			prompt: '@agy check that all color usage in the Console uses theme tokens (no hex literals).'
-		},
-		{
-			category: 'Verify',
-			label: 'Run the test suite',
-			prompt: '@cc run the unit test suite and report any failures.'
-		},
-		{
-			category: 'Verify',
-			label: 'Smoke test the build',
-			prompt: '@cc verify the latest build runs and key routes (/console, /chat, /activity) load.'
-		},
-		{
-			category: 'Investigate',
-			label: 'Why is X slow?',
-			prompt:
-				'@cc investigate why dispatch responses are slow — trace the wait between operator send and final reply.'
-		},
-		{
-			category: 'Investigate',
-			label: 'Triage Linear',
-			prompt: '@cc do a 3-day Linear ticket sweep and report what should move state.'
-		}
-	];
-
-	// Auto-grow the textarea up to ~6 visible lines. CSS-only (resize: none)
-	// won't grow at all; we set the height directly from scrollHeight so the
-	// composer expands as you type. Done in an effect — no per-keystroke
-	// listener, no layout thrash.
-	$effect(() => {
-		// Re-runs whenever textDraft changes.
-		const _ = textDraft;
-		if (!textareaEl) return;
-		textareaEl.style.height = 'auto';
-		const next = Math.min(textareaEl.scrollHeight, 168); // ~6 lines at text-base
-		textareaEl.style.height = `${next}px`;
-	});
-
-	// Worker activity (per-trace): live progress from emit_chat_activity.py.
-	// Keyed by trace_id; arrays are oldest-first per trace.
-	type Activity = {
+	type ChatMessage = {
 		id: number;
-		trace_id: string;
-		action: string;
-		target: string | null;
+		sender: string;
+		message: string;
 		timestamp: string;
+		image_path?: string | null;
 	};
-	let activityByTrace = $state<Record<string, Activity[]>>({});
 
-	// Live worker stdout stream (per-trace). EventSource subscribers append
-	// chunks here; the UI renders a tailing pane under each active worker
-	// bubble. Capped client-side at ~64 KB to keep DOM nodes manageable.
-	const STREAM_BUFFER_MAX = 64 * 1024;
-	let streamByTrace = $state<Record<string, string>>({});
-	let streamEnded = $state<Record<string, boolean>>({});
-	const streamSources = new Map<string, EventSource>();
+	let messages = $state<ChatMessage[]>(data.messages || []);
+	let activeThread = $state(data.activeThread || 'default');
+	let workspaces = $state(data.workspaces || []);
+	let threads = $state(data.threads || []);
 
-	// requestAnimationFrame batching for streaming chunks. SSE chunks land
-	// 5-30× per second; rendering each one triggers a full marked.parse +
-	// DOMPurify pass on the entire accumulated buffer, plus a DOM diff for
-	// the streaming bubble. That CPU spike per chunk made the output feel
-	// choppy ("the worker is replying back during build mode is clunky").
-	//
-	// Fix: accumulate incoming chunks in a Map, schedule a single state
-	// update per animation frame (~16 ms = 60 fps). The Markdown component
-	// then re-renders at most once per frame regardless of chunk arrival
-	// rate, which matches what ChatGPT / Claude.ai do for streaming feel.
-	const pendingStreamChunks = new Map<string, string>();
-	let streamFlushScheduled = false;
-	function scheduleStreamFlush() {
-		if (streamFlushScheduled) return;
-		streamFlushScheduled = true;
-		requestAnimationFrame(() => {
-			streamFlushScheduled = false;
-			if (pendingStreamChunks.size === 0) return;
-			const updates: Record<string, string> = { ...streamByTrace };
-			for (const [traceId, chunk] of pendingStreamChunks) {
-				let next = updates[traceId] || '';
-				next = next + (next.endsWith('\n') || next.length === 0 ? '' : '\n') + chunk;
-				if (next.length > STREAM_BUFFER_MAX) {
-					next = '...[truncated]...\n' + next.slice(next.length - STREAM_BUFFER_MAX);
-				}
-				updates[traceId] = next;
-			}
-			pendingStreamChunks.clear();
-			streamByTrace = updates;
+	let textDraft = $state('');
+	let selectedRepo = $state('LogueOS-Console');
+	let currentTier = $state<Tier>('chat');
+	let lastModelUsed = $state('');
+	let sending = $state(false);
 
-			// Auto-scroll the feed during streaming when the operator was
-			// already at the bottom. Without this the streaming bubble grows
-			// downward but the viewport stays put — you watch the text fall
-			// below the fold. Using 'auto' (instant) not 'smooth' because
-			// each frame already changes the content; a 200ms smooth animation
-			// per frame would visibly stutter and fight itself.
-			if (userAtBottom && feedContainer) {
-				feedContainer.scrollTop = feedContainer.scrollHeight;
-			}
-		});
-	}
+	let showModelOverrideModal = $state(false);
+	let sidebarOpen = $state(false);
+	let imageMode = $state(false);
 
-	// Stick-to-bottom scroll: chat threads should behave like iMessage/Slack —
-	// land at the bottom on first paint, auto-scroll on new messages ONLY if
-	// the operator is already near the bottom. If they've scrolled up to read
-	// history, show a "X new ↓" pill instead of yanking the viewport.
-	let userAtBottom = $state(true);
-	let unseenCount = $state(0);
-	let lastSeenMessageId = $state<number | null>(null);
-	// ID of the first message that arrived while scrolled up (drives the unread divider).
-	let firstUnseenMessageId = $state<number | null>(null);
-	// IntersectionObserver sentinel element — bound in the template at feed bottom.
-	let scrollSentinel = $state<HTMLDivElement | null>(null);
-	// Connection status dot wired to the EventSource (SSE) streams in syncStreamSubscriptions.
-	let connStatus = $state<'green' | 'amber' | 'red'>('green');
-	let connDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-	let connConsecutiveErrors = 0;
+	// Ephemeral worker-activity pill state.
+	let activityPill = $state<{ worker: string; step: string; trace_id: string } | null>(null);
+	let activityFadeTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// ─────────────────────────────────────────────────────────────────
-	// Voice: mic dictation + read-aloud (PR 4)
-	// ─────────────────────────────────────────────────────────────────
-	let isRecording = $state(false);
-	let transcribing = $state(false);
-	let speakingMessageId = $state<number | null>(null);
+	// Composer states
+	let composerMode = $state<'idle' | 'focused' | 'recording' | 'talkback'>('idle');
+	let openChip = $state<null | 'repo' | 'thread'>(null);
 
+	// MediaRecorder for dictation
 	let mediaRecorder: MediaRecorder | null = null;
-	let audioChunks: Blob[] = [];
-	// Single persistent <audio> element — never recreated (iOS gesture-unlock continuity).
-	let persistentAudio = $state<HTMLAudioElement | null>(null);
+	let recordChunks: Blob[] = [];
+
+	// Persistent audio for TTS
+	let audioEl = $state<HTMLAudioElement | null>(null);
 	let audioUnlocked = false;
 
-	// Plays a 1-frame silent WAV through the persistent audio element to
-	// satisfy iOS Safari's requirement that audio.play() be called inside a
-	// user gesture before any async play is allowed.
-	function unlockAudio() {
-		if (audioUnlocked || !persistentAudio) return;
-		const SILENT_WAV =
-			'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-		persistentAudio.src = SILENT_WAV;
-		persistentAudio.play().catch(() => {});
-		audioUnlocked = true;
-	}
-
-	async function handleMicPress() {
-		unlockAudio();
-		if (isRecording) {
-			// Second tap = stop and transcribe
-			mediaRecorder?.stop();
-			return;
-		}
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-			audioChunks = [];
-			mediaRecorder = new MediaRecorder(stream);
-			mediaRecorder.ondataavailable = (e) => {
-				if (e.data.size > 0) audioChunks.push(e.data);
-			};
-			mediaRecorder.onstop = async () => {
-				stream.getTracks().forEach((t) => t.stop());
-				isRecording = false;
-				if (audioChunks.length === 0) return;
-				const blob = new Blob(audioChunks, { type: audioChunks[0].type || 'audio/webm' });
-				audioChunks = [];
-				transcribing = true;
-				try {
-					const form = new FormData();
-					form.append('file', blob, 'recording.webm');
-					const resp = await fetch(resolve('/api/chat/transcribe'), {
-						method: 'POST',
-						body: form
-					});
-					if (resp.status === 429) {
-						const body = await resp.json().catch(() => ({}));
-						toasts.add(
-							`STT cap hit (${(body.usage_today_minutes ?? 0).toFixed(1)} min today)`,
-							'error'
-						);
-						return;
-					}
-					if (!resp.ok) {
-						toasts.add('Transcription failed', 'error');
-						return;
-					}
-					const { text } = (await resp.json()) as { text: string; duration_seconds: number };
-					if (text) {
-						textDraft = textDraft ? textDraft + ' ' + text : text;
-					}
-				} catch (e) {
-					toasts.add('Transcription error', 'error');
-					console.error('transcribe error:', e);
-				} finally {
-					transcribing = false;
-				}
-			};
-			mediaRecorder.start();
-			isRecording = true;
-		} catch (e) {
-			toasts.add('Microphone access denied', 'error');
-			console.error('getUserMedia error:', e);
-		}
-	}
-
-	async function handleSpeakMessage(messageId: number, text: string) {
-		if (!text.trim()) return;
-		unlockAudio();
-		speakingMessageId = messageId;
-		try {
-			const resp = await fetch(resolve('/api/chat/speak'), {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ text })
-			});
-			if (resp.status === 429) {
-				const body = await resp.json().catch(() => ({}));
-				toasts.add(
-					`TTS cap hit (${(body.chars_used_today ?? 0).toLocaleString()} chars today)`,
-					'error'
-				);
-				return;
-			}
-			if (!resp.ok) {
-				toasts.add('Read-aloud failed', 'error');
-				return;
-			}
-			const audioBlob = await resp.blob();
-			const url = URL.createObjectURL(audioBlob);
-			if (!persistentAudio) return;
-			persistentAudio.src = url;
-			persistentAudio.onended = () => URL.revokeObjectURL(url);
-			await persistentAudio.play();
-		} catch (e) {
-			toasts.add('Read-aloud error', 'error');
-			console.error('speak error:', e);
-		} finally {
-			speakingMessageId = null;
-		}
-	}
-
-	// ─────────────────────────────────────────────────────────────────
-	// Talkback mode (PR 5) — walkie-talkie hands-free loop
-	// §2D.3 + §2D.4: A→Capture B→Transcribe C→Dispatch D→Speak E→Loop
-	// ─────────────────────────────────────────────────────────────────
+	// Talkback state machine variables (PR 5)
 	let talkbackActive = $state(false);
 	type TalkbackPhase = 'capture' | 'transcribe' | 'dispatch' | 'speak' | 'loop';
 	let talkbackPhase = $state<TalkbackPhase | null>(null);
@@ -493,16 +100,573 @@
 	let talkbackTtsAbortController: AbortController | null = null;
 	let talkbackDispatchMsgId: number | null = null;
 	let talkbackConsecutiveFailures = 0;
-	// Accumulated silence in ms (resets on speech). Auto-stop at 3 min.
 	let continuousSilenceMs = 0;
+
+	// Talkback constants
 	const TALKBACK_SILENCE_AUTOSTOP_MS = 3 * 60 * 1000;
-	// RMS threshold below which audio is considered silence
 	const TALKBACK_SILENCE_THRESHOLD = 0.01;
-	// Silence duration in ms that ends a capture round (speech gap)
 	const TALKBACK_SILENCE_GATE_MS = 2500;
-	// Max capture duration per round (ms)
 	const TALKBACK_MAX_CAPTURE_MS = 30_000;
 
+	// Element refs
+	let feedContainer = $state<HTMLDivElement | null>(null);
+	let scrollSentinel = $state<HTMLDivElement | null>(null);
+	let textareaEl = $state<HTMLTextAreaElement | null>(null);
+	let fileInputEl = $state<HTMLInputElement | null>(null);
+
+	// Pending attachments — uploads stage here as removable chips above the
+	// composer rather than getting injected as markdown into the textarea.
+	// On send, each attachment's markdown link is appended to the outgoing
+	// message body so the server-side rendering stays unchanged.
+	type Attachment = { id: string; filename: string; url: string; mime: string; size: number; uploading?: boolean };
+	let attachments = $state<Attachment[]>([]);
+
+	// Scroll state
+	let userAtBottom = $state(true);
+	let unseenCount = $state(0);
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Derived properties
+	// ─────────────────────────────────────────────────────────────────────
+	const selectedWorkspace = $derived(workspaces.find((w) => w.name === selectedRepo));
+	const tierEmoji = $derived(
+		currentTier === 'planning'
+			? '⚖️'
+			: currentTier === 'deep'
+				? '🧠'
+				: currentTier === 'local'
+					? '🔧'
+					: '🪶'
+	);
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Draft Persist Effect
+	// ─────────────────────────────────────────────────────────────────────
+	let draftDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		const text = textDraft;
+		if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+		draftDebounceTimer = setTimeout(() => {
+			const tid = activeThread;
+			void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(tid)}`), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ body: text })
+			}).catch(() => {});
+		}, 400);
+	});
+
+	// Auto-grow the composer textarea with the draft. Resting state is rows=5
+	// (~140px — a real writing surface, not a snippet). Expands up to roughly
+	// half the viewport (capped 480px) then scrolls internally.
+	function composerMaxHeight(): number {
+		if (typeof window === 'undefined') return 360;
+		return Math.min(Math.round(window.innerHeight * 0.5), 480);
+	}
+	$effect(() => {
+		const _ = textDraft; // dep — re-run whenever the draft changes
+		void _;
+		if (!textareaEl) return;
+		textareaEl.style.height = 'auto';
+		const max = composerMaxHeight();
+		const target = Math.min(Math.max(textareaEl.scrollHeight, 80), max);
+		textareaEl.style.height = `${target}px`;
+	});
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Network & Data Actions
+	// ─────────────────────────────────────────────────────────────────────
+	async function loadTier(threadId: string) {
+		try {
+			const r = await fetch(resolve(`/api/chat/tier?thread_id=${encodeURIComponent(threadId)}`));
+			if (r.ok) {
+				const b = await r.json();
+				if (b.current_tier) currentTier = b.current_tier as Tier;
+				providerOverride = (b.provider_override ?? null) as ProviderPref;
+				lastModelUsed = b.last_model_used || '';
+			}
+		} catch {
+			/* keep last known */
+		}
+	}
+
+	type ProviderPref = 'anthropic' | 'gemini' | null;
+	let providerOverride = $state<ProviderPref>(null);
+
+	// Concrete model picker — operator picks a specific model and we
+	// translate it to a (tier, provider) pair that the router will pin.
+	// 'auto' = no overrides (smart routing).
+	type ModelChoice = {
+		id: string;
+		label: string;
+		sublabel: string;
+		tier: Tier | null;
+		provider: ProviderPref;
+	};
+	const MODEL_CHOICES: ModelChoice[] = [
+		{ id: 'auto', label: 'Auto', sublabel: 'smart tier routing', tier: null, provider: null },
+		{
+			id: 'claude-haiku',
+			label: 'Claude Haiku 4.5',
+			sublabel: 'fast · chat tier',
+			tier: 'chat',
+			provider: 'anthropic'
+		},
+		{
+			id: 'claude-sonnet',
+			label: 'Claude Sonnet 4.6',
+			sublabel: 'planning',
+			tier: 'planning',
+			provider: 'anthropic'
+		},
+		{
+			id: 'claude-opus',
+			label: 'Claude Opus 4.7',
+			sublabel: 'deep',
+			tier: 'deep',
+			provider: 'anthropic'
+		},
+		{
+			id: 'gemini-flash-lite',
+			label: 'Gemini 2.5 Flash-lite',
+			sublabel: 'fast · chat tier',
+			tier: 'chat',
+			provider: 'gemini'
+		},
+		{
+			id: 'gemini-flash',
+			label: 'Gemini 2.5 Flash',
+			sublabel: 'planning',
+			tier: 'planning',
+			provider: 'gemini'
+		},
+		{
+			id: 'gemini-pro',
+			label: 'Gemini 2.5 Pro',
+			sublabel: 'deep',
+			tier: 'deep',
+			provider: 'gemini'
+		},
+		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: null }
+	];
+
+	const selectedModelChoice = $derived(
+		MODEL_CHOICES.find(
+			(c) =>
+				(c.tier ?? null) === (currentTier === 'chat' && !providerOverride ? null : currentTier) &&
+				c.provider === providerOverride
+		) ?? MODEL_CHOICES[0]
+	);
+
+	async function setModelChoice(choice: ModelChoice) {
+		showModelOverrideModal = false;
+		try {
+			const resp = await fetch(resolve('/api/chat/tier'), {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					thread_id: activeThread,
+					tier: choice.tier,
+					provider: choice.provider
+				})
+			});
+			if (resp.ok) {
+				const body = await resp.json();
+				if (body.current_tier) currentTier = body.current_tier as Tier;
+				providerOverride = (body.provider_override ?? null) as ProviderPref;
+				await loadTier(activeThread);
+				toasts.add(`Model set to ${choice.label}`, 'success');
+			}
+		} catch {
+			toasts.add('Failed to update model preference', 'error');
+		}
+	}
+
+	async function pollMessages(forThread?: string) {
+		// Capture the thread the caller intended at the moment of the request.
+		// Without this guard a slow in-flight poll for the previous thread can
+		// land after switchThread() has flipped activeThread and clobber the
+		// new thread's (empty) messages with the previous thread's content —
+		// exact symptom the operator reported: "old thread shows up instead
+		// of a clean slate."
+		const requestedThread = forThread ?? activeThread;
+		try {
+			const r = await fetch(
+				resolve('/api/chat') + `?thread=${encodeURIComponent(requestedThread)}`
+			);
+			if (!r.ok) return;
+			// Drop the response if the operator switched threads while the
+			// fetch was in flight. The 3s poll will re-fire with the new thread.
+			if (requestedThread !== activeThread) return;
+			const b = await r.json();
+			const newMessages: ChatMessage[] = b.messages || [];
+			if (
+				newMessages.length !== messages.length ||
+				JSON.stringify(newMessages) !== JSON.stringify(messages)
+			) {
+				if (!userAtBottom) {
+					const added = newMessages.length - messages.length;
+					if (added > 0) unseenCount += added;
+				}
+				messages = newMessages;
+				if (userAtBottom) {
+					queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+				}
+			}
+		} catch {
+			/* offline */
+		}
+	}
+
+	async function pollActivity() {
+		try {
+			const r = await fetch(resolve('/api/chat/activity?limit=8'));
+			if (!r.ok) return;
+			const b = await r.json();
+			const rows = (b.activity || []) as Array<{
+				trace_id: string;
+				action: string;
+				target: string | null;
+				timestamp: string;
+			}>;
+			const cutoff = Date.now() - 5 * 60 * 1000;
+			let live: typeof activityPill = null;
+			for (const row of rows) {
+				if (new Date(row.timestamp).getTime() < cutoff) continue;
+				if (row.action === 'completed' || row.action === 'failed') continue;
+				const worker = row.trace_id.startsWith('agy-') ? 'AGY' : 'CC';
+				const step = row.target ? `${row.action} '${row.target}'` : row.action;
+				live = { worker, step, trace_id: row.trace_id };
+				break;
+			}
+			if (live) {
+				activityPill = live;
+				if (activityFadeTimer) clearTimeout(activityFadeTimer);
+				activityFadeTimer = setTimeout(() => {
+					if (activityPill?.trace_id === live!.trace_id) activityPill = null;
+				}, 60_000);
+			} else if (activityPill) {
+				if (activityFadeTimer) clearTimeout(activityFadeTimer);
+				activityFadeTimer = setTimeout(() => {
+					activityPill = null;
+				}, 3000);
+			}
+		} catch {
+			/* silent */
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Audio iOS workaround
+	// ─────────────────────────────────────────────────────────────────────
+	function unlockAudio() {
+		if (audioUnlocked || !audioEl) return;
+		try {
+			audioEl.src =
+				'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+			void audioEl.play().catch(() => {});
+			audioUnlocked = true;
+		} catch {
+			/* best effort */
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Send text message
+	// ─────────────────────────────────────────────────────────────────────
+	async function sendMessage() {
+		// Slash command takes precedence — if the draft is /<known-command>
+		// we run it locally instead of dispatching to /api/chat.
+		if (await runSlashFromDraft()) return;
+
+		const text = textDraft.trim();
+		// Allow sending an attachment-only message (no text body), but require
+		// at least one of the two so we don't post empty rows.
+		if (!text && attachments.length === 0) return;
+		if (sending) return;
+		if (attachments.some(a => a.uploading)) {
+			toasts.add('Wait for image upload to finish', 'info');
+			return;
+		}
+		unlockAudio();
+		sending = true;
+
+		const isGenImage = imageMode;
+		imageMode = false; // toggle off image mode immediately on send
+
+		// Fold staged attachments into the outgoing message body as markdown
+		// image links. The server is unchanged — the message field is a string;
+		// the chat renderer already handles ![alt](url) markdown. Chips just
+		// stage them visually until send.
+		const attachmentMd = attachments.map((a) => `![${a.filename}](${a.url})`).join('\n');
+		const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
+
+		const optimistic: ChatMessage = {
+			id: Date.now(),
+			sender: 'operator',
+			message: messageBody,
+			timestamp: new Date().toISOString()
+		};
+		messages = [...messages, optimistic];
+		textDraft = '';
+		attachments = [];
+		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+
+		// Routing decision (mirrors /api/chat server logic): if the message
+		// looks like an explicit worker dispatch or it's an image-gen request,
+		// use the non-streaming /api/chat endpoint. Otherwise stream tokens
+		// via /api/chat/stream so the reply renders live.
+		const lower = messageBody.toLowerCase();
+		const isDispatch = lower.includes('@cc') || lower.includes('@agy') || lower.includes('@gemini');
+		const useStream = !isDispatch && !isGenImage;
+
+		try {
+			if (useStream) {
+				await runStreamingSend(messageBody);
+			} else {
+				const r = await fetch(resolve('/api/chat'), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						message: messageBody,
+						thread: activeThread,
+						target_repo: selectedRepo,
+						image: isGenImage || undefined
+					})
+				});
+				if (!r.ok) throw new Error(`HTTP ${r.status}`);
+				await pollMessages();
+			}
+		} catch (e) {
+			toasts.add(`Send failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+			textDraft = text; // restore
+		} finally {
+			sending = false;
+		}
+	}
+
+	function handlePaste(e: ClipboardEvent) {
+		const items = Array.from(e.clipboardData?.items ?? []);
+		const imageFiles = items
+			.filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+			.map((it) => it.getAsFile())
+			.filter((f): f is File => f !== null);
+		if (imageFiles.length === 0) return; // let default paste happen
+		e.preventDefault();
+		for (const f of imageFiles) {
+			void uploadOneFile(f);
+		}
+	}
+
+	function handleKey(e: KeyboardEvent) {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			void sendMessage();
+		}
+	}
+
+	// Set of message ids currently showing the "Copied" check on their copy
+	// button. Cleared 1500ms after copy fires.
+	// Regenerate flow — operator clicks "Regenerate" on an AGY reply. We
+	// find the prior operator message in the same thread, delete the
+	// existing reply, then re-stream a new one. Old reply gets replaced
+	// rather than stacking up.
+	let regeneratingIds = $state(new Set<number>());
+	async function regenerateReply(m: ChatMessage) {
+		if (sending || regeneratingIds.has(m.id)) return;
+		// Find the most recent operator message before this reply.
+		const idx = messages.findIndex((x) => x.id === m.id);
+		if (idx < 0) return;
+		let priorOperator: ChatMessage | null = null;
+		for (let i = idx - 1; i >= 0; i--) {
+			if (messages[i].sender === 'operator') {
+				priorOperator = messages[i];
+				break;
+			}
+		}
+		if (!priorOperator) {
+			toasts.add('No prior message to regenerate from', 'error');
+			return;
+		}
+		regeneratingIds = new Set([...regeneratingIds, m.id]);
+		sending = true;
+		try {
+			// Drop the old reply server-side + optimistically from the feed so
+			// the streamed replacement lands in the right place.
+			await fetch(resolve(`/api/chat?id=${m.id}`), { method: 'DELETE' }).catch(() => null);
+			messages = messages.filter((x) => x.id !== m.id);
+			await runStreamingSend(priorOperator.message);
+		} catch (e) {
+			toasts.add(`Regenerate failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+		} finally {
+			sending = false;
+			regeneratingIds = new Set([...regeneratingIds].filter((i) => i !== m.id));
+		}
+	}
+
+	let copiedIds = $state(new Set<number>());
+	async function copyMessage(m: ChatMessage) {
+		try {
+			await navigator.clipboard.writeText(m.message);
+			copiedIds = new Set([...copiedIds, m.id]);
+			setTimeout(() => {
+				copiedIds = new Set([...copiedIds].filter((i) => i !== m.id));
+			}, 1500);
+		} catch {
+			toasts.add('Clipboard unavailable — long-press to copy manually', 'error');
+		}
+	}
+
+	// Streaming send — opens an SSE connection to /api/chat/stream, inserts
+	// a placeholder AGY bubble, then appends token text as it arrives. The
+	// server persists the final assembled reply to DB before closing the
+	// stream, so pollMessages() at the end reconciles the optimistic bubble
+	// with the persisted row (replaces it with the canonical numeric-id row).
+	async function runStreamingSend(messageBody: string) {
+		const STREAM_ID = Date.now() + 1; // distinct from the operator optimistic id
+		// Insert an empty placeholder; tokens will append. With this bubble
+		// present, the thinking-dots indicator suppresses (last msg !== operator).
+		messages = [
+			...messages,
+			{
+				id: STREAM_ID,
+				sender: 'agy',
+				message: '',
+				timestamp: new Date().toISOString()
+			}
+		];
+
+		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+		let errored = false;
+		let streamCompleteOk = false;
+
+		try {
+			const resp = await fetch(resolve('/api/chat/stream'), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					message: messageBody,
+					thread: activeThread,
+					target_repo: selectedRepo
+				})
+			});
+			if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
+
+			reader = resp.body.getReader();
+			const decoder = new TextDecoder('utf-8');
+			let buf = '';
+			let assembled = '';
+
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) {
+					streamCompleteOk = true;
+					break;
+				}
+				buf += decoder.decode(value, { stream: true });
+				let sep: number;
+				while ((sep = buf.indexOf('\n\n')) !== -1) {
+					const raw = buf.slice(0, sep);
+					buf = buf.slice(sep + 2);
+					const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
+					if (!dataLine) continue;
+					try {
+						const evt = JSON.parse(dataLine.slice(6)) as
+							| { type: 'token'; text: string }
+							| { type: 'done'; provider_used: string; model_used: string }
+							| { type: 'error'; message: string };
+						if (evt.type === 'token') {
+							assembled += evt.text;
+							messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
+							if (userAtBottom) {
+								queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+							}
+						} else if (evt.type === 'done') {
+							upsertThreadTier_local(evt.model_used);
+						} else if (evt.type === 'error') {
+							errored = true;
+							toasts.add(`LLM stream failed: ${evt.message}`, 'error');
+							messages = messages.map((m) =>
+								m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
+							);
+						}
+					} catch {
+						/* skip malformed */
+					}
+				}
+			}
+		} finally {
+			if (reader) reader.cancel().catch(() => {});
+			if (errored || !streamCompleteOk) {
+				messages = messages.filter((m) => m.id !== STREAM_ID);
+			}
+		}
+
+		// Reconcile against the persisted DB state.
+		await pollMessages();
+		if (!errored) {
+			// pollMessages replaces the messages array from DB; the optimistic
+			// STREAM_ID row should now be gone (DB has the canonical row).
+			// Nothing else to do here.
+		}
+	}
+
+	// Tiny local-only setter for the model label badge — avoids hitting the
+	// /api/chat/tier roundtrip just to display the model used.
+	function upsertThreadTier_local(modelUsed: string) {
+		if (modelUsed) lastModelUsed = modelUsed;
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Voice dictation (Mic button - One-shot)
+	// ─────────────────────────────────────────────────────────────────────
+	async function toggleRecord() {
+		unlockAudio();
+		if (composerMode === 'recording') {
+			mediaRecorder?.stop();
+			return;
+		}
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({
+				audio: { echoCancellation: true, noiseSuppression: true }
+			});
+			recordChunks = [];
+			mediaRecorder = new MediaRecorder(stream);
+			mediaRecorder.ondataavailable = (e) => {
+				if (e.data.size > 0) recordChunks.push(e.data);
+			};
+			mediaRecorder.onstop = async () => {
+				composerMode = 'idle';
+				stream.getTracks().forEach((t) => t.stop());
+				const blob = new Blob(recordChunks, { type: 'audio/webm' });
+				const fd = new FormData();
+				fd.append('file', blob, 'rec.webm');
+				try {
+					const r = await fetch(resolve('/api/chat/transcribe'), { method: 'POST', body: fd });
+					if (!r.ok) {
+						toasts.add('Transcription failed', 'error');
+						return;
+					}
+					const b = await r.json();
+					if (b.text) {
+						textDraft = (textDraft + ' ' + b.text).trim();
+						// Re-focus composer
+						textareaEl?.focus();
+					}
+				} catch {
+					toasts.add('Transcription service unreachable', 'error');
+				}
+			};
+			mediaRecorder.start();
+			composerMode = 'recording';
+		} catch {
+			toasts.add('Microphone permission denied', 'error');
+		}
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Hands-free continuous Talkback Loop (PR 5)
+	// ─────────────────────────────────────────────────────────────────────
 	function pSleep(ms: number): Promise<void> {
 		return new Promise((r) => setTimeout(r, ms));
 	}
@@ -549,14 +713,15 @@
 
 	async function stopTalkback(reason?: string) {
 		talkbackActive = false;
+		composerMode = 'idle';
 		talkbackPhase = null;
 		talkbackDispatchMsgId = null;
 		talkbackStopCapture();
 		talkbackTtsAbortController?.abort();
 		talkbackTtsAbortController = null;
-		if (persistentAudio && !persistentAudio.paused) {
-			persistentAudio.pause();
-			persistentAudio.currentTime = 0;
+		if (audioEl && !audioEl.paused) {
+			audioEl.pause();
+			audioEl.currentTime = 0;
 		}
 		if (talkbackWakeLock) {
 			await talkbackWakeLock.release().catch(() => {});
@@ -565,18 +730,15 @@
 		if (reason) toasts.add(reason, 'info');
 	}
 
-	async function emergencyStop() {
-		await stopTalkback('Talkback stopped');
-	}
-
 	async function toggleTalkback() {
 		if (talkbackActive) {
-			await stopTalkback('Talkback off');
+			// No toast on manual stop — the pill returns to idle, which is signal enough.
+			// Auto-stop paths (cap hit, mic disconnected, error streak) still toast
+			// because their reason carries information the operator needs.
+			await stopTalkback();
 			return;
 		}
-		// Unlock audio element via user gesture (iOS requirement)
 		unlockAudio();
-		// Request screen wake lock — keeps phone screen on during loop (iOS 16.4+)
 		try {
 			if ('wakeLock' in navigator) {
 				talkbackWakeLock = await (
@@ -586,12 +748,12 @@
 				).wakeLock.request('screen');
 			}
 		} catch {
-			// Wake lock not available; talkback continues without it
+			/* continuous without lock */
 		}
 		talkbackActive = true;
+		composerMode = 'talkback';
 		talkbackConsecutiveFailures = 0;
 		continuousSilenceMs = 0;
-		toasts.add('Talkback ON — earbuds recommended for best results', 'info');
 		void beginTalkbackCapture();
 	}
 
@@ -601,12 +763,10 @@
 		talkbackTranscriptBuffer = '';
 
 		try {
-			// Step A: open mic with echo + noise cancellation (§2D.4)
 			talkbackStream = await navigator.mediaDevices.getUserMedia({
 				audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
 			});
 
-			// Guard: permission revoke mid-session (getUserMedia track ended)
 			talkbackStream.getTracks().forEach((track) => {
 				track.onended = () => {
 					if (talkbackActive) {
@@ -615,8 +775,6 @@
 				};
 			});
 
-			// Step B: get AssemblyAI realtime token (§2D.3)
-			talkbackPhase = 'transcribe';
 			const tokenResp = await fetch(resolve('/api/chat/transcribe/stream'));
 			if (!tokenResp.ok) {
 				if (tokenResp.status === 429) {
@@ -627,23 +785,17 @@
 			}
 			const { ws_url } = (await tokenResp.json()) as { token: string; ws_url: string };
 
-			// Audio context at 16 kHz (matches AssemblyAI realtime sample rate)
 			talkbackAudioCtx = new AudioContext({ sampleRate: 16000 });
 			const source = talkbackAudioCtx.createMediaStreamSource(talkbackStream);
 
-			// ScriptProcessorNode for raw PCM capture (deprecated but universally
-			// supported incl. iOS Safari; AudioWorklet requires a separate file URL)
 			const bufferSize = 4096;
 			talkbackProcessor = talkbackAudioCtx.createScriptProcessor(bufferSize, 1, 1);
 			source.connect(talkbackProcessor);
-			// Connect to destination to keep the audio graph alive (required)
 			talkbackProcessor.connect(talkbackAudioCtx.destination);
 
-			// Open WebSocket to AssemblyAI using the temporary token
 			talkbackWs = new WebSocket(ws_url);
 			talkbackWs.binaryType = 'arraybuffer';
 
-			// State for capture loop resolution
 			let captureEndResolve: (() => void) | null = null;
 			const capturePromise = new Promise<void>((res) => {
 				captureEndResolve = res;
@@ -667,7 +819,6 @@
 					};
 					if (msg.message_type === 'FinalTranscript' && msg.text?.trim()) {
 						talkbackTranscriptBuffer += (talkbackTranscriptBuffer ? ' ' : '') + msg.text.trim();
-						// Keyword stop detection (bonus, lightweight string match)
 						const lower = msg.text.toLowerCase();
 						if (lower.includes('stop talkback') || lower.includes('cancel talkback')) {
 							void stopTalkback('Stop word detected — Talkback stopped');
@@ -680,12 +831,10 @@
 			talkbackWs.onerror = () => captureEndResolve?.();
 			talkbackWs.onclose = () => captureEndResolve?.();
 
-			// PCM capture + silence detection in onaudioprocess
 			talkbackProcessor.onaudioprocess = (e) => {
 				if (!talkbackActive) return;
 				const inputData = e.inputBuffer.getChannelData(0);
 
-				// RMS energy for silence detection
 				let sum = 0;
 				for (let i = 0; i < inputData.length; i++) {
 					sum += inputData[i] * inputData[i];
@@ -698,22 +847,19 @@
 					const silenceDur = now - localSilenceStart;
 					continuousSilenceMs += (inputData.length / 16000) * 1000;
 
-					// 3-minute continuous silence → auto-disable talkback
 					if (continuousSilenceMs >= TALKBACK_SILENCE_AUTOSTOP_MS) {
 						void stopTalkback('3 minutes of silence — Talkback auto-stopped');
 						captureEndResolve?.();
 						return;
 					}
-					// Silence gate: end this capture round if speech was detected
 					if (silenceDur >= TALKBACK_SILENCE_GATE_MS && talkbackTranscriptBuffer.trim()) {
 						captureEndResolve?.();
 					}
 				} else {
 					localSilenceStart = null;
-					continuousSilenceMs = 0; // reset on any speech
+					continuousSilenceMs = 0;
 				}
 
-				// Forward PCM to AssemblyAI as Int16
 				if (wsReady && talkbackWs?.readyState === WebSocket.OPEN) {
 					const pcm16 = new Int16Array(inputData.length);
 					for (let i = 0; i < inputData.length; i++) {
@@ -731,12 +877,10 @@
 
 			const text = talkbackTranscriptBuffer.trim();
 			if (!text) {
-				// Empty round (pure silence) — re-arm without counting as failure
 				void beginTalkbackCapture();
 				return;
 			}
 
-			// Step C: dispatch text to /api/chat, model hard-locked to Flash-lite
 			await dispatchTalkback(text);
 		} catch (e) {
 			console.error('Talkback capture error:', e);
@@ -753,18 +897,18 @@
 
 	async function dispatchTalkback(text: string) {
 		if (!talkbackActive) return;
-		talkbackPhase = 'dispatch';
+		talkbackPhase = 'transcribe'; // visual bump to transcribing
 
 		try {
+			talkbackPhase = 'dispatch';
 			const resp = await fetch(resolve('/api/chat'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					sender: 'operator',
 					message: text,
-					agent: 'agy', // Gemini OAuth path
 					thread: activeThread,
-					talkback: true // server enforces Flash-lite tier (§2D.3 Step C)
+					target_repo: selectedRepo,
+					talkback: true // server overrides tier to Flash-lite
 				})
 			});
 			if (!resp.ok) throw new Error(`Dispatch ${resp.status}`);
@@ -776,7 +920,6 @@
 			userAtBottom = true;
 			talkbackDispatchMsgId = sentMsg?.id ?? null;
 
-			// Step D: wait for assistant reply, then speak it
 			talkbackPhase = 'speak';
 			await waitForTalkbackReply();
 		} catch (e) {
@@ -794,7 +937,7 @@
 	async function waitForTalkbackReply() {
 		if (!talkbackActive || talkbackDispatchMsgId === null) return;
 		const dispatchId = talkbackDispatchMsgId;
-		const deadline = Date.now() + 90_000; // 90s reply timeout
+		const deadline = Date.now() + 90_000;
 
 		while (Date.now() < deadline && talkbackActive) {
 			await pollMessages();
@@ -821,7 +964,7 @@
 	}
 
 	async function speakTalkbackReply(text: string) {
-		if (!talkbackActive || !persistentAudio) return;
+		if (!talkbackActive || !audioEl) return;
 		talkbackTtsAbortController = new AbortController();
 
 		try {
@@ -839,10 +982,9 @@
 
 			const audioBlob = await resp.blob();
 			const url = URL.createObjectURL(audioBlob);
-			persistentAudio.src = url;
+			audioEl.src = url;
 
-			// Step E: after playback ends, play chime + re-arm mic
-			persistentAudio.onended = () => {
+			audioEl.onended = () => {
 				URL.revokeObjectURL(url);
 				if (talkbackActive) {
 					talkbackPhase = 'loop';
@@ -852,7 +994,7 @@
 				}
 			};
 
-			await persistentAudio.play();
+			await audioEl.play();
 		} catch (e) {
 			if ((e as Error).name === 'AbortError') return;
 			console.error('Talkback speak error:', e);
@@ -868,853 +1010,149 @@
 		}
 	}
 
-	// Talkback phase label shown in the LISTENING banner
-	const TALKBACK_PHASE_LABELS: Record<TalkbackPhase, string> = {
-		capture: '🔴 LISTENING',
-		transcribe: '🔄 TRANSCRIBING...',
-		dispatch: '📤 SENDING...',
-		speak: '🔈 SPEAKING...',
-		loop: '↩ RE-ARMING...'
+	const TALKBACK_PHASE_LABELS = {
+		capture: '🔴 Capture',
+		transcribe: '🔄 Transcribe',
+		dispatch: '📤 Sending',
+		speak: '🔈 Reply',
+		loop: '↩ Ready'
 	};
 
-	// Optimistic "dispatching..." indicator. Set true the moment the operator
-	// hits send; cleared when the dispatch-side system bubble (or a streaming
-	// bubble, whichever comes first) lands in the messages list. Closes the
-	// 3-5s perception gap between "I sent" and "agent is working" — without
-	// this the chat feels dead during the gateway + listener + worker
-	// cold-start round-trip.
-	let dispatching = $state(false);
-	let dispatchingSinceMsgId = $state<number | null>(null);
-
-	// 1s message poll — the dominant chat-side latency between worker
-	// emit_chat_message landing in the DB and the operator seeing it.
-	// Dropping from 3s shaves up to 2s off every dispatch's perceived
-	// completion time. The query is a single SELECT against a tiny indexed
-	// table; cost is negligible.
-	const POLL_INTERVAL_MS = 1000;
-	// Activity ticker pulls one row per active trace per tick. 1s while
-	// something is running, 3s when idle. Idle rate intentionally stays at
-	// 3s so we don't hammer the DB when no traces are active.
-	const ACTIVITY_POLL_FAST_MS = 1000;
-	const ACTIVITY_POLL_IDLE_MS = 3000;
-
-	// A trace is "active" if it was dispatched but hasn't finished yet.
-	// Multiple signals indicate it's done; if ANY fires the trace is inactive:
-	//   1. emit_chat_activity emitted a terminal action (completed | failed)
-	//   2. The worker emitted a chat_messages row from cc / agy / system-reply
-	//      tied to this trace_id (i.e. the final emit_chat_message). This is
-	//      the most reliable signal because workers tend to emit a final
-	//      message even if they skip the activity rows.
-	//   3. The SSE stream closed itself (streamEnded[traceId] is true). The
-	//      stream closes when cc_completion_log.jsonl shows the trace's row.
-	function isTraceActive(traceId: string): boolean {
-		// Signal 3 — SSE stream ended (server saw the completion-log row).
-		if (streamEnded[traceId]) return false;
-
-		// Signal 1 — explicit terminal activity row.
-		const rows = activityByTrace[traceId] || [];
-		const last = rows[rows.length - 1]?.action || '';
-		if (last === 'completed' || last === 'failed') return false;
-
-		// Signal 2 — the worker emitted its final reply into the chat as a
-		// non-system message. The system "Agent dispatched" row uses the same
-		// trace_id but sender='system'; a follow-up from sender='cc' or 'agy'
-		// (or any non-system) with the same trace_id means the worker spoke.
-		for (const m of messages) {
-			if (m.trace_id !== traceId) continue;
-			if (m.sender === 'system' || m.sender === 'operator') continue;
-			// cc / agy / any worker sender = the worker's reply landed.
-			return false;
-		}
-
-		return true;
+	// ─────────────────────────────────────────────────────────────────────
+	// Paperclip Upload Wiring
+	// ─────────────────────────────────────────────────────────────────────
+	function triggerUpload() {
+		fileInputEl?.click();
 	}
 
-	function tracesFromMessages(msgs: ChatMessage[]): string[] {
-		const set = new Set<string>();
-		for (const m of msgs) {
-			if (m.trace_id) set.add(m.trace_id);
-		}
-		return Array.from(set);
-	}
-
-	function scheduleConnStatus(status: 'green' | 'amber' | 'red') {
-		if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
-		connDebounceTimer = setTimeout(() => {
-			connStatus = status;
-			connDebounceTimer = null;
-		}, 1000);
-	}
-
-	// Scroll the chat container to the absolute bottom. Wraps in
-	// requestAnimationFrame so the call lands after layout/paint — on first
-	// mount, calling scrollTo before the messages render does nothing.
-	async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
-		await tick();
-		if (!feedContainer) return;
-		const el = feedContainer;
-		requestAnimationFrame(() => {
-			el.scrollTo({ top: el.scrollHeight, behavior });
-		});
-	}
-
-	async function jumpToLatest() {
-		userAtBottom = true;
-		unseenCount = 0;
-		firstUnseenMessageId = null;
-		if (messages.length > 0) lastSeenMessageId = messages[messages.length - 1].id;
-		await scrollToBottom('smooth');
-	}
-
-	// Poll the API for new messages stateless and snappy
-	async function pollMessages() {
-		try {
-			const resp = await fetch(
-				resolve('/api/chat') + `?thread=${encodeURIComponent(activeThread)}`
-			);
-			if (!resp.ok) return;
-			const body = await resp.json();
-			const newMessages: ChatMessage[] = body.messages || [];
-
-			if (
-				newMessages.length === messages.length &&
-				JSON.stringify(newMessages) === JSON.stringify(messages)
-			) {
-				return;
+	// Uploads a single File via /api/chat/uploads and stages it as a chip.
+	// Shared between the paperclip-triggered <input type=file> and the
+	// drag-and-drop handler. Errors surface via toast; success is silent
+	// because the chip itself is the success indicator.
+	async function uploadOneFile(file: File): Promise<void> {
+		const tempId = crypto.randomUUID();
+		attachments = [
+			...attachments,
+			{
+				id: tempId,
+				filename: file.name,
+				url: '',
+				mime: file.type,
+				size: file.size,
+				uploading: true
 			}
-
-			const prevLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
-			messages = newMessages;
-
-			// Auto-title: fire once when the first assistant message lands.
-			void maybeAutoTitle(activeThread);
-
-			// Clear the "dispatching..." indicator once the dispatch follow-up
-			// (system "Agent dispatched" bubble OR a real worker reply) has
-			// landed after the operator's most recent send.
-			if (dispatching && dispatchingSinceMsgId !== null) {
-				const settled = newMessages.some(
-					(m) =>
-						m.id > (dispatchingSinceMsgId as number) &&
-						(m.sender === 'system' || (m.sender !== 'operator' && m.trace_id))
-				);
-				if (settled) {
-					dispatching = false;
-					dispatchingSinceMsgId = null;
-				}
-			}
-
-			// Stick-to-bottom: only auto-scroll when the operator was already
-			// reading at the bottom. If they've scrolled up to read history,
-			// count new arrivals and let the "X new ↓" pill bring them back
-			// when they want.
-			if (userAtBottom) {
-				scrollToBottom('smooth');
-				if (newMessages.length > 0) {
-					lastSeenMessageId = newMessages[newMessages.length - 1].id;
-				}
-			} else {
-				const newOnes = newMessages.filter((m) => prevLastId === null || m.id > prevLastId);
-				if (newOnes.length > 0) {
-					unseenCount += newOnes.length;
-					if (firstUnseenMessageId === null && newOnes[0]) {
-						firstUnseenMessageId = newOnes[0].id;
-					}
-				}
-			}
-		} catch {
-			// silent fallback
-		}
-	}
-
-	// Pull all activity rows for every trace mentioned in the current chat.
-	// One trip per trace is wasteful as the active-trace set grows; for the
-	// foreseeable usage volume (≤10 traces visible) the single round-trip
-	// per poll-tick is fine.
-	async function pollActivity() {
-		const traces = tracesFromMessages(messages);
-		if (traces.length === 0) return;
-
-		const updates: Record<string, Activity[]> = { ...activityByTrace };
-		await Promise.all(
-			traces.map(async (traceId) => {
-				try {
-					const resp = await fetch(
-						resolve('/api/chat/activity') + `?trace_id=${encodeURIComponent(traceId)}`
-					);
-					if (!resp.ok) return;
-					const body = await resp.json();
-					updates[traceId] = body.activity || [];
-				} catch {
-					// silent
-				}
-			})
-		);
-		activityByTrace = updates;
-	}
-
-	function anyTraceActive(): boolean {
-		return tracesFromMessages(messages).some(isTraceActive);
-	}
-
-	// Open an EventSource for each active trace; close any whose trace has
-	// completed/failed since last tick. Idempotent — safe to call from the
-	// poll loop. The browser's EventSource auto-reconnects on transient drop.
-	function syncStreamSubscriptions() {
-		const traces = tracesFromMessages(messages);
-		const active = new Set(traces.filter(isTraceActive));
-
-		// Open for newly-active traces.
-		for (const traceId of active) {
-			if (streamSources.has(traceId)) continue;
-			try {
-				const url = base + '/api/chat/stream/' + encodeURIComponent(traceId);
-				const es = new EventSource(url);
-				es.addEventListener('chunk', (ev) => {
-					const data = (ev as MessageEvent).data as string;
-					// Server formatted as one data: line per source line; the
-					// EventSource API rejoins them with \n. Queue into the
-					// per-trace pending bucket and schedule a single rAF flush.
-					const prev = pendingStreamChunks.get(traceId) || '';
-					const next = prev + (prev.endsWith('\n') || prev.length === 0 ? '' : '\n') + data;
-					pendingStreamChunks.set(traceId, next);
-					scheduleStreamFlush();
-				});
-				es.onopen = () => {
-					connConsecutiveErrors = 0;
-					scheduleConnStatus('green');
-				};
-				es.addEventListener('end', () => {
-					streamEnded = { ...streamEnded, [traceId]: true };
-					es.close();
-					streamSources.delete(traceId);
-				});
-				es.addEventListener('error', () => {
-					connConsecutiveErrors++;
-					scheduleConnStatus(connConsecutiveErrors >= 3 ? 'red' : 'amber');
-				});
-				streamSources.set(traceId, es);
-			} catch (e) {
-				console.error('failed to open stream for', traceId, e);
-			}
-		}
-
-		// Close streams for traces no longer active.
-		for (const [traceId, es] of streamSources.entries()) {
-			if (!active.has(traceId)) {
-				es.close();
-				streamSources.delete(traceId);
-			}
-		}
-		// No active traces → reset conn status to green (nothing to fail).
-		if (active.size === 0) {
-			connConsecutiveErrors = 0;
-			scheduleConnStatus('green');
-		}
-	}
-
-	onMount(() => {
-		// Restore draft map and workspace selections from localStorage.
-		try {
-			const savedDrafts = JSON.parse(localStorage.getItem('chat_drafts_v1') || '[]') as [
-				string,
-				string
-			][];
-			drafts = new Map(savedDrafts);
-			const localDraft = drafts.get(activeThread) || '';
-			if (localDraft) textDraft = localDraft;
-		} catch {
-			/* corrupted key — ignore */
-		}
-		try {
-			const savedWS = JSON.parse(localStorage.getItem('chat_workspaces_v1') || '{}') as Record<
-				string,
-				string
-			>;
-			workspaceByThread = savedWS;
-			const savedRepo = savedWS[activeThread];
-			if (savedRepo) selectedRepo = savedRepo;
-		} catch {
-			/* corrupted key — ignore */
-		}
-
-		// Async: fetch server draft for cross-device sync (overwrites local if newer).
-		void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(activeThread)}`))
-			.then((r) => (r.ok ? r.json() : null))
-			.then((body: { body?: string } | null) => {
-				if (body?.body) {
-					textDraft = body.body;
-					drafts.set(activeThread, body.body);
-					try {
-						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-					} catch {
-						/* ignore */
-					}
-				}
-			})
-			.catch(() => {
-				/* offline — use local copy */
-			});
-
-		// Fetch initial tier for badge.
-		void fetchTier(activeThread);
-
-		// First paint may not have measured the feed yet — defer to the next
-		// frame so scrollHeight reflects the rendered messages, then jump
-		// without animation. Snap-to-bottom feel like iMessage.
-		requestAnimationFrame(() => {
-			scrollToBottom('auto');
-			if (messages.length > 0) {
-				lastSeenMessageId = messages[messages.length - 1].id;
-			}
-		});
-
-		// IntersectionObserver on the sentinel div at the bottom of the feed.
-		// When sentinel enters feedContainer's visible area → user is at bottom.
-		// No scroll-event math; no layout thrash on every scroll tick.
-		let sentinelObserver: IntersectionObserver | null = null;
-		if (feedContainer && scrollSentinel) {
-			sentinelObserver = new IntersectionObserver(
-				(entries) => {
-					const entry = entries[0];
-					if (entry?.isIntersecting) {
-						userAtBottom = true;
-						unseenCount = 0;
-						firstUnseenMessageId = null;
-						if (messages.length > 0) {
-							lastSeenMessageId = messages[messages.length - 1].id;
-						}
-					} else {
-						userAtBottom = false;
-					}
-				},
-				{ root: feedContainer, threshold: 0 }
-			);
-			sentinelObserver.observe(scrollSentinel);
-		}
-
-		const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
-
-		// Activity ticker — separate cadence than messages so a running worker
-		// can paint progress without forcing the heavier message poll to speed
-		// up too. setTimeout chain lets us adapt cadence based on whether any
-		// trace is currently active. Each tick also re-syncs stream subscriptions.
-		let activityTimer: ReturnType<typeof setTimeout> | null = null;
-		const scheduleActivity = () => {
-			if (activityTimer !== null) clearTimeout(activityTimer);
-			const next = anyTraceActive() ? ACTIVITY_POLL_FAST_MS : ACTIVITY_POLL_IDLE_MS;
-			activityTimer = setTimeout(async () => {
-				await pollActivity();
-				syncStreamSubscriptions();
-				scheduleActivity();
-			}, next);
-		};
-		// Kick off the first activity fetch immediately, then schedule.
-		void pollActivity().then(() => {
-			syncStreamSubscriptions();
-			scheduleActivity();
-		});
-
-		// Re-fetch instantly when screen returns to focus
-		const onVisibility = () => {
-			if (document.visibilityState === 'visible') {
-				pollMessages();
-				void pollActivity();
-				syncStreamSubscriptions();
-			}
-		};
-		document.addEventListener('visibilitychange', onVisibility);
-
-		// Mobile Threads button in +layout.svelte dispatches this custom event.
-		const onOpenThreads = () => {
-			mobileThreadsOpen = true;
-		};
-		document.addEventListener('logueos:open-threads', onOpenThreads);
-
-		// Initial thread meta load.
-		void refreshThreads();
-
-		return () => {
-			clearInterval(interval);
-			if (activityTimer !== null) clearTimeout(activityTimer);
-			document.removeEventListener('logueos:open-threads', onOpenThreads);
-			if (connDebounceTimer !== null) clearTimeout(connDebounceTimer);
-			sentinelObserver?.disconnect();
-			document.removeEventListener('visibilitychange', onVisibility);
-			// Close every open SSE on unmount.
-			for (const es of streamSources.values()) {
-				try {
-					es.close();
-				} catch {
-					/* noop */
-				}
-			}
-			streamSources.clear();
-		};
-	});
-
-	// Submit a new operator message
-	async function handleSendMessage() {
-		if (!textDraft.trim() || sending) return;
-		const draft = textDraft.trim();
-		textDraft = '';
-		sending = true;
-
-		try {
-			const resp = await fetch(resolve('/api/chat'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					sender: 'operator',
-					message: draft,
-					agent: agentLock,
-					thread: activeThread,
-					image: imageMode
-				})
-			});
-
-			if (!resp.ok) {
-				const err = await resp.json().catch(() => ({}));
-				throw new Error(err.error || `HTTP ${resp.status}`);
-			}
-
-			const body = await resp.json();
-			// Update tier badge from response.
-			if (body.current_tier) currentTier = body.current_tier as Tier;
-			// Snappy local append. The operator just sent — always pin them
-			// to the bottom so they see their own message + the incoming
-			// "Agent dispatched" follow-up.
-			messages = [...messages, body.message];
-			userAtBottom = true;
-			unseenCount = 0;
-			lastSeenMessageId = body.message?.id ?? lastSeenMessageId;
-			// Show the instant "dispatching agent..." indicator unless the
-			// pill is Silent (in which case no worker fires, so no spinner).
-			if (agentLock !== 'silent') {
-				dispatching = true;
-				dispatchingSinceMsgId = body.message?.id ?? null;
-			}
-			scrollToBottom('smooth');
-
-			// Trigger immediate follow-up poll to fetch any auto-dispatched system notification
-			setTimeout(pollMessages, 500);
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			toasts.add(`Failed to send: ${msg}`, 'error');
-			textDraft = draft; // restore draft on error
-		} finally {
-			sending = false;
-		}
-	}
-
-	// Operator approves or denies a terminal command card
-	async function handleAction(messageId: number, status: 'approved' | 'denied') {
-		if (actionSubmitting !== null) return;
-		actionSubmitting = messageId;
-
-		try {
-			const resp = await fetch(resolve('/api/chat/approve'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message_id: messageId,
-					status
-				})
-			});
-
-			if (!resp.ok) {
-				const err = await resp.json().catch(() => ({}));
-				throw new Error(err.error || `HTTP ${resp.status}`);
-			}
-
-			toasts.add(
-				`Command ${status === 'approved' ? 'approved' : 'denied'} successfully.`,
-				'success'
-			);
-
-			// Snappy local update
-			messages = messages.map((m) => {
-				if (m.id === messageId) {
-					const updatedAction = m.interactive_action ? { ...m.interactive_action, status } : null;
-					return { ...m, status, interactive_action: updatedAction };
-				}
-				return m;
-			});
-
-			// Instantly poll to fetch the resulting system message logging the decision
-			setTimeout(pollMessages, 400);
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			toasts.add(`Action failed: ${msg}`, 'error');
-		} finally {
-			actionSubmitting = null;
-		}
-	}
-
-	function handleKeyPress(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			handleSendMessage();
-		}
-	}
-
-	// Upload state — true while an image is being POSTed. Disables send so the
-	// operator can't accidentally fire off a message with a half-uploaded image.
-	let uploading = $state(false);
-
-	async function uploadImage(file: File): Promise<string | null> {
+		];
 		const fd = new FormData();
 		fd.append('file', file);
 		fd.append('target_repo', selectedRepo);
-		const resp = await fetch(resolve('/api/chat/uploads'), {
-			method: 'POST',
-			body: fd
-		});
-		if (!resp.ok) {
-			const text = await resp.text().catch(() => '');
-			throw new Error(`upload failed: HTTP ${resp.status} ${text.slice(0, 120)}`);
-		}
-		const body = await resp.json();
-		return body.url || null;
-	}
-
-	async function handleImageFiles(files: File[]) {
-		if (files.length === 0) return;
-		uploading = true;
 		try {
-			for (const file of files) {
-				try {
-					const url = await uploadImage(file);
-					if (!url) continue;
-					// Append the markdown image at the end of the current draft.
-					// Wrap with blank lines so multiple pastes stack instead of running together.
-					const tag = `\n\n![${file.name || 'image'}](${url})\n\n`;
-					textDraft = (textDraft + tag).replace(/^\n+/, '');
-				} catch (e: unknown) {
-					const msg = e instanceof Error ? e.message : 'upload error';
-					toasts.add(msg, 'error');
-				}
-			}
-		} finally {
-			uploading = false;
-		}
-	}
-
-	function handlePaste(e: ClipboardEvent) {
-		if (!e.clipboardData) return;
-		const files: File[] = [];
-		for (const item of Array.from(e.clipboardData.items)) {
-			if (item.kind === 'file' && item.type.startsWith('image/')) {
-				const f = item.getAsFile();
-				if (f) files.push(f);
-			}
-		}
-		if (files.length > 0) {
-			e.preventDefault();
-			void handleImageFiles(files);
-		}
-	}
-
-	function handleDrop(e: DragEvent) {
-		if (!e.dataTransfer) return;
-		const files: File[] = [];
-		for (const f of Array.from(e.dataTransfer.files)) {
-			if (f.type.startsWith('image/')) files.push(f);
-		}
-		if (files.length > 0) {
-			e.preventDefault();
-			void handleImageFiles(files);
-		}
-	}
-
-	// Drop a "--- NEW CONVERSATION ---" marker so future worker dispatches
-	// don't replay older context into a fresh thread. The server slices
-	// history after the most recent such marker before building prompts.
-	let resetting = $state(false);
-	async function handleNewConversation() {
-		if (resetting) return;
-		resetting = true;
-		try {
-			const resp = await fetch(resolve('/api/chat/reset'), {
+			toasts.add(`Uploading ${file.name}...`, 'info');
+			const r = await fetch(resolve('/api/chat/uploads'), {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ thread: activeThread })
+				body: fd
 			});
-			if (!resp.ok) {
-				const err = await resp.json().catch(() => ({}));
-				throw new Error(err.error || `HTTP ${resp.status}`);
+			if (!r.ok) {
+				const err = await r.json().catch(() => ({}));
+				throw new Error(err.message || `HTTP ${r.status}`);
 			}
-			const body = await resp.json();
-			messages = [...messages, body.message];
-			scrollToBottom('smooth');
-			toasts.add(
-				'Started a new conversation. Older context cleared from worker dispatches.',
-				'success'
-			);
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : 'Unknown error';
-			toasts.add(`Reset failed: ${msg}`, 'error');
+			const body = await r.json();
+			if (body.url) {
+				attachments = attachments.map((a) =>
+					a.id === tempId
+						? {
+								...a,
+								id: body.filename || tempId,
+								url: body.url,
+								mime: body.mime || file.type,
+								size: body.size || file.size,
+								uploading: false
+							}
+						: a
+				);
+			}
+		} catch (err) {
+			attachments = attachments.filter((a) => a.id !== tempId);
+			toasts.add(`Upload failed: ${err instanceof Error ? err.message : 'unknown'}`, 'error');
+		}
+	}
+
+	async function handleUpload(e: Event) {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+		try {
+			await uploadOneFile(file);
+			textareaEl?.focus();
 		} finally {
-			resetting = false;
+			target.value = '';
 		}
 	}
 
-	function isResetMarker(m: ChatMessage): boolean {
-		return m.sender === 'system' && m.message.startsWith('--- NEW CONVERSATION ---');
+	// Drag-and-drop wiring. dragover MUST preventDefault for drop to fire.
+	// Use a counter for dragenter/leave because they bubble across child
+	// elements — naive boolean would flicker as the cursor crosses child
+	// boundaries inside the drop zone.
+	let isDragging = $state(false);
+	let dragCounter = 0;
+	function handleDragEnter(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragCounter++;
+		isDragging = true;
 	}
-
-	// ──────────────────────────────────────────────────────────────
-	// Multi-thread switching
-	// ──────────────────────────────────────────────────────────────
-	async function refreshThreads() {
-		try {
-			const resp = await fetch(resolve('/api/chat/threads'));
-			if (!resp.ok) return;
-			const body = await resp.json();
-			if (body.active !== undefined) {
-				// New enriched format from PR 7 endpoint.
-				threadMetasActive = body.active || [];
-				threadMetasArchived = body.archived || [];
-				// Keep backward-compat threads list for legacy code paths.
-				threads = [...threadMetasActive, ...threadMetasArchived].map((m) => ({
-					thread_id: m.thread_id,
-					message_count: m.message_count,
-					latest_ts: m.latest_ts
-				}));
-				if (!threads.some((t) => t.thread_id === 'default')) {
-					threads = [{ thread_id: 'default', message_count: 0, latest_ts: '' }, ...threads];
-				}
-			} else if (body.threads) {
-				// Fallback: old format.
-				threads = body.threads;
-			}
-		} catch {
-			// silent
+	function handleDragOver(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'copy';
+	}
+	function handleDragLeave(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragCounter = Math.max(0, dragCounter - 1);
+		if (dragCounter === 0) isDragging = false;
+	}
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		dragCounter = 0;
+		isDragging = false;
+		const files = Array.from(e.dataTransfer?.files ?? []);
+		if (files.length === 0) return;
+		for (const file of files) {
+			await uploadOneFile(file);
 		}
+		textareaEl?.focus();
 	}
 
-	function getThreadTitle(threadId: string): string {
-		const meta =
-			threadMetasActive.find((m) => m.thread_id === threadId) ??
-			threadMetasArchived.find((m) => m.thread_id === threadId);
-		if (meta && meta.title && meta.title !== 'New thread') return meta.title;
-		return threadId === 'default' ? 'Default' : threadId;
+	function removeAttachment(id: string) {
+		attachments = attachments.filter((a) => a.id !== id);
 	}
 
-	async function pinThread(threadId: string, pinned: boolean) {
-		kebabOpenThreadId = null;
-		try {
-			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ pinned })
-			});
-			await refreshThreads();
-		} catch {
-			/* silent */
-		}
+	function humanSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 	}
 
-	async function archiveThread(threadId: string, archived: boolean) {
-		kebabOpenThreadId = null;
-		try {
-			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ archived })
-			});
-			await refreshThreads();
-			// If we archived the active thread, switch to default.
-			if (archived && threadId === activeThread) {
-				await switchThread('default');
-			}
-		} catch {
-			/* silent */
-		}
-	}
-
-	async function deleteThreadConfirmed(threadId: string) {
-		kebabOpenThreadId = null;
-		try {
-			const resp = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-				method: 'DELETE'
-			});
-			if (!resp.ok) {
-				const err = await resp.json().catch(() => ({}));
-				toasts.add(err.message || 'Delete failed.', 'error');
-				return;
-			}
-			toasts.add('Thread deleted.', 'success');
-			await refreshThreads();
-			if (threadId === activeThread) await switchThread('default');
-		} catch {
-			toasts.add('Delete failed.', 'error');
-		}
-	}
-
-	function startRename(threadId: string, currentTitle: string) {
-		kebabOpenThreadId = null;
-		renamingThreadId = threadId;
-		renameValue =
-			currentTitle === 'New thread' || currentTitle === 'Default'
-				? threadId === 'default'
-					? ''
-					: threadId
-				: currentTitle;
-	}
-
-	async function commitRename(threadId: string) {
-		const title = renameValue.trim();
-		renamingThreadId = null;
-		if (!title) return;
-		try {
-			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ title })
-			});
-			await refreshThreads();
-		} catch {
-			/* silent */
-		}
-	}
-
-	async function generateSummary(threadId: string) {
-		kebabOpenThreadId = null;
-		toasts.add('Generating summary…', 'success');
-		try {
-			const resp = await fetch(
-				resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/summary`),
-				{ method: 'POST' }
-			);
-			if (resp.ok) {
-				const body = await resp.json();
-				toasts.add(`Summary: ${body.summary?.slice(0, 120) ?? ''}`, 'success');
-				await refreshThreads();
-			} else {
-				toasts.add('Summary generation failed.', 'error');
-			}
-		} catch {
-			toasts.add('Summary generation failed.', 'error');
-		}
-	}
-
-	async function toggleRemember(threadId: string, current: boolean) {
-		kebabOpenThreadId = null;
-		try {
-			if (!current) {
-				// Enabling: POST to /remember to set flag AND fire immediate Tier 0 emission.
-				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/remember`), {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({})
-				});
-			} else {
-				// Disabling: just clear the flag, no emission needed.
-				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
-					method: 'PATCH',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ remember_flag: false })
-				});
-			}
-			await refreshThreads();
-		} catch {
-			/* silent */
-		}
-	}
-
-	async function maybeAutoTitle(threadId: string) {
-		if (autoTitledThreads.has(threadId)) return;
-		const meta =
-			threadMetasActive.find((m) => m.thread_id === threadId) ??
-			threadMetasArchived.find((m) => m.thread_id === threadId);
-		if (meta && meta.title !== 'New thread') {
-			autoTitledThreads.add(threadId);
-			return;
-		}
-		// Only fire if there's at least one assistant message.
-		const hasAssistant = messages.some((m) => m.sender !== 'operator' && m.sender !== 'system');
-		if (!hasAssistant) return;
-		autoTitledThreads.add(threadId);
-		try {
-			const resp = await fetch(
-				resolve(`/api/chat/threads/${encodeURIComponent(threadId)}/auto-title`),
-				{ method: 'POST' }
-			);
-			if (resp.ok) await refreshThreads();
-		} catch {
-			/* silent */
-		}
-	}
-
+	// ─────────────────────────────────────────────────────────────────────
+	// Sidebar / Thread Management
+	// ─────────────────────────────────────────────────────────────────────
 	async function switchThread(threadId: string) {
 		if (threadId === activeThread) {
-			threadSwitcherOpen = false;
+			sidebarOpen = false;
 			return;
 		}
-
-		// Save the current draft before switching away from this thread.
-		const prevThread = activeThread;
-		const prevDraft = textDraft;
-		if (prevDraft.trim()) {
-			drafts.set(prevThread, prevDraft);
-			try {
-				localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-			} catch {
-				/* ignore */
-			}
-		}
-
 		activeThread = threadId;
-		threadSwitcherOpen = false;
+		sidebarOpen = false;
 		messages = [];
-		streamByTrace = {};
-		streamEnded = {};
-		activityByTrace = {};
-		dispatching = false;
-		dispatchingSinceMsgId = null;
-		unseenCount = 0;
-		userAtBottom = true;
+		// Pass the target thread explicitly so pollMessages can drop the
+		// response if another switch happens before this fetch returns.
+		await pollMessages(threadId);
+		await loadTier(threadId);
+	}
 
-		// Restore workspace selection for the new thread.
-		const savedRepo = workspaceByThread[threadId];
-		if (savedRepo) selectedRepo = savedRepo;
-
-		// Restore draft: use localStorage for instant paint, then async-reconcile with server.
-		textDraft = drafts.get(threadId) || '';
-		void fetch(resolve(`/api/chat/drafts?thread_id=${encodeURIComponent(threadId)}`))
-			.then((r) => (r.ok ? r.json() : null))
-			.then((body: { body?: string } | null) => {
-				if (body?.body && body.body !== textDraft) {
-					textDraft = body.body;
-					drafts.set(threadId, body.body);
-					try {
-						localStorage.setItem('chat_drafts_v1', JSON.stringify(Array.from(drafts.entries())));
-					} catch {
-						/* ignore */
-					}
-				}
-			})
-			.catch(() => {
-				/* offline — localStorage copy stands */
-			});
-
-		// Persist the choice so a fresh page load (phone or desktop) lands
-		// here instead of the default thread. Fire-and-forget; never blocks
-		// the visual switch.
-		void fetch(resolve('/api/chat/state'), {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ thread: threadId })
-		}).catch(() => {
-			/* silent — local switch already happened, persistence is best-effort */
-		});
-		// Reload messages for the new thread and refresh tier badge.
-		await pollMessages();
-		await pollActivity();
-		syncStreamSubscriptions();
-		void fetchTier(threadId);
-		requestAnimationFrame(() => scrollToBottom('auto'));
+	function switchRepo(name: string) {
+		selectedRepo = name;
+		openChip = null;
 	}
 
 	function slugifyThreadName(name: string): string {
@@ -1728,1318 +1166,1214 @@
 		);
 	}
 
-	function newThread() {
+	// Resolve a guaranteed-clean slug for a new thread. Checks both the local
+	// sidebar list AND the DB for residual messages — covers three cases the
+	// operator hit:
+	//   (1) name collides with an active thread → suffix -2, -3, ...
+	//   (2) name collides with an archived-and-hidden thread → suffix
+	//   (3) name collides with orphan chat_messages rows left behind by a
+	//       Clear-All / Delete that didn't fully cascade → suffix
+	// Without this, switchThread() would re-open the existing/orphan thread
+	// and pollMessages() would surface the old content — which is exactly
+	// what the operator described as "the old thread shows up instead of a
+	// clean slate."
+	async function findUniqueSlug(baseSlug: string): Promise<string> {
+		const localUsed = new Set(threads.map((t) => t.thread_id));
+		let slug = baseSlug;
+		let i = 1;
+		while (i < 200) {
+			if (!localUsed.has(slug)) {
+				// Probe the DB — orphan rows survive a failed delete.
+				try {
+					const r = await fetch(
+						resolve('/api/chat') + `?thread=${encodeURIComponent(slug)}&limit=1`
+					);
+					if (r.ok) {
+						const b = await r.json();
+						if (!Array.isArray(b.messages) || b.messages.length === 0) return slug;
+					} else {
+						return slug; // assume free if probe failed
+					}
+				} catch {
+					return slug; // offline → assume free
+				}
+			}
+			i++;
+			slug = `${baseSlug}-${i}`;
+		}
+		return `${baseSlug}-${Date.now()}`; // safety net — shouldn't reach here
+	}
+
+	async function newThread() {
 		const raw = window.prompt('New thread name (letters, numbers, dashes):');
 		if (!raw) return;
-		const slug = slugifyThreadName(raw);
-		// Add to local list so the switcher shows it instantly; the server
-		// only knows about a thread once a message lands in it, so the
-		// refresh after a first send will reconcile.
-		if (!threads.some((t) => t.thread_id === slug)) {
-			threads = [{ thread_id: slug, message_count: 0, latest_ts: '' }, ...threads];
+		const baseSlug = slugifyThreadName(raw);
+		const slug = await findUniqueSlug(baseSlug);
+		// When the slug got suffixed (collision), the sidebar title needs to
+		// reflect the unique slug too — otherwise the operator sees two rows
+		// with the same visible name and can't tell which is which.
+		const title = slug === baseSlug ? raw.trim() || slug : slug;
+		if (slug !== baseSlug) {
+			toasts.add(`"${baseSlug}" was taken — created "${slug}" for a clean slate.`, 'info');
 		}
+		threads = [
+			{
+				thread_id: slug,
+				title,
+				archived: false,
+				pinned: false,
+				message_count: 0,
+				latest_ts: ''
+			},
+			...threads
+		];
 		void switchThread(slug);
 	}
 
-	// ──────────────────────────────────────────────────────────────────────
-	// Per-message workflow actions: critique / build / verify / copy / retry
-	// ──────────────────────────────────────────────────────────────────────
-	// Each worker reply gets a small footer row of action buttons. These let
-	// the operator chain agents (AGY brainstorm → CC critique → AGY build →
-	// CC verify) without leaving the chat, just by tapping a button on the
-	// reply they want to act on.
-	let workflowSubmitting = $state<string | null>(null); // `${msgId}:${action}`
+	// ─────────────────────────────────────────────────────────────────────
+	// Thread management — rename / archive / delete / clear-all. Backend is
+	// /api/chat/threads/[id] PATCH (title/archived) + DELETE (archived only).
+	// ─────────────────────────────────────────────────────────────────────
+	let threadMenuOpenFor = $state<string | null>(null);
+	let renamingFor = $state<string | null>(null);
+	let renameDraft = $state('');
+	let showArchived = $state(false);
 
-	function isWorkerReply(m: ChatMessage): boolean {
-		// 'operator' messages we sent, 'system' marker rows — neither qualify
-		// for workflow actions. Anything else (cc, agy, future workers) is a
-		// reply we can act on.
-		return m.sender !== 'operator' && m.sender !== 'system';
+	function openRename(t: { thread_id: string; title: string }) {
+		threadMenuOpenFor = null;
+		renamingFor = t.thread_id;
+		renameDraft = t.title || t.thread_id;
 	}
-
-	async function copyToClipboard(text: string): Promise<boolean> {
+	async function commitRename(threadId: string) {
+		const title = renameDraft.trim();
+		renamingFor = null;
+		if (!title) return;
+		// Optimistic update.
+		threads = threads.map((t) => (t.thread_id === threadId ? { ...t, title } : t));
 		try {
-			if (navigator.clipboard && navigator.clipboard.writeText) {
-				await navigator.clipboard.writeText(text);
-				return true;
-			}
-		} catch {
-			/* fall through to manual */
-		}
-		// Fallback: hidden textarea + execCommand. Older iOS Safari versions
-		// silently fail navigator.clipboard outside user-gesture contexts.
-		try {
-			const ta = document.createElement('textarea');
-			ta.value = text;
-			ta.style.position = 'fixed';
-			ta.style.left = '-9999px';
-			document.body.appendChild(ta);
-			ta.select();
-			const ok = document.execCommand('copy');
-			document.body.removeChild(ta);
-			return ok;
-		} catch {
-			return false;
-		}
-	}
-
-	async function handleWorkflowAction(
-		messageId: number,
-		action: 'critique' | 'build' | 'verify' | 'retry' | 'copy',
-		opts: { agent?: 'claude-code' | 'agy'; messageText?: string } = {}
-	) {
-		const key = `${messageId}:${action}`;
-		if (workflowSubmitting !== null) return;
-		workflowSubmitting = key;
-
-		try {
-			if (action === 'copy') {
-				const ok = await copyToClipboard(opts.messageText || '');
-				toasts.add(ok ? 'Copied to clipboard.' : 'Copy failed.', ok ? 'success' : 'error');
-				return;
-			}
-
-			// For dispatching actions, pick the target agent. Critique and
-			// retry default to "the other one" (a CC reply → CC critique would
-			// be circular). Build defaults to AGY (frontend leaning). Verify
-			// defaults to CC. Operator can override via the agent pill if they
-			// want differently — fall back to agentLock when explicit.
-			const sourceMsg = messages.find((mm) => mm.id === messageId);
-			const sourceSender = sourceMsg?.sender;
-			let agent: 'claude-code' | 'agy' = 'claude-code';
-			if (opts.agent) {
-				agent = opts.agent;
-			} else if (action === 'critique' || action === 'retry') {
-				agent = sourceSender === 'cc' ? 'agy' : 'claude-code';
-			} else if (action === 'build') {
-				agent = 'agy';
-			} else if (action === 'verify') {
-				agent = 'claude-code';
-			}
-
-			const resp = await fetch(resolve('/api/chat/workflow'), {
-				method: 'POST',
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(threadId)}`), {
+				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					action,
-					source_message_id: messageId,
-					target_agent: agent,
-					target_repo: selectedRepo
-				})
+				body: JSON.stringify({ title })
 			});
-			if (!resp.ok) {
-				const err = await resp.json().catch(() => ({}));
-				throw new Error(err.error || `HTTP ${resp.status}`);
+		} catch {
+			toasts.add('Rename failed — try again', 'error');
+		}
+	}
+	function cancelRename() {
+		renamingFor = null;
+		renameDraft = '';
+	}
+
+	async function toggleArchive(t: { thread_id: string; archived: boolean }) {
+		threadMenuOpenFor = null;
+		const archived = !t.archived;
+		threads = threads.map((x) => (x.thread_id === t.thread_id ? { ...x, archived } : x));
+		try {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ archived })
+			});
+			toasts.add(archived ? `Archived "${t.thread_id}"` : `Restored "${t.thread_id}"`, 'success');
+		} catch {
+			toasts.add('Archive failed', 'error');
+		}
+	}
+
+	async function deleteThreadById(t: { thread_id: string; archived: boolean }) {
+		threadMenuOpenFor = null;
+		if (t.thread_id === 'default') {
+			toasts.add('Cannot delete the Default Space', 'error');
+			return;
+		}
+		// Backend requires archived=true before delete. Auto-archive if needed.
+		if (!t.archived) {
+			await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ archived: true })
+			}).catch(() => null);
+		}
+		const ok = window.confirm(
+			`Delete thread "${t.thread_id}"? This permanently removes all messages, drafts, and metadata for it.`
+		);
+		if (!ok) return;
+		try {
+			const r = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+				method: 'DELETE'
+			});
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			threads = threads.filter((x) => x.thread_id !== t.thread_id);
+			if (activeThread === t.thread_id) {
+				await switchThread('default');
 			}
-			toasts.add(`${action} dispatched to ${agent}.`, 'success');
-			void pollMessages();
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : 'workflow error';
-			toasts.add(msg, 'error');
-		} finally {
-			workflowSubmitting = null;
+			toasts.add(`Deleted "${t.thread_id}"`, 'success');
+		} catch (e) {
+			toasts.add(`Delete failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
 		}
 	}
 
-	// Inline-streaming helpers. For each system "Agent dispatched" bubble with
-	// an active trace, we render a SYNTHETIC worker bubble that grows with
-	// the SSE stream while the worker is in flight. When the real worker
-	// reply lands (a non-system non-operator chat_messages row with the same
-	// trace_id), the synthetic bubble is hidden — the real bubble takes over
-	// and is persisted via chat_messages for SSR + history.
-	function hasRealWorkerReply(traceId: string): boolean {
-		for (const m of messages) {
-			if (m.trace_id !== traceId) continue;
-			if (m.sender === 'system' || m.sender === 'operator') continue;
-			return true;
+	async function clearAllSessions() {
+		const ok = window.confirm(
+			'Archive and delete every thread except Default Space? This cannot be undone.'
+		);
+		if (!ok) return;
+		const targets = threads.filter((t) => t.thread_id !== 'default');
+		let removed = 0;
+		for (const t of targets) {
+			try {
+				await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ archived: true })
+				});
+				const r = await fetch(resolve(`/api/chat/threads/${encodeURIComponent(t.thread_id)}`), {
+					method: 'DELETE'
+				});
+				if (r.ok) removed++;
+			} catch {
+				/* skip */
+			}
 		}
-		return false;
+		threads = threads.filter((t) => t.thread_id === 'default');
+		if (activeThread !== 'default') await switchThread('default');
+		toasts.add(`Cleared ${removed} thread${removed === 1 ? '' : 's'}`, 'success');
 	}
 
-	// Infer sender from trace_id prefix so the synthetic bubble styles itself
-	// correctly (orange for cc, purple for agy/gemini). Defaults to 'cc' if
-	// the prefix is unrecognized.
-	function senderFromTrace(traceId: string): 'cc' | 'agy' {
-		const prefix = traceId.split('-')[0]?.toLowerCase() || '';
-		if (prefix === 'agy' || prefix === 'gemini') return 'agy';
-		return 'cc';
+	// ─────────────────────────────────────────────────────────────────────
+	// Slash commands. Operator types `/` at the start of the composer →
+	// autocomplete popup lists matching commands. Submit (Enter / Send /
+	// click on row) runs the command's handler instead of sending the
+	// literal text to the LLM.
+	// ─────────────────────────────────────────────────────────────────────
+	type SlashCmd = {
+		key: string; // text after the slash, e.g. 'clear'
+		usage: string; // display form: '/clear' or '/new <name>'
+		description: string;
+		run: (rest: string) => Promise<void> | void;
+	};
+
+	function addLocalSystemMessage(text: string) {
+		messages = [
+			...messages,
+			{
+				id: Date.now(),
+				sender: 'system',
+				message: text,
+				timestamp: new Date().toISOString()
+			}
+		];
 	}
 
-	function shouldRenderStreamingBubble(m: ChatMessage): boolean {
-		if (!m.trace_id) return false;
-		if (m.sender !== 'system') return false;
-		// Only attach a streaming bubble to the dispatch announcement, not
-		// to other system messages that happen to carry a trace_id.
-		if (!m.message.startsWith('Agent dispatched:')) return false;
-		const buf = streamByTrace[m.trace_id] || '';
-		if (buf.length === 0) return false;
-		if (hasRealWorkerReply(m.trace_id)) return false;
+	const SLASH_COMMANDS: SlashCmd[] = [
+		{
+			key: 'clear',
+			usage: '/clear',
+			description: 'Reset conversation context (server slices history at this marker)',
+			run: async () => {
+				// Persist a system marker — /api/chat and /api/chat/stream slice
+				// thread history at the latest `--- NEW CONVERSATION ---` line,
+				// so this drops the LLM's working memory without deleting prior
+				// messages from the operator's view.
+				await fetch(resolve('/api/chat'), {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						sender: 'system',
+						message: '--- NEW CONVERSATION ---',
+						thread: activeThread,
+						agent: 'silent'
+					})
+				}).catch(() => null);
+				await pollMessages();
+				toasts.add('Conversation context reset', 'success');
+			}
+		},
+		{
+			key: 'new',
+			usage: '/new <name>',
+			description: 'Create + switch to a new thread',
+			run: async (rest) => {
+				const baseSlug = slugifyThreadName(rest);
+				if (!baseSlug || baseSlug === 'thread') {
+					toasts.add('Thread name required: /new my-feature', 'error');
+					return;
+				}
+				const slug = await findUniqueSlug(baseSlug);
+				const title = slug === baseSlug ? rest.trim() || slug : slug;
+				if (slug !== baseSlug) {
+					toasts.add(`"${baseSlug}" was taken — created "${slug}" for a clean slate.`, 'info');
+				}
+				threads = [
+					{
+						thread_id: slug,
+						title,
+						archived: false,
+						pinned: false,
+						message_count: 0,
+						latest_ts: ''
+					},
+					...threads
+				];
+				await switchThread(slug);
+				toasts.add(`Switched to thread "${slug}"`, 'success');
+			}
+		},
+		{
+			key: 'regen',
+			usage: '/regen',
+			description: 'Regenerate the most recent assistant reply',
+			run: async () => {
+				// Walk backwards for the last non-operator, non-system reply
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (messages[i].sender !== 'operator' && messages[i].sender !== 'system') {
+						await regenerateReply(messages[i]);
+						return;
+					}
+				}
+				toasts.add('No assistant reply to regenerate', 'error');
+			}
+		},
+		{
+			key: 'help',
+			usage: '/help',
+			description: 'Show available slash commands',
+			run: () => {
+				const body = SLASH_COMMANDS.map((c) => `- \`${c.usage}\` — ${c.description}`).join('\n');
+				addLocalSystemMessage(`**Slash commands**\n\n${body}`);
+			}
+		}
+	];
+
+	const slashQuery = $derived(
+		textDraft.startsWith('/') ? textDraft.slice(1).split(/\s/)[0].toLowerCase() : null
+	);
+	const slashMatches = $derived(
+		slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.key.startsWith(slashQuery))
+	);
+	const slashMode = $derived(
+		textDraft.startsWith('/') && !textDraft.includes('\n') && slashMatches.length > 0
+	);
+
+	async function runSlashFromDraft(): Promise<boolean> {
+		if (!textDraft.startsWith('/')) return false;
+		const trimmed = textDraft.trim();
+		const spaceIdx = trimmed.indexOf(' ');
+		const key = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).toLowerCase();
+		const rest = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+		const cmd = SLASH_COMMANDS.find((c) => c.key === key);
+		if (!cmd) return false;
+		textDraft = '';
+		attachments = [];
+		try {
+			await cmd.run(rest);
+		} catch (e) {
+			toasts.add(`Command failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
+		}
 		return true;
+	}
+
+	async function pickSlash(cmd: SlashCmd) {
+		// If the command takes args (usage has < >), prefill the composer
+		// instead of running immediately so the operator can type the arg.
+		if (cmd.usage.includes('<')) {
+			textDraft = `/${cmd.key} `;
+			textareaEl?.focus();
+			return;
+		}
+		textDraft = `/${cmd.key}`;
+		await runSlashFromDraft();
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// Lifecycle
+	// ─────────────────────────────────────────────────────────────────────
+	let pollTimer: ReturnType<typeof setInterval>;
+	let activityTimer: ReturnType<typeof setInterval>;
+	let sentinelObs: IntersectionObserver | null = null;
+
+	onMount(() => {
+		void loadTier(activeThread);
+		if (feedContainer && scrollSentinel) {
+			sentinelObs = new IntersectionObserver(
+				(entries) => {
+					const ent = entries[0];
+					if (ent?.isIntersecting) {
+						userAtBottom = true;
+						unseenCount = 0;
+					} else {
+						userAtBottom = false;
+					}
+				},
+				{ root: feedContainer, threshold: 0 }
+			);
+			sentinelObs.observe(scrollSentinel);
+		}
+		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'auto' }));
+		pollTimer = setInterval(pollMessages, 3000);
+		activityTimer = setInterval(pollActivity, 5000);
+	});
+
+	onDestroy(() => {
+		clearInterval(pollTimer);
+		clearInterval(activityTimer);
+		sentinelObs?.disconnect();
+		if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+		if (activityFadeTimer) clearTimeout(activityFadeTimer);
+		void stopTalkback();
+	});
+
+	// Utilities
+	function fmtTime(iso: string): string {
+		try {
+			return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+		} catch {
+			return '';
+		}
+	}
+
+	function senderDisplay(s: string): string {
+		if (s === 'operator') return 'You';
+		return s.toUpperCase();
 	}
 </script>
 
 <svelte:head>
-	<title>Co-Working Chat — LogueOS</title>
+	<title>LogueOS — Conversational Kernel</title>
 </svelte:head>
 
-<!-- Single persistent audio element for all voice playback (PR 4).
-     Never recreated — iOS Safari requires audio.play() to stay on the same
-     element that was unlocked by the initial user gesture. -->
-<audio bind:this={persistentAudio} class="hidden" aria-hidden="true"></audio>
+<!-- Persistent audio element for ElevenLabs speech -->
+<audio bind:this={audioEl} class="hidden" aria-hidden="true"></audio>
+<input
+	type="file"
+	accept="image/*"
+	bind:this={fileInputEl}
+	class="hidden"
+	onchange={handleUpload}
+/>
 
-<!-- h-full flexes inside the parent <main flex-1>, which is the canonical
-     pattern (per mobile-chat-ux skill). Magic-number heights like
-     calc(100dvh-100px) break when iOS shrinks 100dvh on keyboard appearance,
-     pushing the composer below the visible area. -->
-<div class="relative -m-4 flex h-full overflow-hidden">
-	<!-- ── Desktop sidebar (PR 7) — 250px, collapsible, hidden on mobile ──────── -->
-	{#if sidebarOpen}
-		<aside
-			class="hidden w-[250px] shrink-0 flex-col overflow-hidden border-r border-border bg-background md:flex"
-			aria-label="Thread list"
+<div
+	class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] font-sans text-foreground"
+	ondragenter={handleDragEnter}
+	ondragover={handleDragOver}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+	role="region"
+	aria-label="Chat surface (drop images to attach)"
+>
+	<!-- Drag-and-drop overlay — appears when the operator drags a file over
+	     the surface from desktop / Files app. pointer-events-none keeps it
+	     from intercepting the drop event itself. -->
+	{#if isDragging}
+		<div
+			class="pointer-events-none absolute inset-3 z-[60] flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-cyan-400/60 bg-cyan-500/10 backdrop-blur-md"
+			aria-hidden="true"
 		>
-			<!-- Sidebar header -->
-			<div class="flex items-center justify-between border-b border-border px-3 py-2">
-				<span class="font-sans text-xs font-bold tracking-wider text-foreground uppercase"
-					>Threads</span
+			<Paperclip size={32} class="text-cyan-300" />
+			<span class="font-mono text-xs tracking-wider text-cyan-200 uppercase">Drop to attach</span>
+			<span class="px-4 text-center font-sans text-xs text-cyan-300/70"
+				>Images stage as chips above the composer</span
+			>
+		</div>
+	{/if}
+	<!-- Radial Gradient Atmosphere Background -->
+	<div
+		class="pointer-events-none absolute inset-0 -z-0"
+		style="background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(168, 85, 247, 0.07), transparent 60%), radial-gradient(ellipse 60% 50% at 100% 100%, rgba(244, 114, 182, 0.04), transparent 50%);"
+	></div>
+
+	<!-- ═════════════════════════════════════════════════════════════════
+	     COLLAPSIBLE THREADS SIDEBAR (PR 7 redone for Conversational OS)
+	     ═════════════════════════════════════════════════════════════════ -->
+	{#if sidebarOpen}
+		<!-- Back-drop overlay for mobile -->
+		<button
+			type="button"
+			onclick={() => (sidebarOpen = false)}
+			class="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+			aria-label="Close sidebar"
+		></button>
+	{/if}
+
+	<aside
+		class="fixed top-0 bottom-0 left-0 z-40 flex w-72 flex-col border-r border-zinc-800/60 bg-[#090909]/98 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out lg:static lg:translate-x-0
+			{sidebarOpen
+			? 'translate-x-0 lg:w-72 lg:opacity-100'
+			: '-translate-x-full lg:pointer-events-none lg:w-0 lg:opacity-0'}"
+	>
+		<!-- Sidebar Header -->
+		<div class="flex shrink-0 items-center justify-between border-b border-zinc-800/50 px-4 py-4">
+			<div class="flex items-center gap-2">
+				<img src="{base}/favicon.png" alt="LogueOS" class="h-6 w-6" />
+				<span class="font-mono text-xs font-semibold tracking-wider text-zinc-300 uppercase"
+					>Sessions</span
 				>
+			</div>
+			<div class="flex items-center gap-1.5">
 				<button
 					type="button"
 					onclick={newThread}
-					class="flex items-center gap-1 rounded px-1.5 py-0.5 font-sans text-[10px] text-cta transition-colors hover:bg-cta/10"
-					title="New thread"
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:scale-105 hover:text-white active:scale-95"
+					title="Create new session"
 				>
-					<Plus size={10} />
-					New
+					<Plus size={14} />
 				</button>
-			</div>
-			<!-- Sidebar thread list -->
-			<div class="custom-scrollbar flex flex-1 flex-col overflow-y-auto">
-				<!-- Active (pinned first, then chronological) -->
-				{#each threadMetasActive as meta (meta.thread_id)}
-					{@render threadListItem(meta, false)}
-				{/each}
-				{#if threadMetasActive.length === 0}
-					<div class="px-3 py-4 text-center font-sans text-[11px] text-muted-foreground">
-						No threads yet
-					</div>
-				{/if}
-				<!-- Archived section (collapsible) -->
-				{#if threadMetasArchived.length > 0}
-					<button
-						type="button"
-						onclick={() => (showArchivedThreads = !showArchivedThreads)}
-						class="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 font-mono text-[10px] tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-muted-foreground"
-					>
-						<span>{showArchivedThreads ? '▾' : '▸'}</span>
-						<span>Archived ({threadMetasArchived.length})</span>
-					</button>
-					{#if showArchivedThreads}
-						{#each threadMetasArchived as meta (meta.thread_id)}
-							{@render threadListItem(meta, true)}
-						{/each}
-					{/if}
-				{/if}
-			</div>
-		</aside>
-	{/if}
-
-	<!-- ── Main chat column ──────────────────────────────────────────────────── -->
-	<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-		<!-- Top row: sidebar toggle + active thread name + reset context -->
-		<div class="flex shrink-0 items-center justify-between gap-2 px-2 pt-1">
-			<div class="flex items-center gap-1.5">
-				<!-- Desktop: sidebar toggle -->
 				<button
 					type="button"
-					onclick={() => (sidebarOpen = !sidebarOpen)}
-					class="hidden h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-surface hover:text-foreground active:scale-95 md:flex"
-					aria-label={sidebarOpen ? 'Close thread sidebar' : 'Open thread sidebar'}
-					title={sidebarOpen ? 'Close sidebar' : 'Open thread sidebar'}
+					onclick={() => (sidebarOpen = false)}
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:text-white lg:hidden"
+					aria-label="Close sidebar"
 				>
-					<PanelLeft size={13} />
+					<X size={14} />
 				</button>
-				<!-- Mobile: opens full-screen overlay -->
-				<button
-					type="button"
-					onclick={() => (mobileThreadsOpen = true)}
-					class="flex items-center gap-1.5 rounded border border-border bg-surface px-2 py-1.5 transition-colors hover:bg-surface/80 active:scale-95 md:hidden"
-					aria-label="Open threads"
-				>
-					<MessageSquare size={12} class="text-muted-foreground" />
-					<span class="font-sans text-sm font-bold tracking-tight text-foreground">
-						{getThreadTitle(activeThread)}
-					</span>
-					<span class="text-xs text-muted-foreground" aria-hidden="true">▾</span>
-				</button>
-				<!-- Desktop: active thread name label -->
-				<span class="hidden font-sans text-sm font-bold tracking-tight text-foreground md:block">
-					{getThreadTitle(activeThread)}
-				</span>
 			</div>
-
-			<button
-				type="button"
-				onclick={handleNewConversation}
-				disabled={resetting}
-				class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded border border-border bg-surface px-2 py-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors hover:bg-surface/80 hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50"
-				title="Drop a 'new conversation' marker inside this thread so old context isn't replayed to workers."
-			>
-				{#if resetting}
-					<Loader2 size={10} class="animate-spin" />
-				{:else}
-					<RefreshCw size={10} />
-				{/if}
-				<span>Reset context</span>
-			</button>
 		</div>
 
-		<!-- Talkback status bar: always visible while talkback is active (§2D.3 §2D.4).
-	     Left: phase indicator. Right: large emergency STOP button (top-right of feed). -->
-		{#if talkbackActive}
-			<div
-				class="animate-fade-in flex shrink-0 items-center justify-between gap-2 border-b border-status-red/20 bg-status-red/10 px-3 py-1.5"
-			>
-				<span class="font-mono text-xs font-bold tracking-wider text-status-red uppercase">
-					{talkbackPhase ? TALKBACK_PHASE_LABELS[talkbackPhase] : '🔴 LISTENING'}
-				</span>
+		<!-- Threads Scroll Area -->
+		<div class="flex flex-1 flex-col overflow-y-auto p-2">
+			<!-- Toolbar — Show archived toggle + Clear All -->
+			<div class="mb-1 flex items-center justify-between px-2 py-1">
 				<button
 					type="button"
-					onclick={emergencyStop}
-					class="flex items-center gap-1.5 rounded border border-status-red/50 bg-status-red/20 px-2.5 py-1 font-mono text-[11px] font-bold tracking-wider text-status-red uppercase transition-colors hover:bg-status-red/30 active:scale-95"
-					aria-label="Emergency stop talkback"
+					onclick={() => (showArchived = !showArchived)}
+					class="flex items-center gap-1 font-mono text-[9px] tracking-wider text-zinc-500 uppercase transition-colors hover:text-zinc-300"
+					title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
 				>
-					<Square size={10} fill="currentColor" />
-					<span>STOP</span>
+					<Archive size={10} />
+					<span>{showArchived ? 'Hide archived' : 'Show archived'}</span>
+				</button>
+				<button
+					type="button"
+					onclick={clearAllSessions}
+					class="flex items-center gap-1 rounded font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:text-red-400"
+					title="Archive and delete every non-default thread"
+				>
+					<Eraser size={10} />
+					<span>Clear all</span>
 				</button>
 			</div>
-		{/if}
 
-		<!-- Main Chat Area (Scrollable Feed) -->
-		<div
-			bind:this={feedContainer}
-			class="custom-scrollbar relative flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-4"
-		>
-			{#if messages.length === 0}
-				<div
-					class="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface/10 p-8 text-center"
-				>
-					<MessageSquare size={36} class="mb-3 text-muted-foreground opacity-60" />
-					<h3 class="font-sans text-sm font-bold text-foreground">No Chat History</h3>
-					<p class="mt-1 max-w-xs font-sans text-xs text-muted-foreground">
-						Type your first request below to ping GMI or CC. Mentions like <code class="text-cta"
-							>@agy</code
-						>
-						or <code class="text-cta">@cc</code> will automatically boot them up!
-					</p>
-				</div>
+			{#if threads.length === 0}
+				<div class="px-3 py-4 text-center font-mono text-[10px] text-zinc-600">No sessions yet</div>
 			{:else}
-				{#each messages as m (m.id)}
-					{#if !isResetMarker(m) && m.id === firstUnseenMessageId}
-						<!-- Unread boundary: first message that arrived while operator was scrolled up. -->
-						<div class="animate-fade-in my-1 flex items-center gap-2" aria-label="New messages">
-							<div class="h-px flex-1 bg-border/60"></div>
-							<span
-								class="shrink-0 font-mono text-[10px] tracking-wider text-muted-foreground/70 uppercase"
-								>New Messages</span
-							>
-							<div class="h-px flex-1 bg-border/60"></div>
-						</div>
-					{/if}
-					{#if isResetMarker(m)}
-						<!-- Conversation boundary — dispatched workers after this point
-					     see no context from before. -->
-						<div class="animate-fade-in my-1 flex items-center gap-2" aria-label="New conversation">
-							<div class="h-px flex-1 bg-border"></div>
-							<div
-								class="flex items-center gap-1.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
-							>
-								<Plus size={10} />
-								<span>New conversation · {formatShortTime(m.timestamp)}</span>
-							</div>
-							<div class="h-px flex-1 bg-border"></div>
-						</div>
-					{:else}
-						<!-- Message Container — left-border thread-grouped when trace_id present -->
-						<div
-							class="flex flex-col gap-1 {m.sender === 'operator'
-								? 'items-end'
-								: 'items-start'} {m.trace_id ? 'thread-grouped' : ''} animate-fade-in"
-						>
-							<!-- Metadata strip -->
-							<div
-								class="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground uppercase"
-							>
-								{#if m.sender === 'operator'}
-									<span>Operator</span>
-									<User size={10} />
-								{:else if m.sender === 'system'}
-									<span class="text-status-blue">System</span>
-								{:else}
-									{@const senderClass =
-										m.sender === 'agy'
-											? 'text-purple-400'
-											: m.sender === 'hermes'
-												? 'text-status-green'
-												: 'text-orange-400'}
-									<Cpu size={10} class={senderClass} />
-									<span class={senderClass}>{m.sender}</span>
-								{/if}
-								<span>·</span>
-								<span>{formatShortTime(m.timestamp)}</span>
-							</div>
-
-							<!-- Speech Bubble -->
-							<div
-								class="max-w-[85%] rounded-lg px-3.5 py-2 font-sans text-sm leading-relaxed select-text
-							{m.sender === 'operator'
-									? 'rounded-tr-none border border-cta/30 bg-cta/15 text-white'
-									: m.sender === 'system'
-										? 'w-full max-w-none border border-border/50 bg-surface/50 py-1.5 text-center font-mono text-xs text-muted-foreground'
-										: 'rounded-tl-none border border-border bg-surface text-foreground'}"
-							>
-								<Markdown content={m.message} />
-
-								<!-- Render interactive action cards if present -->
-								{#if m.interactive_action}
-									<div
-										class="mt-3 flex flex-col gap-2 rounded border border-border/80 bg-background/80 p-3 font-mono text-xs"
+				<div class="space-y-1">
+					{#each threads.filter((t) => showArchived || !t.archived) as t (t.thread_id)}
+						<div class="relative">
+							{#if renamingFor === t.thread_id}
+								<!-- Rename input replaces the row in-place. -->
+								<form
+									class="flex items-center gap-1 rounded-xl border border-purple-500/40 bg-zinc-900 px-2 py-1.5"
+									onsubmit={(e) => {
+										e.preventDefault();
+										void commitRename(t.thread_id);
+									}}
+								>
+									<input
+										type="text"
+										bind:value={renameDraft}
+										class="flex-1 bg-transparent text-xs text-white focus:outline-none"
+										autofocus
+										onkeydown={(e) => {
+											if (e.key === 'Escape') cancelRename();
+										}}
+									/>
+									<button
+										type="submit"
+										class="rounded px-1.5 py-0.5 text-[10px] text-purple-300 hover:bg-purple-500/10"
+										>Save</button
 									>
-										<div
-											class="flex items-center gap-1.5 border-b border-border/50 pb-1.5 text-[10px] font-bold tracking-wider text-status-amber uppercase"
-										>
-											<Terminal size={12} />
-											<span>Interactive Command Request</span>
-										</div>
-
-										<div class="text-[11px] text-muted-foreground">
-											Reason: <span class="text-foreground italic"
-												>{m.interactive_action.reason}</span
+									<button
+										type="button"
+										onclick={cancelRename}
+										class="rounded px-1.5 py-0.5 text-[10px] text-zinc-500 hover:bg-zinc-800"
+										>Cancel</button
+									>
+								</form>
+							{:else}
+								<div
+									class="group flex w-full items-center gap-1 rounded-xl pr-1 transition-all
+										{activeThread === t.thread_id
+										? 'border border-zinc-700/50 bg-zinc-800/40'
+										: 'border border-transparent hover:bg-zinc-900/40'}
+										{t.archived ? 'opacity-60' : ''}"
+								>
+									<button
+										type="button"
+										onclick={() => switchThread(t.thread_id)}
+										class="flex flex-1 items-center justify-between truncate px-3 py-2 text-left font-sans text-xs
+											{activeThread === t.thread_id ? 'font-medium text-white' : 'text-zinc-300'}"
+									>
+										<div class="flex min-w-0 items-center gap-2.5 truncate">
+											<MessageSquare
+												size={13}
+												class={activeThread === t.thread_id ? 'text-purple-400' : 'text-zinc-500'}
+											/>
+											<span class="truncate"
+												>{t.thread_id === 'default' && t.title === 'default'
+													? 'Default Space'
+													: t.title || t.thread_id}</span
 											>
-										</div>
-
-										<div
-											class="rounded border border-border/40 bg-surface/60 p-2 font-mono text-[11px] leading-tight break-all text-green-400 select-all"
-										>
-											$ {m.interactive_action.command}
-										</div>
-
-										<!-- Card Actions -->
-										<div class="mt-2 flex w-full items-center gap-2">
-											{#if m.interactive_action.status === 'pending'}
-												<button
-													type="button"
-													onclick={() => handleAction(m.id, 'denied')}
-													disabled={actionSubmitting !== null}
-													class="flex flex-1 items-center justify-center gap-1.5 rounded border border-status-red/40 bg-status-red/10 py-1.5 font-sans text-[11px] font-bold tracking-wider text-status-red uppercase transition-all duration-200 hover:bg-status-red/20 focus:outline-none active:scale-95"
-												>
-													{#if actionSubmitting === m.id}
-														<Loader2 size={12} class="animate-spin" />
-													{:else}
-														<X size={12} />
-														<span>Deny</span>
-													{/if}
-												</button>
-												<button
-													type="button"
-													onclick={() => handleAction(m.id, 'approved')}
-													disabled={actionSubmitting !== null}
-													class="flex flex-1 items-center justify-center gap-1.5 rounded border border-status-green/40 bg-status-green/10 py-1.5 font-sans text-[11px] font-bold tracking-wider text-status-green uppercase shadow-[0_0_10px_rgba(34,197,94,0.05)] transition-all duration-200 hover:bg-status-green/20 focus:outline-none active:scale-95"
-												>
-													{#if actionSubmitting === m.id}
-														<Loader2 size={12} class="animate-spin" />
-													{:else}
-														<Check size={12} />
-														<span>Approve</span>
-													{/if}
-												</button>
-											{:else}
-												<div
-													class="w-full rounded border py-1.5 text-center font-sans text-[10px] font-bold tracking-widest uppercase
-												{m.interactive_action.status === 'approved'
-														? 'border-status-green/30 bg-status-green/5 text-status-green'
-														: 'border-status-red/30 bg-status-red/5 text-status-red'}"
-												>
-													{m.interactive_action.status === 'approved'
-														? '✓ Command Approved'
-														: '✗ Command Denied'}
-												</div>
+											{#if t.archived}
+												<Archive size={10} class="shrink-0 text-zinc-600" />
 											{/if}
 										</div>
-									</div>
-								{/if}
-							</div>
-
-							<!-- Per-message workflow actions on WORKER replies only.
-					     Five icons: Critique, Build, Verify, Copy, Retry. All
-					     compact + tooltip-labeled to stay out of the way on
-					     phone. Pure render — no extra fetches. -->
-							{#if isWorkerReply(m)}
-								<div class="mt-0.5 flex items-center gap-1 text-muted-foreground">
-									<!-- Speaker button: read this reply aloud via ElevenLabs Emma. -->
-									<button
-										type="button"
-										onclick={() => handleSpeakMessage(m.id, m.message)}
-										disabled={speakingMessageId !== null}
-										title="Read aloud (Emma)"
-										aria-label="Read aloud"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40
-										{speakingMessageId === m.id ? 'text-cta' : ''}"
-									>
-										{#if speakingMessageId === m.id}
-											<Loader2 size={10} class="animate-spin" />
-										{:else}
-											<Volume2 size={10} />
-										{/if}
-										<span>Speak</span>
-									</button>
-									<button
-										type="button"
-										onclick={() => handleWorkflowAction(m.id, 'critique')}
-										disabled={workflowSubmitting !== null}
-										title="Send to the other agent for critique"
-										aria-label="Critique"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-									>
-										{#if workflowSubmitting === `${m.id}:critique`}
-											<Loader2 size={10} class="animate-spin" />
-										{:else}
-											<HelpCircle size={10} />
-										{/if}
-										<span>Critique</span>
-									</button>
-									<button
-										type="button"
-										onclick={() => handleWorkflowAction(m.id, 'build')}
-										disabled={workflowSubmitting !== null}
-										title="Dispatch AGY to implement this proposal"
-										aria-label="Build"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-									>
-										{#if workflowSubmitting === `${m.id}:build`}
-											<Loader2 size={10} class="animate-spin" />
-										{:else}
-											<Terminal size={10} />
-										{/if}
-										<span>Build</span>
-									</button>
-									<button
-										type="button"
-										onclick={() => handleWorkflowAction(m.id, 'verify')}
-										disabled={workflowSubmitting !== null}
-										title="Dispatch CC to verify the implementation/claim"
-										aria-label="Verify"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-									>
-										{#if workflowSubmitting === `${m.id}:verify`}
-											<Loader2 size={10} class="animate-spin" />
-										{:else}
-											<CheckCircle2 size={10} />
-										{/if}
-										<span>Verify</span>
-									</button>
-									<button
-										type="button"
-										onclick={() => handleWorkflowAction(m.id, 'copy', { messageText: m.message })}
-										disabled={workflowSubmitting !== null}
-										title="Copy reply to clipboard"
-										aria-label="Copy"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-									>
-										<BookOpen size={10} />
-										<span>Copy</span>
-									</button>
-									<button
-										type="button"
-										onclick={() => handleWorkflowAction(m.id, 'retry')}
-										disabled={workflowSubmitting !== null}
-										title="Retry the original operator request with the other agent"
-										aria-label="Retry"
-										class="flex items-center gap-1 rounded border border-transparent px-1.5 py-0.5 font-mono text-[10px] tracking-wider uppercase transition-colors hover:border-border hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-									>
-										{#if workflowSubmitting === `${m.id}:retry`}
-											<Loader2 size={10} class="animate-spin" />
-										{:else}
-											<RefreshCw size={10} />
-										{/if}
-										<span>Retry</span>
-									</button>
-								</div>
-							{/if}
-
-							<!-- Activity ticker: for any message tied to a worker trace, render the
-						     stream of progress events emitted via tools/emit_chat_activity.py.
-						     If the trace is mentioned but has no activity yet, show a pulsing
-						     "Working..." placeholder. -->
-							{#if m.trace_id}
-								{@const acts = activityByTrace[m.trace_id] || []}
-								{@const active = isTraceActive(m.trace_id)}
-								{#if acts.length > 0 || active}
-									<div
-										class="mt-1 flex flex-col gap-0.5 font-mono text-[11px] {m.sender === 'operator'
-											? 'items-end'
-											: 'items-start'}"
-									>
-										{#each acts as a (a.id)}
-											<div
-												class="flex items-center gap-1.5 px-1
-												{a.action === 'completed'
-													? 'text-status-green'
-													: a.action === 'failed'
-														? 'text-status-red'
-														: a.action === 'edited'
-															? 'text-cta'
-															: a.action === 'ran'
-																? 'text-status-blue'
-																: 'text-muted-foreground'}"
-											>
-												{#if a.action === 'reading'}
-													<BookOpen size={10} />
-												{:else if a.action === 'edited'}
-													<Edit3 size={10} />
-												{:else if a.action === 'ran'}
-													<Terminal size={10} />
-												{:else if a.action === 'thinking'}
-													<Loader2 size={10} class="animate-spin" />
-												{:else if a.action === 'completed'}
-													<CheckCircle2 size={10} />
-												{:else if a.action === 'failed'}
-													<AlertTriangle size={10} />
-												{:else}
-													<span>·</span>
-												{/if}
-												<span class="tracking-wider uppercase opacity-80">{a.action}</span>
-												{#if a.target}
-													<span class="max-w-[260px] truncate text-foreground/70">{a.target}</span>
-												{/if}
-											</div>
-										{/each}
-										{#if active && (acts.length === 0 || (acts[acts.length - 1].action !== 'completed' && acts[acts.length - 1].action !== 'failed'))}
-											<div
-												class="flex animate-pulse items-center gap-1.5 px-1 text-muted-foreground"
-											>
-												<Loader2 size={10} class="animate-spin" />
-												<span class="tracking-wider uppercase">Working...</span>
-											</div>
-										{/if}
-									</div>
-								{/if}
-
-								<!-- Live worker stdout — collapsed by default; expand to see what
-							     the worker is actually saying as it works. -->
-								{#if streamByTrace[m.trace_id]}
-									{@const buf = streamByTrace[m.trace_id]}
-									{@const ended = streamEnded[m.trace_id]}
-									<details
-										class="mt-1 w-full max-w-[85%] {m.sender === 'operator'
-											? 'self-end'
-											: 'self-start'}"
-									>
-										<summary
-											class="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase transition-colors select-none hover:text-foreground"
-										>
-											<Terminal size={10} />
+										{#if t.message_count > 0}
 											<span
-												>Worker output ({buf.length.toLocaleString()} chars{ended
-													? ', ended'
-													: ', live'})</span
+												class="ml-2 shrink-0 rounded border border-zinc-900 bg-zinc-950 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500"
+												>{t.message_count}</span
 											>
-										</summary>
-										<pre
-											class="custom-scrollbar mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded border border-border/60 bg-background/70 px-2 py-1.5 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-muted-foreground">{buf}</pre>
-									</details>
-								{/if}
-							{/if}
-						</div>
-
-						<!-- Synthetic streaming bubble: appears below the "Agent dispatched"
-					     system message while the worker is in flight, grows with SSE
-					     stream chunks, and disappears once the real worker reply
-					     lands in chat_messages. -->
-						{#if shouldRenderStreamingBubble(m)}
-							{@const senderLabel = senderFromTrace(m.trace_id || '')}
-							{@const buf = streamByTrace[m.trace_id || ''] || ''}
-							<div class="animate-fade-in flex flex-col items-start gap-1">
-								<div
-									class="flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground uppercase"
-								>
-									<Cpu
-										size={10}
-										class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}
-									/>
-									<span class={senderLabel === 'agy' ? 'text-purple-400' : 'text-orange-400'}
-										>{senderLabel}</span
-									>
-									<span>·</span>
-									<span class="flex items-center gap-1">
-										<Loader2 size={10} class="animate-spin" />
-										<span>streaming</span>
-									</span>
-								</div>
-								<!-- Plain pre-wrap text during streaming. The Markdown
-							     component re-parses + re-highlights on every state
-							     change; doing that for each rAF tick during a fast
-							     stream made the worker's reply feel choppy. The
-							     formatted version lands when the real chat_messages
-							     reply supersedes this synthetic bubble. -->
-								<div
-									class="max-w-[85%] rounded-lg rounded-tl-none border border-border bg-surface px-3.5 py-2 font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground select-text"
-								>
-									{buf}
-								</div>
-							</div>
-						{/if}
-					{/if}
-				{/each}
-
-				<!-- Instant dispatch feedback: fills the perception gap between
-				     "operator hit send" and "Agent dispatched" landing from the
-				     server (gateway round-trip + listener spawn ≈ 1-3s). The
-				     pulsing line disappears as soon as the system bubble OR a
-				     streaming bubble takes over. -->
-				{#if dispatching}
-					<div class="animate-fade-in flex flex-col items-start gap-1">
-						<div
-							class="flex animate-pulse items-center gap-1.5 px-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
-						>
-							<Loader2 size={10} class="animate-spin" />
-							<span>dispatching agent...</span>
-						</div>
-					</div>
-				{/if}
-			{/if}
-			<!-- IntersectionObserver sentinel — always rendered at the bottom of feed content.
-		     When this element is visible inside feedContainer, the user is at the bottom. -->
-			<div bind:this={scrollSentinel} class="h-px w-full shrink-0" aria-hidden="true"></div>
-		</div>
-
-		<!-- "X new ↓" pill: appears when new messages arrive while the operator is
-	     scrolled up reading history. Tap to scroll to the bottom. Anchored
-	     above the composer; hidden when at bottom or no unseen messages. -->
-		{#if !userAtBottom && unseenCount > 0}
-			<button
-				type="button"
-				onclick={jumpToLatest}
-				class="animate-fade-in mt-0 -mb-1 flex items-center gap-1.5 self-center rounded-full border border-cta/40 bg-cta/15 px-3 py-1 font-sans text-xs font-bold text-cta shadow-lg backdrop-blur-md transition-all duration-150 hover:bg-cta/25 active:scale-95"
-				aria-label="Jump to latest messages"
-			>
-				<span>{unseenCount} new</span>
-				<span aria-hidden="true">↓</span>
-			</button>
-		{/if}
-
-		<!-- Composer: single-row pill cluster + auto-grow textarea with inline
-	     attach + send icons + examples drawer. Replaces the old 3-row stack
-	     (suggestions + Send-to row + input) for ~30% less vertical space
-	     on phone. -->
-		<div class="flex shrink-0 flex-col gap-1.5 border-t border-border bg-background/95 p-2">
-			<!-- Examples drawer (collapsed by default; only rendered when open) -->
-			{#if examplesOpen}
-				<div class="animate-fade-in flex flex-col gap-1 px-1 pb-1">
-					{#each Array.from(new Set(STARTER_PROMPTS.map((p) => p.category))) as cat (cat)}
-						<div class="mt-0.5 flex items-center gap-1.5">
-							<span
-								class="w-20 shrink-0 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
-								>{cat}</span
-							>
-							<div class="flex flex-wrap gap-1">
-								{#each STARTER_PROMPTS.filter((p) => p.category === cat) as ex (ex.label)}
+										{/if}
+									</button>
 									<button
 										type="button"
-										onclick={() => {
-											textDraft = ex.prompt;
-											examplesOpen = false;
-											textareaEl?.focus();
+										onclick={(e) => {
+											e.stopPropagation();
+											threadMenuOpenFor = threadMenuOpenFor === t.thread_id ? null : t.thread_id;
 										}}
-										class="rounded border border-border bg-surface/50 px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
+										class="flex h-7 w-6 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
+										aria-label="Session options"
 									>
-										{ex.label}
+										<MoreVertical size={13} />
 									</button>
-								{/each}
-							</div>
+								</div>
+							{/if}
+
+							{#if threadMenuOpenFor === t.thread_id}
+								<button
+									type="button"
+									class="fixed inset-0 z-40 cursor-default"
+									onclick={() => (threadMenuOpenFor = null)}
+									aria-label="Close menu"
+									tabindex="-1"
+								></button>
+								<div
+									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-800 bg-[#0e0e0e] py-1 shadow-2xl"
+								>
+									<button
+										type="button"
+										onclick={() => openRename(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
+									>
+										<Edit3 size={11} class="text-zinc-500" />
+										<span>Rename</span>
+									</button>
+									<button
+										type="button"
+										onclick={() => toggleArchive(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-900 disabled:opacity-40"
+									>
+										{#if t.archived}
+											<ArchiveRestore size={11} class="text-zinc-500" />
+											<span>Restore</span>
+										{:else}
+											<Archive size={11} class="text-zinc-500" />
+											<span>Archive</span>
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={() => deleteThreadById(t)}
+										disabled={t.thread_id === 'default'}
+										class="flex w-full items-center gap-2 border-t border-zinc-800/50 px-3 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-40"
+									>
+										<Trash2 size={11} />
+										<span>Delete</span>
+									</button>
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>
 			{/if}
+		</div>
 
-			<!-- Control row: examples button + agent switcher pills, single line -->
-			<div
-				class="flex items-center gap-2 font-mono text-[10px] tracking-wider text-muted-foreground uppercase select-none"
-			>
+		<!-- Sidebar Footer info -->
+		<div
+			class="shrink-0 space-y-0.5 border-t border-zinc-800/50 bg-black/25 p-3 font-mono text-[9px] text-zinc-600 select-none"
+		>
+			<div>CORE: LogueOS-Console</div>
+			<div>HOST: 127.0.0.1:18080</div>
+		</div>
+	</aside>
+
+	<!-- ═════════════════════════════════════════════════════════════════
+	     MAIN CONVERSATIONAL CANVAS
+	     ═════════════════════════════════════════════════════════════════ -->
+	<main class="relative flex h-full flex-1 flex-col overflow-hidden select-text">
+		<!-- ═════════════════════════════════════════════════════════════════
+		     QUIET HEADER
+		     ═════════════════════════════════════════════════════════════════ -->
+		<header
+			class="relative z-50 flex shrink-0 items-center justify-between px-4 pt-3 pb-2 select-none"
+		>
+			<div class="flex items-center gap-1.5">
+				<!-- Sidebar toggle button -->
 				<button
 					type="button"
-					onclick={() => (examplesOpen = !examplesOpen)}
-					class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
-					title="Open examples / starter prompts"
-					aria-label="Examples"
+					onclick={() => (sidebarOpen = !sidebarOpen)}
+					class="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-zinc-400 transition-all hover:text-white active:scale-90"
+					aria-label="Toggle Sessions Sidebar"
+					title="Toggle Sessions Sidebar"
 				>
-					<Sparkles size={10} />
-					<span>Examples</span>
+					<Menu size={16} />
 				</button>
-				<span class="text-muted-foreground/50">·</span>
-				<span class="shrink-0">Send to</span>
-				<div class="flex items-center gap-1">
-					<button
-						type="button"
-						onclick={() => (agentLock = 'auto')}
-						class="rounded border px-2 py-0.5 transition-colors active:scale-95
-						{agentLock === 'auto'
-							? 'border-foreground/30 bg-foreground/5 text-foreground'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-						title="Use the @-mention heuristic to decide. Default."
-					>
-						Auto
-					</button>
-					<button
-						type="button"
-						onclick={() => (agentLock = 'claude-code')}
-						class="rounded border px-2 py-0.5 transition-colors active:scale-95
-						{agentLock === 'claude-code'
-							? 'border-orange-400/40 bg-orange-400/10 text-orange-400'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-						title="Lock all sends to Claude Code."
-					>
-						CC
-					</button>
-					<button
-						type="button"
-						onclick={() => (agentLock = 'agy')}
-						class="rounded border px-2 py-0.5 transition-colors active:scale-95
-						{agentLock === 'agy'
-							? 'border-purple-400/40 bg-purple-400/10 text-purple-400'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-						title="Talk to AGY (Gemini API) — fast chat-mode, no worker spawn. Use Build / Critique on a reply when you want the heavy worker."
-					>
-						AGY
-					</button>
-					<button
-						type="button"
-						onclick={() => (agentLock = 'hermes')}
-						class="rounded border px-2 py-0.5 transition-colors active:scale-95
-						{agentLock === 'hermes'
-							? 'border-status-green/40 bg-status-green/10 text-status-green'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-						title="Local Hermes (Qwen via Ollama). Free, fast, no file access — sounding board only."
-					>
-						Hermes
-					</button>
-					<button
-						type="button"
-						onclick={() => (agentLock = 'silent')}
-						class="rounded border px-2 py-0.5 transition-colors active:scale-95
-						{agentLock === 'silent'
-							? 'border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground'
-							: 'border-border bg-transparent text-muted-foreground hover:text-foreground'}"
-						title="Log this message in the chat without dispatching any worker (chat note)."
-					>
-						Silent
-					</button>
-				</div>
-				<span class="text-muted-foreground/50">·</span>
-				<!-- Workspace selector pill — drives target_repo on all dispatches -->
+
+				<!-- Logo home anchor -->
+				<a
+					href={resolve('/')}
+					aria-label="Return to Dashboard"
+					class="ml-0.5 flex h-9 w-9 items-center justify-center transition-opacity hover:opacity-80"
+				>
+					<img src="{base}/favicon.png" alt="LogueOS" class="h-6 w-6" />
+				</a>
+			</div>
+
+			<!-- Context badges dropdown container -->
+			<div class="flex items-center gap-1.5">
+				<!-- Repository selection chip -->
 				<div class="relative">
 					<button
 						type="button"
-						onclick={() => (repoDropdownOpen = !repoDropdownOpen)}
-						class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
-						title="Switch target repository for workflow actions"
-						aria-label="Select repository"
+						onclick={() => (openChip = openChip === 'repo' ? null : 'repo')}
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
+						aria-label="Target repository"
 					>
 						<span>{selectedWorkspace?.emoji ?? '📁'}</span>
 						<span>{selectedWorkspace?.display_name ?? selectedRepo}</span>
-						<ChevronDown size={8} />
+						<ChevronDown size={10} class="text-zinc-500" />
 					</button>
-					{#if repoDropdownOpen}
+
+					{#if openChip === 'repo'}
 						<button
 							type="button"
-							class="fixed inset-0 z-40"
-							onclick={() => (repoDropdownOpen = false)}
-							aria-label="Close workspace dropdown"
+							class="fixed inset-0 z-40 cursor-default"
+							onclick={() => (openChip = null)}
+							aria-label="Close popover"
 							tabindex="-1"
 						></button>
 						<div
-							class="absolute bottom-full left-0 z-50 mb-1 min-w-44 rounded border border-border bg-surface py-1 font-mono shadow-lg"
+							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
-							{#each Array.from(new Set([...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].map((w) => w.group))) as grp (grp)}
-								<div
-									class="mt-1 px-2 py-0.5 text-[9px] tracking-wider text-muted-foreground/50 uppercase first:mt-0"
+							<div
+								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
+							>
+								Target Directory
+							</div>
+							{#each workspaces as ws (ws.name)}
+								<button
+									type="button"
+									onclick={() => switchRepo(ws.name)}
+									class="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-zinc-900
+										{selectedRepo === ws.name ? 'font-medium text-cyan-400' : 'text-zinc-400'}"
 								>
-									{grp}
-								</div>
-								{#each [...(data.workspaces ?? []), ...(showArchivedWorkspaces ? (data.archivedWorkspaces ?? []) : [])].filter((w) => w.group === grp) as ws (ws.name)}
-									<button
-										type="button"
-										onclick={() => selectWorkspace(ws.name)}
-										class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[11px] transition-colors hover:bg-foreground/5
-										{ws.is_archived ? 'opacity-60' : ''}
-										{selectedRepo === ws.name ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
-									>
+									<span class="flex items-center gap-2">
 										<span>{ws.emoji}</span>
 										<span>{ws.display_name}</span>
-										{#if selectedRepo === ws.name}
-											<Check size={8} class="ml-auto shrink-0" />
-										{/if}
-									</button>
-								{/each}
+									</span>
+									{#if selectedRepo === ws.name}
+										<Check size={11} />
+									{/if}
+								</button>
 							{/each}
-							{#if (data.archivedWorkspaces ?? []).length > 0 || showArchivedWorkspaces}
-								<div class="mt-1 border-t border-border pt-1">
-									<button
-										type="button"
-										onclick={() => (showArchivedWorkspaces = !showArchivedWorkspaces)}
-										class="flex w-full items-center gap-1 px-2 py-1 text-left text-[10px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
-									>
-										{showArchivedWorkspaces ? '▾' : '▸'}
-										<span>{showArchivedWorkspaces ? 'Hide' : 'Show'} archived</span>
-										{#if (data.archivedWorkspaces ?? []).length > 0}
-											<span class="ml-auto">{(data.archivedWorkspaces ?? []).length}</span>
-										{/if}
-									</button>
-								</div>
-							{/if}
 						</div>
 					{/if}
 				</div>
 
-				<!-- Tier badge: shows current conversation tier (server-driven auto-escalation).
-			     Tap → override dropdown. Only visible when using AGY/direct LLM path. -->
-				{#if agentLock === 'agy' || agentLock === 'auto'}
-					<div class="relative">
+				<!-- Model Picker Badge -->
+				<div class="relative">
+					<button
+						type="button"
+						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
+						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
+						aria-label="Model picker"
+						title="Pick a specific model or leave on Auto"
+					>
+						<span>{tierEmoji}</span>
+						<span class="max-w-[120px] truncate font-mono text-[10px] tracking-wide text-zinc-400"
+							>{selectedModelChoice.id === 'auto'
+								? lastModelUsed || 'Auto'
+								: selectedModelChoice.label}</span
+						>
+						<ChevronDown size={10} class="text-zinc-500" />
+					</button>
+
+					{#if showModelOverrideModal}
 						<button
 							type="button"
-							onclick={() => (tierOverrideOpen = !tierOverrideOpen)}
-							class="flex items-center gap-1 rounded border border-border bg-transparent px-1.5 py-0.5 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-95"
-							title="Current LLM tier. Tap to override or reset to Auto."
-							aria-label="LLM tier override"
+							class="fixed inset-0 z-40 cursor-default"
+							onclick={() => (showModelOverrideModal = false)}
+							aria-label="Close popover"
+							tabindex="-1"
+						></button>
+						<div
+							class="absolute top-full right-0 z-50 mt-2 min-w-56 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
-							<span>{TIER_LABELS[currentTier]}</span>
-						</button>
-						{#if tierOverrideOpen}
-							<button
-								type="button"
-								class="fixed inset-0 z-40"
-								onclick={() => (tierOverrideOpen = false)}
-								aria-label="Close tier dropdown"
-								tabindex="-1"
-							></button>
 							<div
-								class="absolute bottom-full left-0 z-50 mb-1 min-w-36 rounded border border-border bg-surface py-1 font-mono text-[11px] shadow-lg"
+								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
 							>
-								<div
-									class="px-2 py-0.5 text-[9px] tracking-wider text-muted-foreground/50 uppercase"
+								Model
+							</div>
+							{#each MODEL_CHOICES as choice (choice.id)}
+								<button
+									type="button"
+									onclick={() => setModelChoice(choice)}
+									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-900
+										{selectedModelChoice.id === choice.id ? 'font-medium text-purple-400' : 'text-zinc-300'}"
 								>
-									Lock tier
-								</div>
-								{#each ['chat', 'planning', 'deep', 'local'] as Tier[] as t (t)}
-									<button
-										type="button"
-										onclick={() => setTierOverride(t)}
-										class="flex w-full items-center gap-1.5 px-2 py-1 text-left transition-colors hover:bg-foreground/5
-										{currentTier === t ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
-									>
-										{TIER_LABELS[t]}
-									</button>
-								{/each}
-								<div class="mt-1 border-t border-border pt-1">
-									<button
-										type="button"
-										onclick={() => setTierOverride(null)}
-										class="w-full px-2 py-1 text-left text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-										>Auto (reset)</button
-									>
-								</div>
+									<span class="flex flex-col leading-tight">
+										<span class="text-xs">{choice.label}</span>
+										<span class="font-mono text-[9px] text-zinc-500">{choice.sublabel}</span>
+									</span>
+									{#if selectedModelChoice.id === choice.id}
+										<Check size={11} class="shrink-0" />
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</header>
+
+		<!-- ═════════════════════════════════════════════════════════════════
+		     EPHEMERAL ACTIVITY PILL
+		     ═════════════════════════════════════════════════════════════════ -->
+		{#if activityPill}
+			<div
+				class="relative z-10 mx-auto shrink-0 px-4 pb-1 select-none"
+				style="animation: fade-in 0.3s ease-out;"
+			>
+				<div
+					class="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-950/20 px-3.5 py-1.5 backdrop-blur-md"
+					style="box-shadow: 0 0 16px rgba(34, 211, 238, 0.1);"
+				>
+					<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
+					<span class="font-mono text-[11px] tracking-wide text-cyan-400">
+						⚡ {activityPill.worker}: {activityPill.step}
+					</span>
+					<a
+						href={resolve('/activity')}
+						class="ml-1.5 font-mono text-[10px] text-cyan-300/60 transition-colors hover:text-cyan-300"
+					>
+						[View Logs]
+					</a>
+				</div>
+			</div>
+		{/if}
+
+		<!-- ═════════════════════════════════════════════════════════════════
+		     CINEMATIC MESSAGE FEED
+		     ═════════════════════════════════════════════════════════════════ -->
+		<div
+			bind:this={feedContainer}
+			class="relative z-10 flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-4 md:px-6"
+		>
+			{#if messages.length === 0}
+				<div class="flex flex-1 items-center justify-center text-center select-none">
+					<div class="max-w-xs space-y-2">
+						<div class="font-sans text-sm font-light text-zinc-500/60">
+							Active terminal partner loop established.
+						</div>
+						<div class="font-mono text-[10px] tracking-widest text-zinc-700 uppercase">
+							{selectedWorkspace?.display_name ?? selectedRepo} · {currentTier}
+						</div>
+					</div>
+				</div>
+			{:else}
+				{#each messages as m (m.id)}
+					<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}">
+						<!-- Custom Labeling / Bubble Headers -->
+						{#if m.sender !== 'operator'}
+							<div
+								class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
+							>
+								<Sparkles size={10} class="shrink-0 text-cyan-400" />
+								<span>{m.sender === 'system' ? 'LOGUEOS' : senderDisplay(m.sender)}</span>
 							</div>
 						{/if}
+
+						<!-- Text Bubble. Operator bubbles render raw (whitespace-pre)
+						     since they're literally what was typed. Assistant
+						     bubbles render through the Markdown component for
+						     code-block highlighting, inline code, lists, etc. -->
+						<div
+							class="max-w-[85%] rounded-2xl px-3.5 py-2 font-sans text-[13.5px] leading-snug tracking-[-0.005em] antialiased selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
+								{m.sender === 'operator'
+								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
+								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
+						>
+							{#if m.sender === 'operator'}
+								<span class="whitespace-pre-wrap">{m.message}</span>
+							{:else}
+								<Markdown content={m.message} />
+							{/if}
+						</div>
+
+						<!-- Time + actions footer. Copy + Regenerate on assistant
+						     replies only — operator's own bubbles already echo
+						     their input and can't be re-rolled. -->
+						<div class="flex items-center gap-2 px-1 select-none">
+							{#if m.sender !== 'operator' && m.message}
+								<button
+									type="button"
+									onclick={() => copyMessage(m)}
+									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300"
+									aria-label="Copy reply"
+									title={copiedIds.has(m.id) ? 'Copied' : 'Copy reply'}
+								>
+									{#if copiedIds.has(m.id)}
+										<Check size={10} class="text-emerald-400" />
+										<span class="text-emerald-400">Copied</span>
+									{:else}
+										<Copy size={10} />
+										<span>Copy</span>
+									{/if}
+								</button>
+								<button
+									type="button"
+									onclick={() => regenerateReply(m)}
+									disabled={sending || regeneratingIds.has(m.id)}
+									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+									aria-label="Regenerate reply"
+									title={regeneratingIds.has(m.id) ? 'Regenerating…' : 'Regenerate reply'}
+								>
+									<RefreshCw size={10} class={regeneratingIds.has(m.id) ? 'animate-spin' : ''} />
+									<span>{regeneratingIds.has(m.id) ? 'Regen…' : 'Regen'}</span>
+								</button>
+							{/if}
+							<div class="font-mono text-[9px] text-zinc-600">
+								{fmtTime(m.timestamp)}
+							</div>
+						</div>
 					</div>
-				{/if}
-				<!-- Connection status dot: green=connected, amber=reconnecting, red=disconnected.
-			     Wired to EventSource (SSE) streams. Debounced 1s to suppress transient blips. -->
-				<span
-					class="ml-auto h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-700
-					{connStatus === 'green'
-						? 'bg-status-green'
-						: connStatus === 'amber'
-							? 'animate-pulse bg-status-amber'
-							: 'bg-status-red'}"
-					title={connStatus === 'green'
-						? 'EventSource: connected'
-						: connStatus === 'amber'
-							? 'EventSource: reconnecting...'
-							: 'EventSource: disconnected'}
-					aria-label="Connection status"
-				></span>
-			</div>
-
-			<!-- Input field: attach + textarea + send in one flex row.
-		     Pulsing green border signals Talkback loop is active (§2D.4). -->
-			<div
-				class="flex items-end gap-1.5 rounded-lg transition-all duration-300
-			{talkbackActive ? 'outline outline-2 outline-offset-1 outline-status-green/40' : ''}"
-			>
-				<input
-					type="file"
-					accept="image/*"
-					multiple
-					bind:this={attachInputEl}
-					onchange={(e) => {
-						const input = e.target as HTMLInputElement;
-						const files = Array.from(input.files || []).filter((f) => f.type.startsWith('image/'));
-						if (files.length > 0) void handleImageFiles(files);
-						input.value = '';
-					}}
-					class="hidden"
-				/>
-				<button
-					type="button"
-					onclick={() => attachInputEl?.click()}
-					disabled={uploading}
-					aria-label="Attach image"
-					title="Attach image (or paste / drop one)"
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground active:scale-90 disabled:pointer-events-none disabled:opacity-40"
-				>
-					{#if uploading}
-						<Loader2 size={16} class="animate-spin" />
-					{:else}
-						<Paperclip size={16} />
-					{/if}
-				</button>
-				<!-- Image-generation toggle. When active, the next send is treated
-			     as a Gemini image prompt (gemini-2.5-flash-image). Sticky —
-			     stays on for back-to-back image work until the operator
-			     turns it off. Indicator: filled green background when ON. -->
-				<button
-					type="button"
-					onclick={() => (imageMode = !imageMode)}
-					aria-pressed={imageMode}
-					aria-label="Toggle image generation mode"
-					title={imageMode
-						? 'Image mode ON — next send generates an image via Gemini. Tap to turn off.'
-						: 'Turn on image generation. Next send becomes an image prompt (Gemini).'}
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90
-					{imageMode
-						? 'border-status-green/40 bg-status-green/15 text-status-green'
-						: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
-				>
-					<Sparkles size={16} />
-				</button>
-				<!-- Talkback (walkie-talkie) toggle. When ON: pulsing green border on
-			     the input row + LISTENING banner above feed (§2D.3 + §2D.4). -->
-				<button
-					type="button"
-					onclick={toggleTalkback}
-					aria-pressed={talkbackActive}
-					aria-label={talkbackActive ? 'Turn off Talkback' : 'Turn on Talkback mode'}
-					title={talkbackActive
-						? 'Talkback ON — tap to stop walkie-talkie loop'
-						: 'Talkback: hands-free voice loop (AssemblyAI + ElevenLabs Emma)'}
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90
-					{talkbackActive
-						? 'animate-pulse border-status-green/50 bg-status-green/15 text-status-green'
-						: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
-				>
-					<Headphones size={16} />
-				</button>
-				<textarea
-					bind:value={textDraft}
-					bind:this={textareaEl}
-					onkeypress={handleKeyPress}
-					onpaste={handlePaste}
-					ondrop={handleDrop}
-					ondragover={(e) => e.preventDefault()}
-					rows="1"
-					placeholder={uploading
-						? 'Uploading image...'
-						: talkbackActive
-							? 'Talkback active — speak your message...'
-							: imageMode
-								? 'Describe the image to generate...'
-								: 'Message your agents...'}
-					autocomplete="off"
-					autocapitalize="none"
-					spellcheck="false"
-					class="custom-scrollbar flex-1 resize-none overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 font-sans text-base text-white transition-colors placeholder:text-muted-foreground focus:border-cta/50 focus:outline-none"
-					style="min-height: 40px; max-height: 168px;"
-				></textarea>
-				<button
-					type="button"
-					onclick={handleSendMessage}
-					disabled={!textDraft.trim() || sending}
-					aria-label="Send message"
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-cta/30 bg-cta/15 text-cta transition-all duration-200 hover:bg-cta/25 active:scale-90 disabled:pointer-events-none disabled:opacity-40"
-				>
-					{#if sending}
-						<Loader2 size={16} class="animate-spin" />
-					{:else}
-						<Send size={16} />
-					{/if}
-				</button>
-				<!-- Mic button: tap to start recording, tap again to stop & transcribe. -->
-				<button
-					type="button"
-					onclick={handleMicPress}
-					disabled={transcribing}
-					aria-label={isRecording ? 'Stop recording' : 'Start voice dictation'}
-					title={isRecording ? 'Tap to stop and transcribe' : 'Voice dictation'}
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors active:scale-90 disabled:pointer-events-none disabled:opacity-40
-					{isRecording
-						? 'animate-pulse border-status-red/40 bg-status-red/15 text-status-red'
-						: 'border-border bg-transparent text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
-				>
-					{#if transcribing}
-						<Loader2 size={16} class="animate-spin" />
-					{:else}
-						<Mic size={16} />
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
-	<!-- end main chat column -->
-
-	<!-- ── Mobile full-screen thread overlay ─────────────────────────────────── -->
-	{#if mobileThreadsOpen}
-		<div class="absolute inset-0 z-50 flex flex-col bg-background md:hidden" aria-modal="true">
-			<!-- Overlay header -->
-			<div class="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-				<span class="font-sans text-sm font-bold text-foreground">Threads</span>
-				<div class="flex items-center gap-2">
-					<button
-						type="button"
-						onclick={newThread}
-						class="flex items-center gap-1 rounded border border-cta/30 px-2 py-0.5 font-sans text-xs text-cta transition-colors hover:bg-cta/10"
-					>
-						<Plus size={10} />
-						New
-					</button>
-					<button
-						type="button"
-						onclick={() => (mobileThreadsOpen = false)}
-						class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-						aria-label="Close threads"
-					>
-						<X size={16} />
-					</button>
-				</div>
-			</div>
-			<!-- Overlay thread list -->
-			<div class="custom-scrollbar flex flex-1 flex-col overflow-y-auto">
-				{#each threadMetasActive as meta (meta.thread_id)}
-					{@render threadListItem(meta, false)}
 				{/each}
-				{#if threadMetasActive.length === 0}
-					<div class="px-3 py-6 text-center font-sans text-xs text-muted-foreground">
-						No threads yet. Start chatting to create one.
+
+				<!-- Thinking indicator — renders an AGY-style bubble with three
+				     staggered bouncing dots while we're waiting on a reply.
+				     Conditions: a send is in flight AND the most recent message
+				     in the feed is from the operator (i.e. we're between their
+				     send and the LLM's response landing). -->
+				{#if sending && messages.length > 0 && messages[messages.length - 1].sender === 'operator'}
+					<div class="flex flex-col items-start gap-1">
+						<div
+							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
+						>
+							<Sparkles size={10} class="shrink-0 text-cyan-400" />
+							<span>AGY</span>
+						</div>
+						<div
+							class="flex items-center gap-1.5 rounded-2xl border border-zinc-900 bg-zinc-950/40 px-4 py-3.5"
+							aria-label="Assistant is thinking"
+							role="status"
+						>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 0ms"
+							></span>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 150ms"
+							></span>
+							<span
+								class="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400/70"
+								style="animation-delay: 300ms"
+							></span>
+						</div>
 					</div>
-				{/if}
-				{#if threadMetasArchived.length > 0}
-					<button
-						type="button"
-						onclick={() => (showArchivedThreads = !showArchivedThreads)}
-						class="flex w-full items-center gap-1.5 border-t border-border px-3 py-2 font-mono text-[10px] tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-muted-foreground"
-					>
-						<span>{showArchivedThreads ? '▾' : '▸'}</span>
-						<span>Archived ({threadMetasArchived.length})</span>
-					</button>
-					{#if showArchivedThreads}
-						{#each threadMetasArchived as meta (meta.thread_id)}
-							{@render threadListItem(meta, true)}
-						{/each}
-					{/if}
-				{/if}
-			</div>
-		</div>
-	{/if}
-</div>
-
-{#snippet threadListItem(meta: ThreadMetaFull, isArchivedSection: boolean)}
-	<div
-		class="group relative flex items-center gap-2 px-3 py-2 transition-colors hover:bg-surface/50
-			{meta.thread_id === activeThread
-			? 'border-l-2 border-cta bg-surface/60'
-			: 'border-l-2 border-transparent'}
-			{meta.pinned ? 'bg-cta/5' : ''}"
-	>
-		<!-- Pin indicator -->
-		{#if meta.pinned}
-			<span class="shrink-0 text-[9px] text-cta/70" aria-label="Pinned" title="Pinned">📌</span>
-		{/if}
-
-		<!-- Thread title / inline rename -->
-		<button
-			type="button"
-			onclick={() => {
-				void switchThread(meta.thread_id);
-				mobileThreadsOpen = false;
-			}}
-			class="min-w-0 flex-1 text-left"
-		>
-			{#if renamingThreadId === meta.thread_id}
-				<!-- Inline rename — click elsewhere or press Enter/Escape to commit -->
-				<!-- svelte-ignore a11y_autofocus -->
-				<input
-					type="text"
-					bind:value={renameValue}
-					autofocus
-					onkeydown={(e) => {
-						if (e.key === 'Enter') void commitRename(meta.thread_id);
-						if (e.key === 'Escape') renamingThreadId = null;
-					}}
-					onblur={() => void commitRename(meta.thread_id)}
-					onclick={(e) => e.stopPropagation()}
-					class="w-full rounded border border-cta/40 bg-surface px-1.5 py-0.5 font-sans text-xs text-foreground focus:ring-1 focus:ring-cta/30 focus:outline-none"
-				/>
-			{:else}
-				<span class="block truncate font-sans text-xs text-foreground">
-					{meta.title}
-				</span>
-				{#if meta.latest_ts}
-					<span class="block font-mono text-[9px] text-muted-foreground/60">
-						{formatShortTime(meta.latest_ts)}
-					</span>
 				{/if}
 			{/if}
-		</button>
+			<div bind:this={scrollSentinel} class="h-px shrink-0" aria-hidden="true"></div>
+		</div>
 
-		<!-- Active worker dot -->
-		{#if meta.thread_id === activeThread && dispatching}
-			<span
-				class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-cta"
-				aria-label="Worker active"
-				title="Worker in flight"
-			></span>
-		{/if}
-
-		<!-- Kebab menu button -->
-		<div class="relative shrink-0">
+		{#if unseenCount > 0 && !userAtBottom}
 			<button
 				type="button"
-				onclick={(e) => {
-					e.stopPropagation();
-					kebabOpenThreadId = kebabOpenThreadId === meta.thread_id ? null : meta.thread_id;
+				onclick={() => {
+					userAtBottom = true;
+					unseenCount = 0;
+					scrollSentinel?.scrollIntoView({ behavior: 'smooth' });
 				}}
-				class="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface hover:text-muted-foreground"
-				aria-label="Thread actions"
-				aria-haspopup="true"
-				aria-expanded={kebabOpenThreadId === meta.thread_id}
+				class="absolute right-1/2 bottom-24 z-20 flex translate-x-1/2 items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3.5 py-1.5 font-mono text-[11px] text-cyan-300 backdrop-blur-md transition-all select-none hover:scale-105 active:scale-95"
+				style="box-shadow: 0 0 16px rgba(34, 211, 238, 0.2);"
 			>
-				<MoreHorizontal size={12} />
+				{unseenCount} new messages ↓
 			</button>
+		{/if}
 
-			{#if kebabOpenThreadId === meta.thread_id}
-				<!-- Dismiss backdrop -->
-				<button
-					type="button"
-					class="fixed inset-0 z-40"
-					onclick={() => (kebabOpenThreadId = null)}
-					aria-label="Close menu"
-					tabindex="-1"
-				></button>
-				<!-- Kebab dropdown -->
-				<div
-					class="absolute top-full right-0 z-50 mt-1 min-w-[160px] rounded-md border border-border bg-background/95 py-1 shadow-lg backdrop-blur-md"
-				>
-					<button
-						type="button"
-						onclick={() => pinThread(meta.thread_id, !meta.pinned)}
-						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+		<!-- ═════════════════════════════════════════════════════════════════
+		     HERO COMPOSER PILL
+		     ═════════════════════════════════════════════════════════════════ -->
+		<div class="relative z-10 shrink-0 px-4 pt-2 pb-4 select-none">
+			<!-- Outer border shifting glow container -->
+			<div
+				class="relative flex flex-col gap-2 rounded-3xl border p-2 transition-all duration-300
+					{composerMode === 'recording'
+					? 'border-amber-500/40 bg-amber-500/[0.04] shadow-[0_0_30px_rgba(245,158,11,0.15)]'
+					: composerMode === 'talkback'
+						? 'border-emerald-500/40 bg-emerald-500/[0.04] shadow-[0_0_30px_rgba(16,185,129,0.15)]'
+						: imageMode
+							? 'border-cyan-500/40 bg-cyan-500/[0.04] shadow-[0_0_30px_rgba(6,182,212,0.15)]'
+							: sending
+								? 'animate-pulse border-purple-500/40 bg-purple-500/[0.04] shadow-[0_0_30px_rgba(168,85,247,0.15)]'
+								: 'border-zinc-800/80 bg-zinc-950/80 shadow-[0_0_24px_rgba(168,85,247,0.06)] focus-within:border-zinc-600/80 hover:border-zinc-700/80'}"
+			>
+				<!-- Dictation / Talkback Status indicators inside composer -->
+				{#if composerMode === 'recording' || composerMode === 'talkback'}
+					<div
+						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] select-none"
 					>
-						<Pin size={11} />
-						{meta.pinned ? 'Unpin' : 'Pin'}
-					</button>
-					<button
-						type="button"
-						onclick={() => startRename(meta.thread_id, meta.title)}
-						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
-					>
-						<Edit3 size={11} />
-						Rename
-					</button>
-					{#if !isArchivedSection}
+						<div class="flex items-center gap-1.5">
+							<span
+								class="h-2 w-2 animate-ping rounded-full
+								{composerMode === 'recording' ? 'bg-amber-400' : 'bg-emerald-400'}"
+							></span>
+							<span
+								class={composerMode === 'recording'
+									? 'text-amber-400'
+									: 'font-semibold text-emerald-400'}
+							>
+								{composerMode === 'recording'
+									? '🔴 Voice Dictation Hot'
+									: '🔊 Walkie-Talkie Engaged'}
+							</span>
+							{#if composerMode === 'talkback' && talkbackPhase}
+								<span class="rounded border border-zinc-800 bg-black/40 px-1 text-zinc-500">
+									{TALKBACK_PHASE_LABELS[talkbackPhase]}
+								</span>
+							{/if}
+						</div>
 						<button
 							type="button"
-							onclick={() => archiveThread(meta.thread_id, true)}
-							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+							onclick={composerMode === 'recording' ? toggleRecord : () => stopTalkback()}
+							class="rounded-full border border-red-500/30 bg-red-950/20 px-2 py-0.5 text-[9px] tracking-wider text-red-400 uppercase transition-all hover:bg-red-900/30"
 						>
-							<Archive size={11} />
-							Archive
+							Disconnect
 						</button>
-					{:else}
+					</div>
+				{:else if imageMode}
+					<div
+						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] text-cyan-400 select-none"
+					>
+						<div class="flex items-center gap-1.5">
+							<Sparkles size={11} class="shrink-0 text-cyan-400" />
+							<span>✨ Prompt will route to Image Generation</span>
+						</div>
 						<button
 							type="button"
-							onclick={() => archiveThread(meta.thread_id, false)}
-							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
+							onclick={() => (imageMode = false)}
+							class="rounded-full border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[9px] tracking-wider text-zinc-400 uppercase transition-all hover:text-white"
 						>
-							<Archive size={11} />
-							Restore
+							Cancel
 						</button>
+					</div>
+				{/if}
+
+				<!-- Slash-command autocomplete. Appears when the draft starts with
+				     `/` and matches at least one known command. Submit/Send
+				     intercepts the literal text and runs the command handler. -->
+				{#if slashMode}
+					<div
+						class="mb-1 flex flex-col gap-1 rounded-2xl border border-cyan-500/20 bg-[#0a1416] p-1.5"
+						role="listbox"
+						aria-label="Slash commands"
+					>
+						{#each slashMatches as cmd (cmd.key)}
+							<button
+								type="button"
+								onclick={() => pickSlash(cmd)}
+								class="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-cyan-500/10"
+								role="option"
+								aria-selected="false"
+							>
+								<span class="flex flex-col leading-tight">
+									<span class="font-mono text-xs text-cyan-300">{cmd.usage}</span>
+									<span class="text-[10px] text-zinc-400">{cmd.description}</span>
+								</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Staged attachments — appear as removable chips with a thumbnail
+				     preview, above the text input row. On send, each chip's
+				     markdown link is folded into the outgoing message body. -->
+				{#if attachments.length > 0}
+					<div class="flex flex-wrap gap-2 border-b border-white/5 px-1 pb-2">
+						{#each attachments as att (att.id)}
+							<div
+								class="group relative flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 py-1 pr-1 pl-2 text-xs text-zinc-200 shadow-sm"
+							>
+								<div class="relative h-8 w-8 shrink-0">
+									{#if att.mime?.startsWith('image/') && att.url}
+										<img
+											src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
+											alt={att.filename}
+											class="h-full w-full rounded-md object-cover"
+										/>
+									{:else}
+										<div
+											class="flex h-full w-full items-center justify-center rounded-md bg-zinc-800 text-zinc-500"
+										>
+											<Paperclip size={14} />
+										</div>
+									{/if}
+									{#if att.uploading}
+										<div class="absolute inset-0 flex items-center justify-center rounded-md bg-zinc-950/60 backdrop-blur-sm">
+											<Loader2 class="animate-spin text-white" size={14} />
+										</div>
+									{/if}
+								</div>
+								<div class="flex flex-col leading-tight">
+									<span class="max-w-[160px] truncate font-medium text-zinc-200"
+										>{att.filename}</span
+									>
+									<span class="font-mono text-[10px] text-zinc-500">{humanSize(att.size)}</span>
+								</div>
+								<button
+									type="button"
+									onclick={() => removeAttachment(att.id)}
+									class="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
+									aria-label="Remove attachment"
+									title="Remove"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Text input area + icons. items-end so buttons sit at the bottom
+				     as the textarea grows; min-h on the wrapper preserves the
+				     hero-pill height even when the textarea collapses to 1 row. -->
+				<div class="flex flex-col gap-2">
+					<!-- Row 1: Textarea only (full width) -->
+					<div class="w-full">
+						<textarea
+							bind:this={textareaEl}
+							bind:value={textDraft}
+							onkeypress={handleKey}
+							onpaste={handlePaste}
+							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
+							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
+							rows="2"
+							placeholder={composerMode === 'recording'
+								? 'Listening dictation… press stop when done.'
+								: composerMode === 'talkback'
+									? 'Continuously monitoring stream… hands free.'
+									: imageMode
+										? 'Describe the image you want to generate…'
+										: 'Ask or command loops…'}
+							autocomplete="off"
+							autocapitalize="sentences"
+							spellcheck="false"
+							disabled={composerMode === 'recording' || composerMode === 'talkback'}
+							class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
+							style="min-height: 80px; max-height: 480px;"
+						></textarea>
+					</div>
+
+					<!-- Row 2: Utility buttons left, Send button right -->
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-1.5">
+							<!-- Attach File -->
+							<button
+								type="button"
+								onclick={triggerUpload}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
+								aria-label="Attach File"
+								title="Attach image"
+							>
+								<Paperclip size={15} />
+							</button>
+
+							<!-- Sparkles Image Toggle -->
+							<button
+								type="button"
+								onclick={() => (imageMode = !imageMode)}
+								disabled={composerMode === 'recording' || composerMode === 'talkback'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{imageMode
+									? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label="Toggle Image Gen Mode"
+								title="Image Generation Mode"
+							>
+								<Sparkles size={15} />
+							</button>
+
+							<!-- Voice Dictation Mic -->
+							<button
+								type="button"
+								onclick={toggleRecord}
+								disabled={composerMode === 'talkback'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{composerMode === 'recording'
+									? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
+								title={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
+							>
+								{#if composerMode === 'recording'}
+									<Square size={14} />
+								{:else}
+									<Mic size={15} />
+								{/if}
+							</button>
+
+							<!-- Talkback Continuous -->
+							<button
+								type="button"
+								onclick={toggleTalkback}
+								disabled={composerMode === 'recording'}
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+									{composerMode === 'talkback'
+									? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
+								aria-label="Hands-free continuous Talkback"
+								title="Hands-free continuous Talkback"
+							>
+								{#if composerMode === 'talkback'}
+									<Square size={14} />
+								{:else}
+									<Headphones size={15} />
+								{/if}
+							</button>
+						</div>
+
+						<!-- Send Button -->
 						<button
 							type="button"
-							onclick={() => deleteThreadConfirmed(meta.thread_id)}
-							class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-status-red transition-colors hover:bg-status-red/10"
+							onclick={sendMessage}
+							disabled={(!textDraft.trim() && !imageMode && attachments.length === 0) ||
+								sending ||
+								composerMode === 'recording' ||
+								composerMode === 'talkback' ||
+								attachments.some((a) => a.uploading)}
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
+							aria-label="Send Message"
+							title="Send (Enter)"
+							style={textDraft.trim() && !sending && composerMode === 'idle'
+								? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
+								: ''}
 						>
-							<Trash2 size={11} />
-							Delete
+							<Send size={14} />
 						</button>
-					{/if}
-					<div class="my-1 h-px bg-border"></div>
-					<button
-						type="button"
-						onclick={() => generateSummary(meta.thread_id)}
-						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs text-foreground transition-colors hover:bg-surface"
-					>
-						<FileText size={11} />
-						Summary
-					</button>
-					<button
-						type="button"
-						onclick={() => toggleRemember(meta.thread_id, meta.remember_flag)}
-						class="flex w-full items-center gap-2 px-3 py-1.5 font-sans text-xs transition-colors hover:bg-surface
-							{meta.remember_flag ? 'text-cta' : 'text-foreground'}"
-					>
-						<Brain size={11} />
-						{meta.remember_flag ? 'Remembering ✓' : 'Remember this'}
-					</button>
+					</div>
 				</div>
-			{/if}
+			</div>
 		</div>
-	</div>
-{/snippet}
+	</main>
+</div>
 
 <style>
-	.custom-scrollbar::-webkit-scrollbar {
-		width: 4px;
-		height: 4px;
-	}
-	.custom-scrollbar::-webkit-scrollbar-track {
-		background: transparent;
-	}
-	.custom-scrollbar::-webkit-scrollbar-thumb {
-		background: #30363d;
-		border-radius: 10px;
-	}
-	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-		background: #484f58;
-	}
-
-	.animate-fade-in {
-		animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-	}
-
-	/* Visual thread grouping: subtle left-border on any message that's part
-	   of a dispatch thread (has a trace_id). Connects the system "dispatched"
-	   row, the activity ticker, the streaming bubble, and the final worker
-	   reply into one visually-connected group without nesting them in a DOM
-	   wrapper. CSS-only — zero JS cost. */
-	.thread-grouped {
-		border-left: 2px solid rgb(255 255 255 / 0.06);
-		padding-left: 0.5rem;
-		margin-left: 0.25rem;
-	}
-
-	@keyframes fadeIn {
+	@keyframes fade-in {
 		from {
 			opacity: 0;
-			transform: translateY(4px);
+			transform: translateY(-4px);
 		}
 		to {
 			opacity: 1;

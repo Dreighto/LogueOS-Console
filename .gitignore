@@ -15,6 +15,32 @@ test-results/
 # server saves output and no --output-dir is set. Per-run, never shared.
 .playwright-mcp/
 
+# Per-worker debug artifacts at repo root — left behind by prior debug
+# sessions (CC + AGY). Never committed. If you see one of these patterns
+# you need to keep, MOVE IT to a real location first (docs/, scripts/, etc.)
+# instead of relaxing this ignore.
+/test_*.ts
+/test_*.js
+/test_dir.js
+/fix_*.js
+/rewrite_*.js
+/verify_*.js
+/verify_*.png
+/fake.png
+/find_brace.py
+/svelte_lines.txt
+/logo_preview.md
+
+# Orchestrator session-state — created by the dispatch listener / loop
+# tools when running this repo as a worktree client. Belongs to the
+# Orchestrator, not the Console.
+/.logueos/
+
+# Stray Windows-path quoted-literal file from the 2026-05-25 Linux migration.
+# A `cp` somewhere on Windows wrote a literal `D:\dev\...` filename into the
+# repo root. Cannot be removed via git rm (filename contains \ on Linux fs).
+"D:\\dev\\LogueOS-Orchestrator\\data\\logueos_memory.db"
+
 # OS
 .DS_Store
 Thumbs.db

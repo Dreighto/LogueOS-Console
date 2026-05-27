@@ -1,4 +1,4 @@
-// Regression suite for the chat-v2-agy surface (the flagship operator chat).
+// Regression suite for the chat surface (the flagship operator chat).
 //
 // Becomes the hard merge gate for every chat-touching PR after this lands.
 // The previous Phase-5 rebuild shipped operator-visible regressions because
@@ -15,7 +15,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 
 const BASE = 'http://127.0.0.1:18767/console/';
-const ROUTE = 'chat-v2-agy/';
+const ROUTE = 'chat/';
 
 // ─────────────────────────────────────────────────────────────────────
 // Network fixtures — match the API surface the page actually hits.
@@ -80,7 +80,7 @@ async function mockChatApis(page: Page) {
 
 test.use({ baseURL: BASE });
 
-test.describe('chat-v2-agy — page load', () => {
+test.describe('chat — page load', () => {
 	test('renders composer + header chrome', async ({ page }) => {
 		await mockChatApis(page);
 		await page.goto(ROUTE);
@@ -124,7 +124,7 @@ test.describe('chat-v2-agy — page load', () => {
 	});
 });
 
-test.describe('chat-v2-agy — sidebar', () => {
+test.describe('chat — sidebar', () => {
 	// Mobile viewport — the aside is a translate-x drawer on mobile; its
 	// bounding box.x is negative when closed, 0 when open. Desktop's `lg:` rules
 	// switch to width/opacity transitions whose timing is harder to assert.
@@ -146,7 +146,7 @@ test.describe('chat-v2-agy — sidebar', () => {
 	});
 });
 
-test.describe('chat-v2-agy — composer', () => {
+test.describe('chat — composer', () => {
 	test('typing enables Send and persists a draft (PUT /api/chat/drafts fires)', async ({
 		page
 	}) => {
@@ -221,7 +221,7 @@ test.describe('chat-v2-agy — composer', () => {
 	});
 });
 
-test.describe('chat-v2-agy — pickers', () => {
+test.describe('chat — pickers', () => {
 	test('Model picker opens and lists all 8 choices (Auto + 6 cloud + 1 local)', async ({
 		page
 	}) => {
