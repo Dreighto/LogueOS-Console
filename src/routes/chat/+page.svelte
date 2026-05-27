@@ -198,9 +198,23 @@
 	// Pending attachments — uploads stage here as removable chips above the
 	// composer rather than getting injected as markdown into the textarea.
 	// On send, each attachment's markdown link is appended to the outgoing
-	// message body so the server-side rendering stays unchanged.
-	type Attachment = { id: string; filename: string; url: string; mime: string; size: number; uploading?: boolean };
+	// message body so the server-side rendering stays unchanged. A `text`
+	// field on an Attachment marks it as a paste-to-attachment chip — the
+	// content lives in memory, no upload, folded into the message body as
+	// a fenced code block on send. See [[reference_chat_app_competitive_borrows]]
+	// for the ChatGPT-borrow rationale (long pastes auto-convert to keep
+	// composer clean + prevent context-window blowout).
+	type Attachment = {
+		id: string;
+		filename: string;
+		url: string;
+		mime: string;
+		size: number;
+		uploading?: boolean;
+		text?: string;
+	};
 	let attachments = $state<Attachment[]>([]);
+	const PASTE_TO_ATTACHMENT_THRESHOLD = 5000;
 
 	// Scroll state
 	let userAtBottom = $state(true);
@@ -491,7 +505,13 @@
 		// image links. The server is unchanged — the message field is a string;
 		// the chat renderer already handles ![alt](url) markdown. Chips just
 		// stage them visually until send.
-		const attachmentMd = attachments.map((a) => `![${a.filename}](${a.url})`).join('\n');
+		const attachmentMd = attachments
+			.map((a) =>
+				a.text
+					? `\n\`\`\`\n${a.text}\n\`\`\`\n`
+					: `![${a.filename}](${a.url})`
+			)
+			.join('\n');
 		const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
 
 		const optimistic: ChatMessage = {
@@ -544,10 +564,38 @@
 			.filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
 			.map((it) => it.getAsFile())
 			.filter((f): f is File => f !== null);
-		if (imageFiles.length === 0) return; // let default paste happen
-		e.preventDefault();
-		for (const f of imageFiles) {
-			void uploadOneFile(f);
+		if (imageFiles.length > 0) {
+			e.preventDefault();
+			for (const f of imageFiles) {
+				void uploadOneFile(f);
+			}
+			return;
+		}
+		// Long-paste auto-attach (ChatGPT-borrow #19): pastes over the
+		// threshold get converted to an attachment chip rather than dumped
+		// into the textarea. Keeps the composer clean and prevents huge
+		// context-window blowout when pasting logs / docs / JSON. The text
+		// is folded back into the message body as a fenced code block on send.
+		const pastedText = e.clipboardData?.getData('text/plain') ?? '';
+		if (pastedText.length > PASTE_TO_ATTACHMENT_THRESHOLD) {
+			e.preventDefault();
+			const id =
+				typeof crypto !== 'undefined' && 'randomUUID' in crypto
+					? crypto.randomUUID()
+					: `paste-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+			const ts = new Date().toISOString().slice(11, 19);
+			attachments = [
+				...attachments,
+				{
+					id,
+					filename: `paste-${ts}.txt`,
+					url: '',
+					mime: 'text/plain',
+					size: pastedText.length,
+					text: pastedText
+				}
+			];
+			toasts.add(`Pasted ${pastedText.length.toLocaleString()} chars as attachment`, 'info');
 		}
 	}
 
