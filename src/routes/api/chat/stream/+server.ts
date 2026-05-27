@@ -1,26 +1,45 @@
-// Streaming chat endpoint — Server-Sent Events transport for the
-// conversational chat path. Mirrors the routeChat branch of /api/chat but
-// emits tokens as they arrive from the LLM provider so the UI can render
-// the reply live instead of waiting on a full block.
-//
-// Body shape matches /api/chat (`message`, `thread`, optionally `agent`).
-// Reserved for the conversational case — dispatch, image, hermes, workflow
-// still POST /api/chat as before.
-//
-// SSE event format:
-//   data: {"type":"token","text":"..."}\n\n     → append to current reply
-//   data: {"type":"done","provider":"gemini",
-//          "model":"gemini-2.5-flash-lite","trace_id":"..."}\n\n
-//   data: {"type":"error","message":"..."}\n\n  → terminal failure
-
 import type { RequestHandler } from './$types';
 import { addChatMessage, getChatMessages } from '$lib/server/chat';
 import { classifyTier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
-import { routeChatStream } from '$lib/server/llm_router';
-import type { RouterMessage } from '$lib/server/llm_router';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
-import { buildMultimodalContent } from '$lib/server/multimodal';
+
+import { streamText, convertToModelMessages } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+
+const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const TIER_MODELS: Record<string, Partial<Record<string, string>>> = {
+	chat: {
+		anthropic: 'claude-3-5-haiku-latest', // mapping internal to SDK
+		gemini: 'gemini-2.5-flash-lite',
+		openai: 'gpt-4o-mini',
+	},
+	planning: {
+		anthropic: 'claude-3-7-sonnet-latest',
+		gemini: 'gemini-2.5-flash',
+		openai: 'gpt-4o',
+	},
+	deep: {
+		anthropic: 'claude-3-opus-latest',
+		gemini: 'gemini-2.5-pro',
+		openai: 'gpt-4o',
+	}
+};
+
+function resolveModel(tier: string, providerPref: string) {
+	const modelId = TIER_MODELS[tier]?.[providerPref] || TIER_MODELS['chat'][providerPref];
+	if (!modelId) {
+		return google('gemini-2.5-flash-lite'); // fallback
+	}
+	if (providerPref === 'anthropic') return anthropic(modelId);
+	if (providerPref === 'openai') return openai(modelId);
+	return google(modelId);
+}
 
 function buildSystemPrompt(ctx: {
 	targetRepo: string;
@@ -48,27 +67,31 @@ Rules:
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	// Propagate client disconnect down to the upstream LLM call so we don't
-	// hold the node process open after the operator navigates away. Without
-	// this, an in-flight SSE connection blocks the systemd service from
-	// SIGTERMing cleanly during deploy/restart cycles (90s+ shutdown).
-	const upstreamAbort = new AbortController();
-	request.signal.addEventListener('abort', () => upstreamAbort.abort());
-
 	const body = await request.json().catch(() => ({}));
-	const { sender, message } = body as { sender?: string; message?: string };
-	const threadId: string =
-		(body && typeof body.thread === 'string' ? body.thread.trim() : '') || 'default';
+	const { id, messages } = body as { id?: string; messages?: any[] };
+	const threadId = (id || 'default').trim();
 
-	if (!message || !message.trim()) {
-		return new Response(JSON.stringify({ error: 'Message content is required.' }), {
+	if (!messages || messages.length === 0) {
+		return new Response(JSON.stringify({ error: 'Messages array is required.' }), {
 			status: 400,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
-	// Persist the operator's message immediately so subsequent polls see it.
-	addChatMessage(sender || 'operator', message.trim(), null, null, null, 'sent', threadId);
+	// The SDK messages array comes directly from the client.
+	// We need to persist the operator's message immediately.
+	const userMessage = messages[messages.length - 1];
+	
+	// We need to handle attachments in the operator's message if any.
+	// Vercel AI SDK puts them in experimental_attachments or just inline.
+	// The prompt states: "Vision support: the SDK natively handles ContentPart for images.
+	// But instead of building our own ContentPart type, use the SDK's experimental_attachments field on the message OR include image parts in the content array per the SDK's UIMessage schema."
+	
+	// We just persist the text part to DB for now.
+	const userText = typeof userMessage.content === 'string' ? userMessage.content : 
+		(userMessage.content.find((p: any) => p.type === 'text')?.text || '');
+
+	addChatMessage('operator', userText.trim(), null, null, null, 'sent', threadId);
 	upsertThreadMeta(threadId, {});
 	touchLastActivity(threadId);
 
@@ -76,109 +99,48 @@ export const POST: RequestHandler = async ({ request }) => {
 	const allForClassify = getChatMessages(30, threadId);
 	const recentForClassify = allForClassify.slice(0, -1);
 	const currentTier = classifyTier({
-		userMessage: message.trim(),
+		userMessage: userText.trim(),
 		recentMessages: recentForClassify,
 		currentTier: threadState.current_tier,
 		operatorOverride: threadState.operator_override
 	});
 	upsertThreadTier(threadId, currentTier, null);
 
-	// Repo selection — same heuristic as /api/chat (text-keyword scan).
-	const text = message.toLowerCase();
+	const textLower = userText.toLowerCase();
 	let targetRepo = 'LogueOS-Console';
-	if (text.includes('miru')) targetRepo = 'project-miru';
+	if (textLower.includes('miru')) targetRepo = 'project-miru';
 	else if (
-		text.includes('orchestrator') ||
-		text.includes('kernel') ||
-		text.includes('logueos-orchestrator')
+		textLower.includes('orchestrator') ||
+		textLower.includes('kernel') ||
+		textLower.includes('logueos-orchestrator')
 	)
 		targetRepo = 'LogueOS-Orchestrator';
-	else if (text.includes('nasdoom')) targetRepo = 'NASDOOM';
+	else if (textLower.includes('nasdoom')) targetRepo = 'NASDOOM';
 
-	// Assemble router messages from the thread history, capped at 20.
-	const allHistory = getChatMessages(30, threadId);
-	let lastResetIdx = -1;
-	for (let i = allHistory.length - 1; i >= 0; i--) {
-		if (
-			allHistory[i].sender === 'system' &&
-			allHistory[i].message.startsWith('--- NEW CONVERSATION ---')
-		) {
-			lastResetIdx = i;
-			break;
-		}
-	}
-	const slice = (lastResetIdx >= 0 ? allHistory.slice(lastResetIdx + 1) : allHistory).slice(0, -1);
-	const routerMessages: RouterMessage[] = slice
-		.filter((r) => r.sender !== 'system')
-		.map((r) => ({
-			role: (r.sender === 'operator' ? 'user' : 'assistant') as 'user' | 'assistant',
-			content: r.message
-		}));
-	const lastContent = await buildMultimodalContent(message.trim());
-	routerMessages.push({ role: 'user', content: lastContent });
+	const providerPref =
+		threadState.provider_override === 'anthropic' ||
+		threadState.provider_override === 'gemini' ||
+		threadState.provider_override === 'openai'
+			? threadState.provider_override
+			: 'gemini';
 
-	// Cap at last 20
-	if (routerMessages.length > 20) {
-		routerMessages.splice(0, routerMessages.length - 20);
-	}
+	const selectedModel = resolveModel(currentTier, providerPref);
 
-	const encoder = new TextEncoder();
-	const stream = new ReadableStream<Uint8Array>({
-		async start(controller) {
-			const send = (obj: object) => {
-				controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-			};
-			try {
-				// Provider preference order:
-				//   1. Operator's persisted provider_override (if set via the
-				//      model picker) — pin to that provider.
-				//   2. Default to 'gemini' (AGY chat lock) since this endpoint
-				//      serves the conversational path AGY is responsible for.
-				const providerPref =
-					threadState.provider_override === 'anthropic' ||
-					threadState.provider_override === 'gemini'
-						? threadState.provider_override
-						: 'gemini';
-				for await (const evt of routeChatStream(
-					currentTier,
-					routerMessages,
-					providerPref,
-					upstreamAbort.signal,
-					buildSystemPrompt({ targetRepo, currentTier, threadId })
-				)) {
-					if (evt.type === 'token') {
-						send({ type: 'token', text: evt.text });
-					} else {
-						// Persist the assembled reply to DB so subsequent polls and
-						// other clients see it.
-						addChatMessage('agy', evt.reply, null, null, null, 'sent', threadId);
-						upsertThreadTier(threadId, currentTier, evt.model_used);
-						send({
-							type: 'done',
-							provider_used: evt.provider_used,
-							model_used: evt.model_used,
-							tokens_used: evt.tokens_used,
-							fell_forward: evt.fell_forward
-						});
-					}
-				}
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : 'unknown error';
-				console.error('[/api/chat/stream] error:', err);
-				send({ type: 'error', message: msg.slice(0, 300) });
-			} finally {
-				controller.close();
-			}
+	const result = streamText({
+		model: selectedModel,
+		system: buildSystemPrompt({ targetRepo, currentTier, threadId }),
+		messages: convertToModelMessages(messages),
+		onFinish: async ({ response }) => {
+			// Persist assistant message with the SDK-generated ID
+			const assistantContent = response.messages.find(m => m.role === 'assistant')?.content;
+			const replyText = typeof assistantContent === 'string' ? assistantContent : 
+				(Array.isArray(assistantContent) ? assistantContent.find((p: any) => p.type === 'text')?.text || '' : '');
+			
+			addChatMessage('agy', replyText, null, null, null, 'sent', threadId);
+			upsertThreadTier(threadId, currentTier, selectedModel.modelId);
 		}
 	});
 
-	return new Response(stream, {
-		status: 200,
-		headers: {
-			'Content-Type': 'text/event-stream',
-			'Cache-Control': 'no-cache, no-transform',
-			Connection: 'keep-alive',
-			'X-Accel-Buffering': 'no'
-		}
-	});
+	result.consumeStream(); // ← KEY: keeps draining into DB even if client disconnects
+	return result.toDataStreamResponse();
 };

@@ -39,6 +39,8 @@
 		Loader2
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
+	import { Chat } from '@ai-sdk/svelte';
+	import { untrack } from 'svelte';
 	import Markdown from '$lib/components/Markdown.svelte';
 
 	let { data } = $props();
@@ -55,16 +57,32 @@
 		image_path?: string | null;
 	};
 
-	let messages = $state<ChatMessage[]>(data.messages || []);
 	let activeThread = $state(data.activeThread || 'default');
 	let workspaces = $state(data.workspaces || []);
 	let threads = $state(data.threads || []);
 
 	let textDraft = $state('');
+
+	const chatClient = $derived(new Chat({
+		id: data.thread?.id || data.activeThread,
+		messages: data.messages || [],
+		sendExtraMessageFields: true,
+		api: '/console/api/chat/stream',
+		generateId: () => crypto.randomUUID(),
+		onError: (e) => toasts.add(e.message, 'error')
+	}));
+	
+	let chatMessages = $derived(chatClient.messages);
+	let chatStatus = $derived(chatClient.status);
+	let chatInput = $state('');
+	let copiedIds = $state(new Set<string>());
+	let regeneratingIds = $state(new Set<string>());
+	let loading = $derived(chatStatus === 'streaming' || chatStatus === 'submitted');
+
 	let selectedRepo = $state('LogueOS-Console');
 	let currentTier = $state<Tier>('chat');
 	let lastModelUsed = $state('');
-	let sending = $state(false);
+	
 
 	let showModelOverrideModal = $state(false);
 	let sidebarOpen = $state(false);
@@ -301,14 +319,14 @@
 			const b = await r.json();
 			const newMessages: ChatMessage[] = b.messages || [];
 			if (
-				newMessages.length !== messages.length ||
-				JSON.stringify(newMessages) !== JSON.stringify(messages)
+				newMessages.length !== chatMessages.length ||
+					JSON.stringify(newMessages) !== JSON.stringify(chatMessages)
 			) {
 				if (!userAtBottom) {
-					const added = newMessages.length - messages.length;
+					const added = newMessages.length - chatMessages.length;
 					if (added > 0) unseenCount += added;
 				}
-				messages = newMessages;
+				// // messages = newMessages;
 				if (userAtBottom) {
 					queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
 				}
@@ -372,59 +390,43 @@
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
-	// Send text message
+	// Send text message (Vercel AI SDK)
 	// ─────────────────────────────────────────────────────────────────────
-	async function sendMessage() {
-		// Slash command takes precedence — if the draft is /<known-command>
-		// we run it locally instead of dispatching to /api/chat.
-		if (await runSlashFromDraft()) return;
-
-		const text = textDraft.trim();
-		// Allow sending an attachment-only message (no text body), but require
-		// at least one of the two so we don't post empty rows.
-		if (!text && attachments.length === 0) return;
-		if (sending) return;
+	async function submitForm(e) {
+		if (e) e.preventDefault();
+		if (loading) return;
 		if (attachments.some(a => a.uploading)) {
 			toasts.add('Wait for image upload to finish', 'info');
 			return;
 		}
+		
 		unlockAudio();
-		sending = true;
-
 		const isGenImage = imageMode;
-		imageMode = false; // toggle off image mode immediately on send
-
-		// Fold staged attachments into the outgoing message body as markdown
-		// image links. The server is unchanged — the message field is a string;
-		// the chat renderer already handles ![alt](url) markdown. Chips just
-		// stage them visually until send.
-		const attachmentMd = attachments.map((a) => `![${a.filename}](${a.url})`).join('\n');
-		const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
-
-		const optimistic: ChatMessage = {
-			id: Date.now(),
-			sender: 'operator',
-			message: messageBody,
-			timestamp: new Date().toISOString()
-		};
-		messages = [...messages, optimistic];
+		imageMode = false;
+		
+		const expAttachments = attachments.map(a => ({
+			url: a.url,
+			contentType: a.mime,
+			name: a.filename
+		}));
+		
+		chatClient.input = textDraft.trim();
 		textDraft = '';
 		attachments = [];
-		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
-
-		// Routing decision (mirrors /api/chat server logic): if the message
-		// looks like an explicit worker dispatch or it's an image-gen request,
-		// use the non-streaming /api/chat endpoint. Otherwise stream tokens
-		// via /api/chat/stream so the reply renders live.
-		const lower = messageBody.toLowerCase();
+		
+		const lower = chatInput.toLowerCase();
 		const isDispatch = lower.includes('@cc') || lower.includes('@agy') || lower.includes('@gemini');
-		const useStream = !isDispatch && !isGenImage;
-
-		try {
-			if (useStream) {
-				await runStreamingSend(messageBody);
-			} else {
-				const r = await fetch(resolve('/api/chat'), {
+		
+		if (isDispatch || isGenImage) {
+			const text = chatInput;
+			chatClient.input = '';
+			const attachmentMd = expAttachments.map(a => `![${a.name}](${a.url})`).join('\n');
+			const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
+			
+			chatClient.append({ role: 'user', content: messageBody });
+			
+			try {
+				const r = await fetch('/console/api/chat', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
@@ -435,13 +437,14 @@
 					})
 				});
 				if (!r.ok) throw new Error(`HTTP ${r.status}`);
-				await pollMessages();
+			} catch (e) {
+				toasts.add(`Send failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
 			}
-		} catch (e) {
-			toasts.add(`Send failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
-			textDraft = text; // restore
-		} finally {
-			sending = false;
+		} else {
+			chatClient.handleSubmit(e, {
+				experimental_attachments: expAttachments,
+				body: { thread: activeThread, target_repo: selectedRepo }
+			});
 		}
 	}
 
@@ -450,171 +453,36 @@
 		const imageFiles = items
 			.filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
 			.map((it) => it.getAsFile())
-			.filter((f): f is File => f !== null);
-		if (imageFiles.length === 0) return; // let default paste happen
+			.filter((f) => f !== null);
+		if (imageFiles.length === 0) return;
 		e.preventDefault();
 		for (const f of imageFiles) {
 			void uploadOneFile(f);
 		}
 	}
 
-	function handleKey(e: KeyboardEvent) {
+	function handleKey(e) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
-			void sendMessage();
+			void submitForm(e);
 		}
 	}
 
-	// Set of message ids currently showing the "Copied" check on their copy
-	// button. Cleared 1500ms after copy fires.
-	// Regenerate flow — operator clicks "Regenerate" on an AGY reply. We
-	// find the prior operator message in the same thread, delete the
-	// existing reply, then re-stream a new one. Old reply gets replaced
-	// rather than stacking up.
-	let regeneratingIds = $state(new Set<number>());
-	async function regenerateReply(m: ChatMessage) {
-		if (sending || regeneratingIds.has(m.id)) return;
-		// Find the most recent operator message before this reply.
-		const idx = messages.findIndex((x) => x.id === m.id);
-		if (idx < 0) return;
-		let priorOperator: ChatMessage | null = null;
-		for (let i = idx - 1; i >= 0; i--) {
-			if (messages[i].sender === 'operator') {
-				priorOperator = messages[i];
-				break;
-			}
-		}
-		if (!priorOperator) {
-			toasts.add('No prior message to regenerate from', 'error');
-			return;
-		}
-		regeneratingIds = new Set([...regeneratingIds, m.id]);
-		sending = true;
+	async function copyMessage(m: any) {
 		try {
-			// Drop the old reply server-side + optimistically from the feed so
-			// the streamed replacement lands in the right place.
-			await fetch(resolve(`/api/chat?id=${m.id}`), { method: 'DELETE' }).catch(() => null);
-			messages = messages.filter((x) => x.id !== m.id);
-			await runStreamingSend(priorOperator.message);
-		} catch (e) {
-			toasts.add(`Regenerate failed: ${e instanceof Error ? e.message : 'unknown'}`, 'error');
-		} finally {
-			sending = false;
-			regeneratingIds = new Set([...regeneratingIds].filter((i) => i !== m.id));
-		}
-	}
-
-	let copiedIds = $state(new Set<number>());
-	async function copyMessage(m: ChatMessage) {
-		try {
-			await navigator.clipboard.writeText(m.message);
+			const text = typeof m.content === 'string' ? m.content : m.content.find(p => p.type === 'text')?.text || '';
+			await navigator.clipboard.writeText(text);
 			copiedIds = new Set([...copiedIds, m.id]);
 			setTimeout(() => {
 				copiedIds = new Set([...copiedIds].filter((i) => i !== m.id));
 			}, 1500);
 		} catch {
-			toasts.add('Clipboard unavailable — long-press to copy manually', 'error');
+			toasts.add('Clipboard unavailable', 'error');
 		}
 	}
-
-	// Streaming send — opens an SSE connection to /api/chat/stream, inserts
-	// a placeholder AGY bubble, then appends token text as it arrives. The
-	// server persists the final assembled reply to DB before closing the
-	// stream, so pollMessages() at the end reconciles the optimistic bubble
-	// with the persisted row (replaces it with the canonical numeric-id row).
-	async function runStreamingSend(messageBody: string) {
-		const STREAM_ID = Date.now() + 1; // distinct from the operator optimistic id
-		// Insert an empty placeholder; tokens will append. With this bubble
-		// present, the thinking-dots indicator suppresses (last msg !== operator).
-		messages = [
-			...messages,
-			{
-				id: STREAM_ID,
-				sender: 'agy',
-				message: '',
-				timestamp: new Date().toISOString()
-			}
-		];
-
-		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-		let errored = false;
-		let streamCompleteOk = false;
-
-		try {
-			const resp = await fetch(resolve('/api/chat/stream'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message: messageBody,
-					thread: activeThread,
-					target_repo: selectedRepo
-				})
-			});
-			if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
-
-			reader = resp.body.getReader();
-			const decoder = new TextDecoder('utf-8');
-			let buf = '';
-			let assembled = '';
-
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done) {
-					streamCompleteOk = true;
-					break;
-				}
-				buf += decoder.decode(value, { stream: true });
-				let sep: number;
-				while ((sep = buf.indexOf('\n\n')) !== -1) {
-					const raw = buf.slice(0, sep);
-					buf = buf.slice(sep + 2);
-					const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
-					if (!dataLine) continue;
-					try {
-						const evt = JSON.parse(dataLine.slice(6)) as
-							| { type: 'token'; text: string }
-							| { type: 'done'; provider_used: string; model_used: string }
-							| { type: 'error'; message: string };
-						if (evt.type === 'token') {
-							assembled += evt.text;
-							messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
-							if (userAtBottom) {
-								queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
-							}
-						} else if (evt.type === 'done') {
-							upsertThreadTier_local(evt.model_used);
-						} else if (evt.type === 'error') {
-							errored = true;
-							toasts.add(`LLM stream failed: ${evt.message}`, 'error');
-							messages = messages.map((m) =>
-								m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
-							);
-						}
-					} catch {
-						/* skip malformed */
-					}
-				}
-			}
-		} finally {
-			if (reader) reader.cancel().catch(() => {});
-			if (errored || !streamCompleteOk) {
-				messages = messages.filter((m) => m.id !== STREAM_ID);
-			}
-		}
-
-		// Reconcile against the persisted DB state.
-		await pollMessages();
-		if (!errored) {
-			// pollMessages replaces the messages array from DB; the optimistic
-			// STREAM_ID row should now be gone (DB has the canonical row).
-			// Nothing else to do here.
-		}
-	}
-
-	// Tiny local-only setter for the model label badge — avoids hitting the
-	// /api/chat/tier roundtrip just to display the model used.
-	function upsertThreadTier_local(modelUsed: string) {
-		if (modelUsed) lastModelUsed = modelUsed;
+	
+	async function regenerateReply(m: any) {
+		(chatClient as any).reload();
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -916,7 +784,7 @@
 			const body = await resp.json();
 			if (body.current_tier) currentTier = body.current_tier as Tier;
 			const sentMsg = body.message;
-			messages = [...messages, sentMsg];
+			// // messages = [...messages, sentMsg];
 			userAtBottom = true;
 			talkbackDispatchMsgId = sentMsg?.id ?? null;
 
@@ -940,14 +808,15 @@
 		const deadline = Date.now() + 90_000;
 
 		while (Date.now() < deadline && talkbackActive) {
-			await pollMessages();
-			const reply = messages.find(
-				(m) => m.id > dispatchId && m.sender !== 'operator' && m.sender !== 'system'
+			
+			const reply = chatMessages.find(
+				(m: any) => m.id > dispatchId && m.role !== 'user' && m.role !== 'system'
 			);
-			if (reply?.message) {
+			if (reply) {
 				talkbackDispatchMsgId = null;
 				talkbackConsecutiveFailures = 0;
-				await speakTalkbackReply(reply.message);
+				const text = (reply as any).content || (reply as any).parts?.find((p: any) => p.type === 'text')?.text || '';
+				await speakTalkbackReply(text);
 				return;
 			}
 			await pSleep(1200);
@@ -1143,7 +1012,7 @@
 		}
 		activeThread = threadId;
 		sidebarOpen = false;
-		messages = [];
+		// // messages = [];
 		// Pass the target thread explicitly so pollMessages can drop the
 		// response if another switch happens before this fetch returns.
 		await pollMessages(threadId);
@@ -1190,7 +1059,7 @@
 					);
 					if (r.ok) {
 						const b = await r.json();
-						if (!Array.isArray(b.messages) || b.messages.length === 0) return slug;
+						if (!Array.isArray(b.messages) || b.chatMessages.length === 0) return slug;
 					} else {
 						return slug; // assume free if probe failed
 					}
@@ -1336,7 +1205,7 @@
 				/* skip */
 			}
 		}
-		threads = threads.filter((t) => t.thread_id === 'default');
+		threads = threads.filter((t) => t.thread_id !== 'default');
 		if (activeThread !== 'default') await switchThread('default');
 		toasts.add(`Cleared ${removed} thread${removed === 1 ? '' : 's'}`, 'success');
 	}
@@ -1344,7 +1213,7 @@
 	// ─────────────────────────────────────────────────────────────────────
 	// Slash commands. Operator types `/` at the start of the composer →
 	// autocomplete popup lists matching commands. Submit (Enter / Send /
-	// click on row) runs the command's handler instead of sending the
+	// click on row) runs the command's handler instead of loading the
 	// literal text to the LLM.
 	// ─────────────────────────────────────────────────────────────────────
 	type SlashCmd = {
@@ -1355,15 +1224,8 @@
 	};
 
 	function addLocalSystemMessage(text: string) {
-		messages = [
-			...messages,
-			{
-				id: Date.now(),
-				sender: 'system',
-				message: text,
-				timestamp: new Date().toISOString()
-			}
-		];
+		(chatClient as any).append({ role: 'system', content: text });
+		queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
 	}
 
 	const SLASH_COMMANDS: SlashCmd[] = [
@@ -1386,7 +1248,7 @@
 						agent: 'silent'
 					})
 				}).catch(() => null);
-				await pollMessages();
+				
 				toasts.add('Conversation context reset', 'success');
 			}
 		},
@@ -1426,9 +1288,9 @@
 			description: 'Regenerate the most recent assistant reply',
 			run: async () => {
 				// Walk backwards for the last non-operator, non-system reply
-				for (let i = messages.length - 1; i >= 0; i--) {
-					if (messages[i].sender !== 'operator' && messages[i].sender !== 'system') {
-						await regenerateReply(messages[i]);
+				for (let i = chatMessages.length - 1; i >= 0; i--) {
+					if (chatMessages[i].role === 'assistant') {
+						await regenerateReply(chatMessages[i]);
 						return;
 					}
 				}
@@ -1971,7 +1833,7 @@
 			bind:this={feedContainer}
 			class="relative z-10 flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-4 md:px-6"
 		>
-			{#if messages.length === 0}
+			{#if chatMessages.length === 0}
 				<div class="flex flex-1 items-center justify-center text-center select-none">
 					<div class="max-w-xs space-y-2">
 						<div class="font-sans text-sm font-light text-zinc-500/60">
@@ -1983,15 +1845,15 @@
 					</div>
 				</div>
 			{:else}
-				{#each messages as m (m.id)}
-					<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}">
+				{#each chatMessages as m (m.id)}
+					<div class="flex flex-col gap-1 {m.role === 'user' ? 'items-end' : 'items-start'}">
 						<!-- Custom Labeling / Bubble Headers -->
-						{#if m.sender !== 'operator'}
+						{#if m.role !== 'user'}
 							<div
 								class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
 							>
 								<Sparkles size={10} class="shrink-0 text-cyan-400" />
-								<span>{m.sender === 'system' ? 'LOGUEOS' : senderDisplay(m.sender)}</span>
+								<span>{m.role === 'system' ? 'LOGUEOS' : senderDisplay('agy')}</span>
 							</div>
 						{/if}
 
@@ -2001,14 +1863,14 @@
 						     code-block highlighting, inline code, lists, etc. -->
 						<div
 							class="max-w-[85%] rounded-2xl px-3.5 py-2 font-sans text-[13.5px] leading-snug tracking-[-0.005em] antialiased selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
-								{m.sender === 'operator'
+								{m.role === 'user'
 								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
 								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
 						>
-							{#if m.sender === 'operator'}
-								<span class="whitespace-pre-wrap">{m.message}</span>
+							{#if m.role === 'user'}
+								<span class="whitespace-pre-wrap">{m.parts?.find(p => p.type === 'text')?.text || ''}</span>
 							{:else}
-								<Markdown content={m.message} />
+								<Markdown content={m.parts?.find(p => p.type === 'text')?.text || ''} />
 							{/if}
 						</div>
 
@@ -2016,7 +1878,7 @@
 						     replies only — operator's own bubbles already echo
 						     their input and can't be re-rolled. -->
 						<div class="flex items-center gap-2 px-1 select-none">
-							{#if m.sender !== 'operator' && m.message}
+							{#if m.role !== 'user'}
 								<button
 									type="button"
 									onclick={() => copyMessage(m)}
@@ -2035,7 +1897,7 @@
 								<button
 									type="button"
 									onclick={() => regenerateReply(m)}
-									disabled={sending || regeneratingIds.has(m.id)}
+									disabled={loading || regeneratingIds.has(m.id)}
 									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
 									aria-label="Regenerate reply"
 									title={regeneratingIds.has(m.id) ? 'Regenerating…' : 'Regenerate reply'}
@@ -2045,7 +1907,7 @@
 								</button>
 							{/if}
 							<div class="font-mono text-[9px] text-zinc-600">
-								{fmtTime(m.timestamp)}
+								{fmtTime((m as any).createdAt?.toISOString() ?? new Date().toISOString())}
 							</div>
 						</div>
 					</div>
@@ -2056,7 +1918,7 @@
 				     Conditions: a send is in flight AND the most recent message
 				     in the feed is from the operator (i.e. we're between their
 				     send and the LLM's response landing). -->
-				{#if sending && messages.length > 0 && messages[messages.length - 1].sender === 'operator'}
+				{#if loading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user'}
 					<div class="flex flex-col items-start gap-1">
 						<div
 							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
@@ -2116,7 +1978,7 @@
 						? 'border-emerald-500/40 bg-emerald-500/[0.04] shadow-[0_0_30px_rgba(16,185,129,0.15)]'
 						: imageMode
 							? 'border-cyan-500/40 bg-cyan-500/[0.04] shadow-[0_0_30px_rgba(6,182,212,0.15)]'
-							: sending
+							: loading
 								? 'animate-pulse border-purple-500/40 bg-purple-500/[0.04] shadow-[0_0_30px_rgba(168,85,247,0.15)]'
 								: 'border-zinc-800/80 bg-zinc-950/80 shadow-[0_0_24px_rgba(168,85,247,0.06)] focus-within:border-zinc-600/80 hover:border-zinc-700/80'}"
 			>
@@ -2209,7 +2071,7 @@
 								<div class="relative h-8 w-8 shrink-0">
 									{#if att.mime?.startsWith('image/') && att.url}
 										<img
-											src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
+											src={att.url.startsWith('./') ? resolve(('/' + att.url.slice(2)) as any) : att.url}
 											alt={att.filename}
 											class="h-full w-full rounded-md object-cover"
 										/>
@@ -2347,16 +2209,16 @@
 						<!-- Send Button -->
 						<button
 							type="button"
-							onclick={sendMessage}
+							onclick={(e) => submitForm(e)}
 							disabled={(!textDraft.trim() && !imageMode && attachments.length === 0) ||
-								sending ||
+								loading ||
 								composerMode === 'recording' ||
 								composerMode === 'talkback' ||
 								attachments.some((a) => a.uploading)}
 							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
 							aria-label="Send Message"
 							title="Send (Enter)"
-							style={textDraft.trim() && !sending && composerMode === 'idle'
+							style={textDraft.trim() && !loading && composerMode === 'idle'
 								? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
 								: ''}
 						>
