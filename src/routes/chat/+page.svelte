@@ -1442,18 +1442,17 @@
 		return `${baseSlug}-${Date.now()}`; // safety net — shouldn't reach here
 	}
 
+	// ChatGPT-style: click + and you immediately get a new thread. No prompt
+	// (`window.prompt()` is silently blocked on iOS Safari + most PWAs, which
+	// is exactly the surface the operator runs on most). Auto-generates a
+	// slug like "chat-7m3q2" — short, collision-tolerant via findUniqueSlug,
+	// rename via the ⋮ menu after the first message lands. Mirrors how
+	// ChatGPT/Claude/Gemini all behave.
 	async function newThread() {
-		const raw = window.prompt('New thread name (letters, numbers, dashes):');
-		if (!raw) return;
-		const baseSlug = slugifyThreadName(raw);
+		const stamp = Date.now().toString(36).slice(-5);
+		const baseSlug = `chat-${stamp}`;
 		const slug = await findUniqueSlug(baseSlug);
-		// When the slug got suffixed (collision), the sidebar title needs to
-		// reflect the unique slug too — otherwise the operator sees two rows
-		// with the same visible name and can't tell which is which.
-		const title = slug === baseSlug ? raw.trim() || slug : slug;
-		if (slug !== baseSlug) {
-			toasts.add(`"${baseSlug}" was taken — created "${slug}" for a clean slate.`, 'info');
-		}
+		const title = 'New thread';
 		threads = [
 			{
 				thread_id: slug,
@@ -1869,15 +1868,16 @@
 				<button
 					type="button"
 					onclick={newThread}
-					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:scale-105 hover:text-white active:scale-95"
+					class="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:scale-105 hover:text-white active:scale-95 sm:h-7 sm:w-7"
 					title="Create new session"
+					aria-label="New thread"
 				>
 					<Plus size={14} />
 				</button>
 				<button
 					type="button"
 					onclick={() => (sidebarOpen = false)}
-					class="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:text-white lg:hidden"
+					class="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:text-white sm:h-7 sm:w-7 lg:hidden"
 					aria-label="Close sidebar"
 				>
 					<X size={14} />
@@ -1990,7 +1990,7 @@
 											e.stopPropagation();
 											threadMenuOpenFor = threadMenuOpenFor === t.thread_id ? null : t.thread_id;
 										}}
-										class="flex h-7 w-6 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
+										class="flex h-11 w-9 shrink-0 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white sm:h-7 sm:w-6"
 										aria-label="Session options"
 									>
 										<MoreVertical size={13} />
@@ -2075,7 +2075,7 @@
 				<button
 					type="button"
 					onclick={() => (sidebarOpen = !sidebarOpen)}
-					class="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-zinc-400 transition-all hover:text-white active:scale-90"
+					class="flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-zinc-400 transition-all hover:text-white active:scale-90 sm:h-9 sm:w-9"
 					aria-label="Toggle Sessions Sidebar"
 					title="Toggle Sessions Sidebar"
 				>
@@ -2104,7 +2104,7 @@
 							closeAllPopovers();
 							openChip = next;
 						}}
-						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
+						class="flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0"
 						aria-label="Target repository"
 					>
 						<span>{selectedWorkspace?.emoji ?? '📁'}</span>
@@ -2163,7 +2163,7 @@
 							closeAllPopovers();
 							showModelOverrideModal = next;
 						}}
-						class="flex items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white"
+						class="flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0"
 						aria-label="Model picker"
 						title="Pick a specific model or leave on Auto"
 					>
@@ -2607,7 +2607,7 @@
 							<button
 								type="button"
 								onclick={triggerUpload}
-								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90"
+								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90 sm:h-9 sm:w-9"
 								aria-label="Attach File"
 								title="Attach image"
 							>
@@ -2619,7 +2619,7 @@
 								type="button"
 								onclick={() => (imageMode = !imageMode)}
 								disabled={composerMode === 'recording' || composerMode === 'talkback'}
-								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
 									{imageMode
 									? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
 									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
@@ -2634,7 +2634,7 @@
 								type="button"
 								onclick={toggleRecord}
 								disabled={composerMode === 'talkback'}
-								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
 									{composerMode === 'recording'
 									? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
 									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
@@ -2653,7 +2653,7 @@
 								type="button"
 								onclick={toggleTalkback}
 								disabled={composerMode === 'recording'}
-								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40
+								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
 									{composerMode === 'talkback'
 									? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
 									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
@@ -2677,7 +2677,7 @@
 								composerMode === 'recording' ||
 								composerMode === 'talkback' ||
 								attachments.some((a) => a.uploading)}
-							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none"
+							class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none sm:h-9 sm:w-9"
 							aria-label="Send Message"
 							title="Send (Enter)"
 							style={textDraft.trim() && !sending && composerMode === 'idle'
