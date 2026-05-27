@@ -3,6 +3,7 @@ import path from 'node:path';
 import { includeIgnoreFile } from '@eslint/compat';
 import js from '@eslint/js';
 import svelte from 'eslint-plugin-svelte';
+import svelteParser from 'svelte-eslint-parser';
 import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import ts from 'typescript-eslint';
@@ -26,8 +27,14 @@ export default defineConfig(
 		}
 	},
 	{
+		// svelte-eslint-parser is the official AST parser for Svelte 5 runes
+		// ($state, $derived, $effect). Without setting `parser` at the top
+		// level, ts.parser sees runes as undefined globals and can't catch
+		// reactive dependency leaks in $effect blocks. svelte-eslint-parser
+		// passes nested <script lang="ts"> through to ts.parser as a sub-parser.
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
 		languageOptions: {
+			parser: svelteParser,
 			parserOptions: {
 				projectService: true,
 				extraFileExtensions: ['.svelte'],

@@ -8,6 +8,18 @@ const config = {
 		// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
+	// Vite Svelte Inspector — dev-only DOM-to-source picker. Press alt-x in
+	// the browser, click any element on the page, and the editor jumps to
+	// the exact .svelte source line. Production builds are unaffected.
+	// `showToggleButton: 'always'` adds a corner button so we don't need to
+	// remember the keybind on iPad/phone sessions.
+	vitePlugin: {
+		inspector: {
+			toggleKeyCombo: 'alt-x',
+			showToggleButton: 'always',
+			toggleButtonPos: 'bottom-right'
+		}
+	},
 	kit: {
 		// adapter-node produces a standalone Node.js server (build/index.js).
 		// Launch with:
