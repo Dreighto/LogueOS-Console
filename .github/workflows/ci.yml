@@ -44,6 +44,12 @@ jobs:
       - name: Unit tests (vitest)
         run: npm run test:unit
 
+      # Build first — playwright runs against `npm run preview` (built output)
+      # in CI, not `npm run dev`. Production build avoids the SvelteKit dev-mode
+      # hydration race where clicks fire before Svelte event handlers attach.
+      - name: Production build
+        run: npm run build
+
       # Gate on the chat-v2-agy regression suite specifically — it passes
       # green and IS the chat-surface merge gate (task #2 payoff). The other
       # e2e specs (status-board.spec.ts, example.spec.ts) carry pre-existing
@@ -52,9 +58,6 @@ jobs:
         run: npx playwright test tests/e2e/chat-v2-agy.spec.ts --reporter=list
         env:
           CI: 'true'
-
-      - name: Production build
-        run: npm run build
 
       # ── Advisory gates (run + report, but do NOT block merge yet) ────
       # Each carries baseline failures on main today; flipping any of these
