@@ -646,14 +646,19 @@
 		const STREAM_ID = Date.now() + 1; // distinct from the operator optimistic id
 		// Insert an empty placeholder; tokens will append. With this bubble
 		// present, the thinking-dots indicator suppresses (last msg !== operator).
+		// Sender derived from active provider so the bubble label (AGY / CC)
+		// matches what the SDK endpoint will persist. pollMessages reconciles
+		// to the canonical DB row after the stream completes.
+		const placeholderSender: ChatMessage['sender'] =
+			providerOverride === 'anthropic' ? 'cc' : 'agy';
 		messages = [
 			...messages,
 			{
 				id: STREAM_ID,
-				sender: 'agy',
+				sender: placeholderSender,
 				message: '',
 				timestamp: new Date().toISOString()
-			}
+			} as ChatMessage
 		];
 		streamPlaceholderId = STREAM_ID;
 
@@ -685,11 +690,12 @@
 		// Reconcile against the persisted DB state — the SDK endpoint's
 		// onFinish callback wrote the assistant row before closing the stream,
 		// so pollMessages picks up the canonical numeric-id row and the
-		// optimistic STREAM_ID placeholder gets replaced.
+		// optimistic STREAM_ID placeholder gets replaced. CRITICAL: without
+		// this call, the placeholder's sender label (set from client-side
+		// providerOverride above) stays stale — DB has the right sender but
+		// the UI never refreshes to show it.
 		if (!errored) {
-			// pollMessages replaces the messages array from DB; the optimistic
-			// STREAM_ID row should now be gone (DB has the canonical row).
-			// Nothing else to do here.
+			await pollMessages();
 		}
 	}
 
