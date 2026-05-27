@@ -35,6 +35,13 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'invalid_json' }, { status: 400 });
 	}
 
+	// CR (PR #140): don't silently coerce a non-string addendum to '' — that
+	// would let a malformed PUT (e.g. `{ addendum: null }`) clear the operator's
+	// persisted context. Treat missing as no-op-clear via explicit empty
+	// string only; reject any other shape.
+	if (body.addendum !== undefined && typeof body.addendum !== 'string') {
+		return json({ error: 'invalid_addendum' }, { status: 400 });
+	}
 	const addendum = typeof body.addendum === 'string' ? body.addendum : '';
 	if (addendum.length > MAX_ADDENDUM_CHARS) {
 		return json(

@@ -73,6 +73,11 @@
 	let workspaceContextOpen = $state(false);
 	let workspaceContextDraft = $state('');
 	let workspaceContextSaving = $state(false);
+	// CR (PR #140) — track whether the initial GET succeeded. If it failed
+	// (network error, 5xx), the draft stays empty; without this gate, Save
+	// would write `addendum=""` and clear the operator's stored context.
+	let workspaceContextLoaded = $state(false);
+	let workspaceContextLoadError = $state(false);
 	const WORKSPACE_CONTEXT_MAX = 4000;
 	let sidebarOpen = $state(false);
 	let imageMode = $state(false);
@@ -366,6 +371,8 @@
 		closeAllPopovers();
 		workspaceContextOpen = true;
 		workspaceContextDraft = '';
+		workspaceContextLoaded = false;
+		workspaceContextLoadError = false;
 		try {
 			const r = await fetch(
 				resolve('/api/chat/workspaces/' + encodeURIComponent(selectedRepo) + '/context')
@@ -373,14 +380,28 @@
 			if (r.ok) {
 				const body = (await r.json()) as { addendum?: string };
 				workspaceContextDraft = body.addendum ?? '';
+				workspaceContextLoaded = true;
+			} else {
+				workspaceContextLoadError = true;
 			}
 		} catch {
-			/* network error — operator sees empty editor */
+			workspaceContextLoadError = true;
 		}
+	}
+
+	async function retryLoadWorkspaceContext() {
+		workspaceContextLoadError = false;
+		await openWorkspaceContextEditor();
 	}
 
 	async function saveWorkspaceContext() {
 		if (workspaceContextSaving) return;
+		// CR (PR #140) — refuse to save if the initial GET failed. Without
+		// this, the empty draft would clobber the operator's persisted addendum.
+		if (!workspaceContextLoaded) {
+			toasts.add('Reload context before saving — initial load failed', 'error');
+			return;
+		}
 		workspaceContextSaving = true;
 		try {
 			const r = await fetch(
@@ -2692,12 +2713,25 @@
 				<span class="font-mono text-zinc-300">{selectedRepo}</span>. Keep it focused —
 				project intent, key files, gotchas. Saves retyping every new thread.
 			</p>
+			{#if workspaceContextLoadError}
+				<div class="flex items-center justify-between gap-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-[12px] text-red-300">
+					<span>Failed to load existing context. Save is disabled to avoid overwriting it.</span>
+					<button
+						type="button"
+						onclick={retryLoadWorkspaceContext}
+						class="rounded-md border border-red-900/60 bg-red-950/40 px-2 py-1 font-mono text-[10px] tracking-wider text-red-200 uppercase hover:bg-red-900/40"
+					>
+						Retry
+					</button>
+				</div>
+			{/if}
 			<textarea
 				bind:value={workspaceContextDraft}
 				maxlength={WORKSPACE_CONTEXT_MAX}
 				rows="8"
 				placeholder="e.g. Chat surface at src/routes/chat/+page.svelte. SDK endpoint /api/chat/sdk-stream. Test framework Playwright."
-				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[13px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none"
+				disabled={workspaceContextLoadError}
+				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[13px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none disabled:opacity-50"
 				style="min-height: 160px;"
 			></textarea>
 			<div class="flex items-center justify-between gap-2">
@@ -2715,7 +2749,7 @@
 					<button
 						type="button"
 						onclick={saveWorkspaceContext}
-						disabled={workspaceContextSaving}
+						disabled={workspaceContextSaving || !workspaceContextLoaded}
 						class="rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 px-3 py-1.5 font-mono text-[10px] tracking-wider text-white uppercase shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
 					>
 						{workspaceContextSaving ? 'Saving…' : 'Save'}
