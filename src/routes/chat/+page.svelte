@@ -42,6 +42,7 @@
 	import { toasts } from '$lib/utils/toasts';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import Canvas from '$lib/components/Canvas.svelte';
+	import WorkspaceContextModal from '$lib/components/WorkspaceContextModal.svelte';
 
 	let { data } = $props();
 
@@ -2752,83 +2753,18 @@
 	</main>
 </div>
 
-{#if workspaceContextOpen}
-	<div
-		class="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) workspaceContextOpen = false;
-		}}
-		role="presentation"
-	>
-		<div
-			class="flex w-full max-w-[520px] flex-col gap-3 rounded-t-2xl border border-zinc-800 bg-[#0e0e0e] p-4 shadow-2xl sm:rounded-2xl"
-			style="padding-bottom: max(1rem, env(safe-area-inset-bottom));"
-		>
-			<div class="flex items-center gap-2">
-				<Edit3 size={14} class="text-purple-400" aria-hidden="true" />
-				<div class="flex-1 font-mono text-[11px] tracking-wider text-zinc-400 uppercase">
-					Workspace context · {selectedWorkspace?.display_name ?? selectedRepo}
-				</div>
-				<button
-					type="button"
-					onclick={() => (workspaceContextOpen = false)}
-					class="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-white"
-					aria-label="Close"
-				>
-					<X size={14} aria-hidden="true" />
-				</button>
-			</div>
-			<p class="text-[12px] text-zinc-500">
-				Auto-injects into every chat send within
-				<span class="font-mono text-zinc-300">{selectedRepo}</span>. Keep it focused —
-				project intent, key files, gotchas. Saves retyping every new thread.
-			</p>
-			{#if workspaceContextLoadError}
-				<div class="flex items-center justify-between gap-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-[12px] text-red-300">
-					<span>Failed to load existing context. Save is disabled to avoid overwriting it.</span>
-					<button
-						type="button"
-						onclick={retryLoadWorkspaceContext}
-						class="rounded-md border border-red-900/60 bg-red-950/40 px-2 py-1 font-mono text-[10px] tracking-wider text-red-200 uppercase hover:bg-red-900/40"
-					>
-						Retry
-					</button>
-				</div>
-			{/if}
-			<textarea
-				bind:value={workspaceContextDraft}
-				maxlength={WORKSPACE_CONTEXT_MAX}
-				rows="8"
-				placeholder="e.g. Chat surface at src/routes/chat/+page.svelte. SDK endpoint /api/chat/sdk-stream. Test framework Playwright."
-				disabled={workspaceContextLoadError}
-				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[13px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none disabled:opacity-50"
-				style="min-height: 160px;"
-			></textarea>
-			<div class="flex items-center justify-between gap-2">
-				<div class="font-mono text-[10px] text-zinc-600">
-					{workspaceContextDraft.length} / {WORKSPACE_CONTEXT_MAX}
-				</div>
-				<div class="flex items-center gap-1.5">
-					<button
-						type="button"
-						onclick={() => (workspaceContextOpen = false)}
-						class="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 font-mono text-[10px] tracking-wider text-zinc-400 uppercase transition-colors hover:bg-zinc-900 hover:text-white"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						onclick={saveWorkspaceContext}
-						disabled={workspaceContextSaving || !workspaceContextLoaded}
-						class="rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 px-3 py-1.5 font-mono text-[10px] tracking-wider text-white uppercase shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50"
-					>
-						{workspaceContextSaving ? 'Saving…' : 'Save'}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<WorkspaceContextModal
+	bind:open={workspaceContextOpen}
+	bind:draft={workspaceContextDraft}
+	saving={workspaceContextSaving}
+	loaded={workspaceContextLoaded}
+	loadError={workspaceContextLoadError}
+	{selectedRepo}
+	{selectedWorkspace}
+	onsave={saveWorkspaceContext}
+	onretry={retryLoadWorkspaceContext}
+	onclose={() => (workspaceContextOpen = false)}
+/>
 
 {#if canvasArtifact}
 	<Canvas
