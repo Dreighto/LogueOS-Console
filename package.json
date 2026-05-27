@@ -57,6 +57,7 @@
 	"dependencies": {
 		"@ai-sdk/anthropic": "^3.0.79",
 		"@ai-sdk/google": "^3.0.79",
+		"@ai-sdk/openai-compatible": "^2.0.48",
 		"@ai-sdk/svelte": "^4.0.191",
 		"ai": "^6.0.191",
 		"better-sqlite3": "^12.10.0",

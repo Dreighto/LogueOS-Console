@@ -33,6 +33,7 @@ import { streamText, convertToModelMessages, generateId, tool, type UIMessage } 
 import { z } from 'zod';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { addChatMessage, getChatMessages, listChatThreads } from '$lib/server/chat';
 import { classifyTier, type Tier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
@@ -133,7 +134,14 @@ const tools = {
 	})
 };
 
-type Provider = 'anthropic' | 'google';
+type Provider = 'anthropic' | 'google' | 'local';
+
+// Local Ollama endpoint — OpenAI-compatible interface at
+// http://localhost:11434/v1. Task #11: brings the operator's eGPU into
+// play once installed. Works against CPU too while waiting.
+const OLLAMA_BASE_URL =
+	process.env.OLLAMA_BASE_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:11434';
+const OLLAMA_V1 = `${OLLAMA_BASE_URL}/v1`;
 
 // Tier × provider → model id. Mirrors src/lib/server/llm_router.ts so
 // behaviour stays aligned; we keep a local copy to avoid pulling in the
@@ -142,21 +150,24 @@ type Provider = 'anthropic' | 'google';
 const TIER_MODELS: Record<Tier, Record<Provider, string>> = {
 	chat: {
 		anthropic: 'claude-haiku-4-5-20251001',
-		google: 'gemini-2.5-flash-lite'
+		google: 'gemini-2.5-flash-lite',
+		local: 'qwen2.5:7b'
 	},
 	planning: {
 		anthropic: 'claude-sonnet-4-6',
-		google: 'gemini-2.5-flash'
+		google: 'gemini-2.5-flash',
+		local: 'qwen2.5:14b'
 	},
 	deep: {
 		anthropic: 'claude-opus-4-7',
-		google: 'gemini-2.5-pro'
+		google: 'gemini-2.5-pro',
+		local: 'qwen2.5:14b'
 	},
 	local: {
-		// Local tier doesn't have an SDK provider wired yet — falls back to
-		// Anthropic chat-tier until task #11 (Ollama via openai-compatible).
+		// Local tier uses the local provider exclusively now.
 		anthropic: 'claude-haiku-4-5-20251001',
-		google: 'gemini-2.5-flash-lite'
+		google: 'gemini-2.5-flash-lite',
+		local: 'qwen2.5:14b'
 	}
 };
 
@@ -184,6 +195,17 @@ function pickModel(provider: Provider, tier: Tier, requestedModel?: string) {
 			throw new Error('Anthropic credential unavailable');
 		}
 		return { model: createAnthropic(auth)(modelId), modelId };
+	}
+	if (provider === 'local') {
+		// Ollama exposes an OpenAI-compatible interface; no auth required
+		// (binds to localhost only — exposed via Tailscale Serve if at all).
+		// Task #11 — eGPU local routing for the 5060 Ti.
+		const localProvider = createOpenAICompatible({
+			name: 'ollama-local',
+			baseURL: OLLAMA_V1,
+			apiKey: 'ollama' // placeholder, ignored by Ollama but required by SDK shape
+		});
+		return { model: localProvider(modelId), modelId };
 	}
 	const apiKey = getGoogleKey();
 	if (!apiKey) throw new Error('Google credential unavailable');
@@ -312,13 +334,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	//   2. thread_state.provider_override (persisted via model picker)
 	//   3. Default 'google' (matches legacy AGY-chat-lock UX). Operator can
 	//      flip to Anthropic via picker; Anthropic-via-OAuth is free.
-	const overrideFromState =
+	const overrideFromState: Provider | null =
 		threadState.provider_override === 'anthropic'
 			? 'anthropic'
 			: threadState.provider_override === 'gemini'
 				? 'google'
 				: null;
-	const provider: Provider = body.provider ?? overrideFromState ?? 'google';
+	// Tier 'local' implicitly selects the local provider unless the operator
+	// has explicitly overridden. Lets the existing "Local (Ollama)" model
+	// picker option route through Ollama without per-thread setup.
+	const tierImpliesLocal: Provider | null = currentTier === 'local' ? 'local' : null;
+	const provider: Provider = body.provider ?? overrideFromState ?? tierImpliesLocal ?? 'google';
 
 	let modelHandle: { model: ReturnType<ReturnType<typeof createAnthropic>>; modelId: string };
 	try {
