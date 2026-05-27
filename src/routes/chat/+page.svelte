@@ -15,25 +15,14 @@
 	import { goto } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
-	import {
-		Send,
-		Mic,
-		Paperclip,
-		Sparkles,
-		Headphones,
-		Square,
-		X,
-		Check,
-		Copy,
-		RefreshCw,
-		Loader2
-	} from 'lucide-svelte';
+	import { Sparkles, Check, Copy, RefreshCw } from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import Canvas from '$lib/components/Canvas.svelte';
 	import WorkspaceContextModal from '$lib/components/WorkspaceContextModal.svelte';
 	import ThreadsSidebar from '$lib/components/ThreadsSidebar.svelte';
 	import ChatHeader from '$lib/components/ChatHeader.svelte';
+	import Composer from '$lib/components/Composer.svelte';
 
 	let { data } = $props();
 
@@ -115,8 +104,7 @@
 	// popover. Net result: clicking one trigger while another popover is
 	// open swaps the popovers in a single tap.
 	$effect(() => {
-		const anyOpen =
-			openChip !== null || showModelOverrideModal || threadMenuOpenFor !== null;
+		const anyOpen = openChip !== null || showModelOverrideModal || threadMenuOpenFor !== null;
 		if (!anyOpen) return;
 		function onKey(e: KeyboardEvent) {
 			if (e.key === 'Escape') {
@@ -193,8 +181,7 @@
 			body: () => ({
 				thread: activeThread,
 				target_repo: selectedRepo,
-				provider:
-					providerOverride === 'gemini' ? 'google' : providerOverride ?? undefined
+				provider: providerOverride === 'gemini' ? 'google' : (providerOverride ?? undefined)
 			})
 		})
 	});
@@ -300,25 +287,10 @@
 		}, 400);
 	});
 
-	// Auto-grow the composer textarea with the draft. Resting state is one
-	// line (~40px — feels like a real input, not an essay block). Grows
-	// smoothly past one line up to roughly half the viewport (capped 480px)
-	// then scrolls internally. Audit 2026-05-27 + operator feedback flagged
-	// the previous 80px floor as too tall for the empty state.
-	const COMPOSER_MIN_PX = 40;
-	function composerMaxHeight(): number {
-		if (typeof window === 'undefined') return 360;
-		return Math.min(Math.round(window.innerHeight * 0.5), 480);
-	}
-	$effect(() => {
-		const _ = textDraft; // dep — re-run whenever the draft changes
-		void _;
-		if (!textareaEl) return;
-		textareaEl.style.height = 'auto';
-		const max = composerMaxHeight();
-		const target = Math.min(Math.max(textareaEl.scrollHeight, COMPOSER_MIN_PX), max);
-		textareaEl.style.height = `${target}px`;
-	});
+	// Composer textarea auto-grow $effect moved into <Composer /> as part of
+	// Task #7 PR 4 — the effect's deps are local to the component (`textDraft`
+	// + `textareaEl`), so it travels cleanly. The parent's draft-persist
+	// effect (further down) still reads `textDraft` via the bindable.
 
 	// ─────────────────────────────────────────────────────────────────────
 	// Network & Data Actions
@@ -608,7 +580,7 @@
 		// at least one of the two so we don't post empty rows.
 		if (!text && attachments.length === 0) return;
 		if (sending) return;
-		if (attachments.some(a => a.uploading)) {
+		if (attachments.some((a) => a.uploading)) {
 			toasts.add('Wait for image upload to finish', 'info');
 			return;
 		}
@@ -623,11 +595,7 @@
 		// the chat renderer already handles ![alt](url) markdown. Chips just
 		// stage them visually until send.
 		const attachmentMd = attachments
-			.map((a) =>
-				a.text
-					? `\n\`\`\`\n${a.text}\n\`\`\`\n`
-					: `![${a.filename}](${a.url})`
-			)
+			.map((a) => (a.text ? `\n\`\`\`\n${a.text}\n\`\`\`\n` : `![${a.filename}](${a.url})`))
 			.join('\n');
 		const messageBody = [text, attachmentMd].filter(Boolean).join('\n\n');
 
@@ -818,11 +786,7 @@
 		// matches what the SDK endpoint will persist. pollMessages reconciles
 		// to the canonical DB row after the stream completes.
 		const placeholderSender: ChatMessage['sender'] =
-			providerOverride === 'anthropic'
-				? 'cc'
-				: providerOverride === 'local'
-					? 'local'
-					: 'agy';
+			providerOverride === 'anthropic' ? 'cc' : providerOverride === 'local' ? 'local' : 'agy';
 		messages = [
 			...messages,
 			{
@@ -867,9 +831,7 @@
 				toastBody = 'Stream cancelled.';
 			}
 			toasts.add(toastBody, 'error');
-			messages = messages.map((m) =>
-				m.id === STREAM_ID ? { ...m, message: `⚠️ ${rawMsg}` } : m
-			);
+			messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: `⚠️ ${rawMsg}` } : m));
 		} finally {
 			streamState = null;
 			if (errored) {
@@ -1288,13 +1250,8 @@
 		}
 	}
 
-	const TALKBACK_PHASE_LABELS = {
-		capture: '🔴 Capture',
-		transcribe: '🔄 Transcribe',
-		dispatch: '📤 Sending',
-		speak: '🔈 Reply',
-		loop: '↩ Ready'
-	};
+	// TALKBACK_PHASE_LABELS moved into <Composer /> with the talkback status
+	// strip in Task #7 PR 4.
 
 	// ─────────────────────────────────────────────────────────────────────
 	// Paperclip Upload Wiring
@@ -1405,11 +1362,8 @@
 		attachments = attachments.filter((a) => a.id !== id);
 	}
 
-	function humanSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-	}
+	// humanSize moved into <Composer /> with the staged-attachments chip row
+	// in Task #7 PR 4.
 
 	// ─────────────────────────────────────────────────────────────────────
 	// Sidebar / Thread Management
@@ -1870,21 +1824,10 @@
 	role="region"
 	aria-label="Chat surface (drop images to attach)"
 >
-	<!-- Drag-and-drop overlay — appears when the operator drags a file over
-	     the surface from desktop / Files app. pointer-events-none keeps it
-	     from intercepting the drop event itself. -->
-	{#if isDragging}
-		<div
-			class="pointer-events-none absolute inset-3 z-[60] flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-cyan-400/60 bg-cyan-500/10 backdrop-blur-md"
-			aria-hidden="true"
-		>
-			<Paperclip size={32} class="text-cyan-300" />
-			<span class="font-mono text-xs tracking-wider text-cyan-200 uppercase">Drop to attach</span>
-			<span class="px-4 text-center font-sans text-xs text-cyan-300/70"
-				>Images stage as chips above the composer</span
-			>
-		</div>
-	{/if}
+	<!-- Drag-and-drop overlay now lives inside <Composer /> below — drag
+	     handlers stay on this outer wrapper so the operator can drop
+	     anywhere on the chat surface; the overlay renders conditional on
+	     `isDragging`, which is bindable into the Composer. -->
 	<!-- Radial Gradient Atmosphere Background -->
 	<div
 		class="pointer-events-none absolute inset-0 -z-0"
@@ -1988,71 +1931,73 @@
 					     thinking-dots block represents it. Once any token text
 					     arrives, m.message is non-empty and the bubble re-renders. -->
 					{#if !(streamState?.placeholderId === m.id && m.message === '')}
-					<div class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}">
-						<!-- Custom Labeling / Bubble Headers -->
-						{#if m.sender !== 'operator'}
-							<div
-								class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
-							>
-								<Sparkles size={10} class="shrink-0 text-cyan-400" />
-								<span>{m.sender === 'system' ? 'LOGUEOS' : senderDisplay(m.sender)}</span>
-							</div>
-						{/if}
+						<div
+							class="flex flex-col gap-1 {m.sender === 'operator' ? 'items-end' : 'items-start'}"
+						>
+							<!-- Custom Labeling / Bubble Headers -->
+							{#if m.sender !== 'operator'}
+								<div
+									class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
+								>
+									<Sparkles size={10} class="shrink-0 text-cyan-400" />
+									<span>{m.sender === 'system' ? 'LOGUEOS' : senderDisplay(m.sender)}</span>
+								</div>
+							{/if}
 
-						<!-- Text Bubble. Operator bubbles render raw (whitespace-pre)
+							<!-- Text Bubble. Operator bubbles render raw (whitespace-pre)
 						     since they're literally what was typed. Assistant
 						     bubbles render through the Markdown component for
 						     code-block highlighting, inline code, lists, etc. -->
-						<div
-							class="max-w-[85%] rounded-2xl px-3.5 py-2 font-sans text-[13.5px] leading-snug tracking-[-0.005em] antialiased selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
+							<div
+								class="max-w-[85%] rounded-2xl px-3.5 py-2 font-sans text-[13.5px] leading-snug tracking-[-0.005em] antialiased selection:bg-purple-900/50 selection:text-white sm:max-w-[80%]
 								{m.sender === 'operator'
-								? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
-								: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
-						>
-							{#if m.sender === 'operator'}
-								<span class="whitespace-pre-wrap">{m.message}</span>
-							{:else}
-								<Markdown content={m.message} oncanvas={openCanvas} />
-							{/if}
-						</div>
+									? 'border border-orange-500/30 bg-orange-500/[0.03] text-orange-50 shadow-[0_0_20px_rgba(249,115,22,0.06)]'
+									: 'border border-zinc-900 bg-zinc-950/40 text-zinc-100'}"
+							>
+								{#if m.sender === 'operator'}
+									<span class="whitespace-pre-wrap">{m.message}</span>
+								{:else}
+									<Markdown content={m.message} oncanvas={openCanvas} />
+								{/if}
+							</div>
 
-						<!-- Time + actions footer. Copy + Regenerate on assistant
+							<!-- Time + actions footer. Copy + Regenerate on assistant
 						     replies only — operator's own bubbles already echo
 						     their input and can't be re-rolled. -->
-						<div class="flex items-center gap-2 px-1 select-none">
-							{#if m.sender !== 'operator' && m.message}
-								<button
-									type="button"
-									onclick={() => copyMessage(m)}
-									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300"
-									aria-label="Copy reply"
-									title={copiedIds.has(m.id) ? 'Copied' : 'Copy reply'}
-								>
-									{#if copiedIds.has(m.id)}
-										<Check size={10} class="text-emerald-400" />
-										<span class="text-emerald-400">Copied</span>
-									{:else}
-										<Copy size={10} />
-										<span>Copy</span>
-									{/if}
-								</button>
-								<button
-									type="button"
-									onclick={() => regenerateReply(m)}
-									disabled={sending || regeneratingIds.has(m.id)}
-									class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
-									aria-label="Regenerate reply"
-									title={regeneratingIds.has(m.id) ? 'Regenerating…' : 'Regenerate reply'}
-								>
-									<RefreshCw size={10} class={regeneratingIds.has(m.id) ? 'animate-spin' : ''} />
-									<span>{regeneratingIds.has(m.id) ? 'Regen…' : 'Regen'}</span>
-								</button>
-							{/if}
-							<div class="font-mono text-[9px] text-zinc-600">
-								{fmtTime(m.timestamp)}
+							<div class="flex items-center gap-2 px-1 select-none">
+								{#if m.sender !== 'operator' && m.message}
+									<button
+										type="button"
+										onclick={() => copyMessage(m)}
+										class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300"
+										aria-label="Copy reply"
+										title={copiedIds.has(m.id) ? 'Copied' : 'Copy reply'}
+									>
+										{#if copiedIds.has(m.id)}
+											<Check size={10} class="text-emerald-400" />
+											<span class="text-emerald-400">Copied</span>
+										{:else}
+											<Copy size={10} />
+											<span>Copy</span>
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={() => regenerateReply(m)}
+										disabled={sending || regeneratingIds.has(m.id)}
+										class="flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9px] tracking-wider text-zinc-600 uppercase transition-colors hover:bg-zinc-900 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+										aria-label="Regenerate reply"
+										title={regeneratingIds.has(m.id) ? 'Regenerating…' : 'Regenerate reply'}
+									>
+										<RefreshCw size={10} class={regeneratingIds.has(m.id) ? 'animate-spin' : ''} />
+										<span>{regeneratingIds.has(m.id) ? 'Regen…' : 'Regen'}</span>
+									</button>
+								{/if}
+								<div class="font-mono text-[9px] text-zinc-600">
+									{fmtTime(m.timestamp)}
+								</div>
 							</div>
 						</div>
-					</div>
 					{/if}
 				{/each}
 
@@ -2075,7 +2020,13 @@
 							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
 						>
 							<Sparkles size={10} class="shrink-0 text-cyan-400" />
-							<span>{providerOverride === 'anthropic' ? 'CC' : providerOverride === 'local' ? 'LOCAL' : 'AGY'}</span>
+							<span
+								>{providerOverride === 'anthropic'
+									? 'CC'
+									: providerOverride === 'local'
+										? 'LOCAL'
+										: 'AGY'}</span
+							>
 						</div>
 						<div
 							class="flex items-center gap-1.5 rounded-2xl border border-zinc-900 bg-zinc-950/40 px-4 py-3.5"
@@ -2108,7 +2059,7 @@
 			     require tool-call persistence into chat_messages). -->
 			{#if streamState}
 				{#each sdkChat.messages as sdkMsg (sdkMsg.id)}
-					{#if sdkMsg.role === 'assistant' && (sdkMsg.parts || []).some((p) => p.type?.startsWith('tool-'))}
+					{#if sdkMsg.role === 'assistant' && (sdkMsg.parts || []).some( (p) => p.type?.startsWith('tool-') )}
 						<div class="flex flex-col items-start gap-1" data-testid="sdk-tool-row">
 							{#each sdkMsg.parts as part, i (i)}
 								{#if part.type?.startsWith('tool-')}
@@ -2120,9 +2071,7 @@
 											<span class="font-semibold tracking-wide">
 												{part.type.replace(/^tool-/, '')}
 											</span>
-											<span
-												class="ml-auto text-[9px] tracking-wider text-purple-400/70 uppercase"
-											>
+											<span class="ml-auto text-[9px] tracking-wider text-purple-400/70 uppercase">
 												{(part as { state?: string }).state ?? 'pending'}
 											</span>
 										</div>
@@ -2158,268 +2107,34 @@
 		{/if}
 
 		<!-- ═════════════════════════════════════════════════════════════════
-		     HERO COMPOSER PILL
+		     HERO COMPOSER PILL — extracted to <Composer /> (Task #7 PR 4).
+		     Drag handlers stay on the outer wrapper (handleDragEnter/Over/
+		     Leave/Drop above); Composer renders the drop overlay conditional
+		     on `isDragging`.
 		     ═════════════════════════════════════════════════════════════════ -->
-		<div class="relative z-10 shrink-0 px-4 pt-2 pb-4 select-none">
-			<!-- Outer border shifting glow container -->
-			<div
-				class="relative flex flex-col gap-2 rounded-3xl border p-2 transition-all duration-300
-					{composerMode === 'recording'
-					? 'border-amber-500/40 bg-amber-500/[0.04] shadow-[0_0_30px_rgba(245,158,11,0.15)]'
-					: composerMode === 'talkback'
-						? 'border-emerald-500/40 bg-emerald-500/[0.04] shadow-[0_0_30px_rgba(16,185,129,0.15)]'
-						: imageMode
-							? 'border-cyan-500/40 bg-cyan-500/[0.04] shadow-[0_0_30px_rgba(6,182,212,0.15)]'
-							: sending
-								? 'animate-pulse border-purple-500/40 bg-purple-500/[0.04] shadow-[0_0_30px_rgba(168,85,247,0.15)]'
-								: 'border-zinc-800/80 bg-zinc-950/80 shadow-[0_0_24px_rgba(168,85,247,0.06)] focus-within:border-zinc-600/80 hover:border-zinc-700/80'}"
-			>
-				<!-- Dictation / Talkback Status indicators inside composer -->
-				{#if composerMode === 'recording' || composerMode === 'talkback'}
-					<div
-						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] select-none"
-					>
-						<div class="flex items-center gap-1.5">
-							<span
-								class="h-2 w-2 animate-ping rounded-full
-								{composerMode === 'recording' ? 'bg-amber-400' : 'bg-emerald-400'}"
-							></span>
-							<span
-								class={composerMode === 'recording'
-									? 'text-amber-400'
-									: 'font-semibold text-emerald-400'}
-							>
-								{composerMode === 'recording'
-									? '🔴 Voice Dictation Hot'
-									: '🔊 Walkie-Talkie Engaged'}
-							</span>
-							{#if composerMode === 'talkback' && talkbackPhase}
-								<span class="rounded border border-zinc-800 bg-black/40 px-1 text-zinc-500">
-									{TALKBACK_PHASE_LABELS[talkbackPhase]}
-								</span>
-							{/if}
-						</div>
-						<button
-							type="button"
-							onclick={composerMode === 'recording' ? toggleRecord : () => stopTalkback()}
-							class="rounded-full border border-red-500/30 bg-red-950/20 px-2 py-0.5 text-[9px] tracking-wider text-red-400 uppercase transition-all hover:bg-red-900/30"
-						>
-							Disconnect
-						</button>
-					</div>
-				{:else if imageMode}
-					<div
-						class="flex items-center justify-between border-b border-white/5 px-2 pt-0.5 pb-1 font-mono text-[10px] text-cyan-400 select-none"
-					>
-						<div class="flex items-center gap-1.5">
-							<Sparkles size={11} class="shrink-0 text-cyan-400" />
-							<span>✨ Prompt will route to Image Generation</span>
-						</div>
-						<button
-							type="button"
-							onclick={() => (imageMode = false)}
-							class="rounded-full border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[9px] tracking-wider text-zinc-400 uppercase transition-all hover:text-white"
-						>
-							Cancel
-						</button>
-					</div>
-				{/if}
-
-				<!-- Slash-command autocomplete. Appears when the draft starts with
-				     `/` and matches at least one known command. Submit/Send
-				     intercepts the literal text and runs the command handler. -->
-				{#if slashMode}
-					<div
-						class="mb-1 flex flex-col gap-1 rounded-2xl border border-cyan-500/20 bg-[#0a1416] p-1.5"
-						role="listbox"
-						aria-label="Slash commands"
-					>
-						{#each slashMatches as cmd (cmd.key)}
-							<button
-								type="button"
-								onclick={() => pickSlash(cmd)}
-								class="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-cyan-500/10"
-								role="option"
-								aria-selected="false"
-							>
-								<span class="flex flex-col leading-tight">
-									<span class="font-mono text-xs text-cyan-300">{cmd.usage}</span>
-									<span class="text-[10px] text-zinc-400">{cmd.description}</span>
-								</span>
-							</button>
-						{/each}
-					</div>
-				{/if}
-
-				<!-- Staged attachments — appear as removable chips with a thumbnail
-				     preview, above the text input row. On send, each chip's
-				     markdown link is folded into the outgoing message body. -->
-				{#if attachments.length > 0}
-					<div class="flex flex-wrap gap-2 border-b border-white/5 px-1 pb-2">
-						{#each attachments as att (att.id)}
-							<div
-								class="group relative flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900 py-1 pr-1 pl-2 text-xs text-zinc-200 shadow-sm"
-							>
-								<div class="relative h-8 w-8 shrink-0">
-									{#if att.mime?.startsWith('image/') && att.url}
-										<img
-											src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
-											alt={att.filename}
-											class="h-full w-full rounded-md object-cover"
-										/>
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center rounded-md bg-zinc-800 text-zinc-500"
-										>
-											<Paperclip size={14} />
-										</div>
-									{/if}
-									{#if att.uploading}
-										<div class="absolute inset-0 flex items-center justify-center rounded-md bg-zinc-950/60 backdrop-blur-sm">
-											<Loader2 class="animate-spin text-white" size={14} />
-										</div>
-									{/if}
-								</div>
-								<div class="flex flex-col leading-tight">
-									<span class="max-w-[160px] truncate font-medium text-zinc-200"
-										>{att.filename}</span
-									>
-									<span class="font-mono text-[10px] text-zinc-500">{humanSize(att.size)}</span>
-								</div>
-								<button
-									type="button"
-									onclick={() => removeAttachment(att.id)}
-									class="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-white"
-									aria-label="Remove attachment"
-									title="Remove"
-								>
-									<X size={12} />
-								</button>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
-				<!-- Text input area + icons. items-end so buttons sit at the bottom
-				     as the textarea grows; min-h on the wrapper preserves the
-				     hero-pill height even when the textarea collapses to 1 row. -->
-				<div class="flex flex-col gap-2">
-					<!-- Row 1: Textarea only (full width) -->
-					<div class="w-full">
-						<textarea
-							bind:this={textareaEl}
-							bind:value={textDraft}
-							onkeypress={handleKey}
-							onpaste={handlePaste}
-							onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
-							onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
-							rows="1"
-							placeholder={composerMode === 'recording'
-								? 'Listening dictation… press stop when done.'
-								: composerMode === 'talkback'
-									? 'Continuously monitoring stream… hands free.'
-									: imageMode
-										? 'Describe the image you want to generate…'
-										: 'Ask or command loops…'}
-							autocomplete="off"
-							autocapitalize="sentences"
-							spellcheck="false"
-							disabled={composerMode === 'recording' || composerMode === 'talkback'}
-							class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-							style="min-height: 40px; max-height: 480px;"
-						></textarea>
-					</div>
-
-					<!-- Row 2: Utility buttons left, Send button right -->
-					<div class="flex items-center justify-between">
-						<div class="flex items-center gap-1.5">
-							<!-- Attach File -->
-							<button
-								type="button"
-								onclick={triggerUpload}
-								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800/80 bg-zinc-900 text-zinc-400 transition-colors hover:text-white active:scale-90 sm:h-9 sm:w-9"
-								aria-label="Attach File"
-								title="Attach image"
-							>
-								<Paperclip size={15} />
-							</button>
-
-							<!-- Sparkles Image Toggle -->
-							<button
-								type="button"
-								onclick={() => (imageMode = !imageMode)}
-								disabled={composerMode === 'recording' || composerMode === 'talkback'}
-								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
-									{imageMode
-									? 'border border-cyan-500/50 bg-cyan-950 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
-									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-								aria-label="Toggle Image Gen Mode"
-								title="Image Generation Mode"
-							>
-								<Sparkles size={15} />
-							</button>
-
-							<!-- Voice Dictation Mic -->
-							<button
-								type="button"
-								onclick={toggleRecord}
-								disabled={composerMode === 'talkback'}
-								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
-									{composerMode === 'recording'
-									? 'animate-pulse border border-amber-500/50 bg-amber-950 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
-									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-								aria-label={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
-								title={composerMode === 'recording' ? 'Stop Recording' : 'Voice Dictation'}
-							>
-								{#if composerMode === 'recording'}
-									<Square size={14} />
-								{:else}
-									<Mic size={15} />
-								{/if}
-							</button>
-
-							<!-- Talkback Continuous -->
-							<button
-								type="button"
-								onclick={toggleTalkback}
-								disabled={composerMode === 'recording'}
-								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all active:scale-90 disabled:opacity-40 sm:h-9 sm:w-9
-									{composerMode === 'talkback'
-									? 'animate-pulse border border-emerald-500/50 bg-emerald-950 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
-									: 'border border-zinc-800/80 bg-zinc-900 text-zinc-400 hover:text-white'}"
-								aria-label="Hands-free continuous Talkback"
-								title="Hands-free continuous Talkback"
-							>
-								{#if composerMode === 'talkback'}
-									<Square size={14} />
-								{:else}
-									<Headphones size={15} />
-								{/if}
-							</button>
-						</div>
-
-						<!-- Send Button -->
-						<button
-							type="button"
-							onclick={sendMessage}
-							disabled={(!textDraft.trim() && !imageMode && attachments.length === 0) ||
-								sending ||
-								composerMode === 'recording' ||
-								composerMode === 'talkback' ||
-								attachments.some((a) => a.uploading)}
-							class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:border disabled:border-zinc-800 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 disabled:shadow-none sm:h-9 sm:w-9"
-							aria-label="Send Message"
-							title="Send (Enter)"
-							style={textDraft.trim() && !sending && composerMode === 'idle'
-								? 'box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);'
-								: ''}
-						>
-							<Send size={14} />
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
+		<Composer
+			bind:textDraft
+			bind:imageMode
+			bind:isDragging
+			bind:textareaEl
+			{attachments}
+			{composerMode}
+			{sending}
+			{talkbackPhase}
+			{slashMode}
+			{slashMatches}
+			onsend={() => void sendMessage()}
+			onpaste={handlePaste}
+			onkey={handleKey}
+			onfocus={() => composerMode === 'idle' && (composerMode = 'focused')}
+			onblur={() => composerMode === 'focused' && (composerMode = 'idle')}
+			ontriggerUpload={triggerUpload}
+			ontoggleRecord={() => void toggleRecord()}
+			ontoggleTalkback={() => void toggleTalkback()}
+			onstopTalkback={() => void stopTalkback()}
+			onpickSlash={(cmd) => void pickSlash(cmd)}
+			onremoveAttachment={removeAttachment}
+		/>
 	</main>
 </div>
 
@@ -2437,11 +2152,7 @@
 />
 
 {#if canvasArtifact}
-	<Canvas
-		code={canvasArtifact.code}
-		language={canvasArtifact.language}
-		onclose={closeCanvas}
-	/>
+	<Canvas code={canvasArtifact.code} language={canvasArtifact.language} onclose={closeCanvas} />
 {/if}
 
 <style>
