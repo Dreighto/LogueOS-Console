@@ -13,9 +13,9 @@
 
 	const colors = {
 		info: 'bg-background border-border text-foreground',
-		success: 'bg-status-green border-status-green/50 text-status-green',
-		warning: 'bg-status-amber border-status-amber/50 text-status-amber',
-		error: 'bg-status-red border-status-red/50 text-status-red'
+		success: 'bg-status-green border-status-green/50 text-white',
+		warning: 'bg-status-amber border-status-amber/50 text-zinc-950',
+		error: 'bg-status-red border-status-red/50 text-white'
 	};
 </script>
 

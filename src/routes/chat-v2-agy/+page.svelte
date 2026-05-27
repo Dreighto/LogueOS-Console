@@ -155,6 +155,31 @@
 		}, 400);
 	});
 
+	// Dynamic click-outside listener to handle pickers and sidebar session option dropdowns
+	// securely without relying on screen-covering fixed backdrop button elements
+	// which trigger layout/stacking context bugs in iOS Safari.
+	$effect(() => {
+		if (openChip === 'repo' || showModelOverrideModal || threadMenuOpenFor !== null) {
+			const handleOutsideClick = (e: MouseEvent) => {
+				const target = e.target as HTMLElement;
+				// Close model picker
+				if (showModelOverrideModal && !target.closest('.model-picker-container')) {
+					showModelOverrideModal = false;
+				}
+				// Close target repository picker
+				if (openChip === 'repo' && !target.closest('.repo-picker-container')) {
+					openChip = null;
+				}
+				// Close thread sidebar options menu
+				if (threadMenuOpenFor !== null && !target.closest('.session-menu-container') && !target.closest('[aria-label="Session options"]')) {
+					threadMenuOpenFor = null;
+				}
+			};
+			window.addEventListener('click', handleOutsideClick, { capture: true });
+			return () => window.removeEventListener('click', handleOutsideClick, { capture: true });
+		}
+	});
+
 	// Auto-grow the composer textarea with the draft. Resting state is rows=5
 	// (~140px — a real writing surface, not a snippet). Expands up to roughly
 	// half the viewport (capped 480px) then scrolls internally.
@@ -1107,6 +1132,8 @@
 	function switchRepo(name: string) {
 		selectedRepo = name;
 		openChip = null;
+		localStorage.setItem('chat_selected_repo_v2', name);
+		toasts.add(`Target repository set to ${name}`, 'success');
 	}
 
 	function slugifyThreadName(name: string): string {
@@ -1448,6 +1475,8 @@
 	let sentinelObs: IntersectionObserver | null = null;
 
 	onMount(() => {
+		const cachedRepo = localStorage.getItem('chat_selected_repo_v2');
+		if (cachedRepo) selectedRepo = cachedRepo;
 		void loadTier(activeThread);
 		if (feedContainer && scrollSentinel) {
 			sentinelObs = new IntersectionObserver(
@@ -1646,7 +1675,7 @@
 								</form>
 							{:else}
 								<div
-									class="group flex w-full items-center gap-1 rounded-xl pr-1 transition-all
+									class="group session-menu-container flex w-full items-center gap-1 rounded-xl pr-1 transition-all
 										{activeThread === t.thread_id
 										? 'border border-zinc-700/50 bg-zinc-800/40'
 										: 'border border-transparent hover:bg-zinc-900/40'}
@@ -1694,15 +1723,8 @@
 							{/if}
 
 							{#if threadMenuOpenFor === t.thread_id}
-								<button
-									type="button"
-									class="fixed inset-0 z-40 cursor-default"
-									onclick={() => (threadMenuOpenFor = null)}
-									aria-label="Close menu"
-									tabindex="-1"
-								></button>
 								<div
-									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-800 bg-[#0e0e0e] py-1 shadow-2xl"
+									class="absolute top-full right-0 z-50 mt-1 min-w-40 overflow-hidden rounded-xl border border-zinc-700 bg-[#0e0e0e] py-1 shadow-2xl"
 								>
 									<button
 										type="button"
@@ -1788,7 +1810,7 @@
 			<!-- Context badges dropdown container -->
 			<div class="flex items-center gap-1.5">
 				<!-- Repository selection chip -->
-				<div class="relative">
+				<div class="relative repo-picker-container">
 					<button
 						type="button"
 						onclick={() => (openChip = openChip === 'repo' ? null : 'repo')}
@@ -1801,15 +1823,8 @@
 					</button>
 
 					{#if openChip === 'repo'}
-						<button
-							type="button"
-							class="fixed inset-0 z-40 cursor-default"
-							onclick={() => (openChip = null)}
-							aria-label="Close popover"
-							tabindex="-1"
-						></button>
 						<div
-							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
+							class="absolute top-full right-0 z-50 mt-2 min-w-48 rounded-2xl border border-zinc-700 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
 							<div
 								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
@@ -1821,7 +1836,7 @@
 									type="button"
 									onclick={() => switchRepo(ws.name)}
 									class="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-zinc-900
-										{selectedRepo === ws.name ? 'font-medium text-cyan-400' : 'text-zinc-400'}"
+										{selectedRepo === ws.name ? 'font-medium text-cyan-400' : 'text-zinc-300'}"
 								>
 									<span class="flex items-center gap-2">
 										<span>{ws.emoji}</span>
@@ -1837,7 +1852,7 @@
 				</div>
 
 				<!-- Model Picker Badge -->
-				<div class="relative">
+				<div class="relative model-picker-container">
 					<button
 						type="button"
 						onclick={() => (showModelOverrideModal = !showModelOverrideModal)}
@@ -1855,15 +1870,8 @@
 					</button>
 
 					{#if showModelOverrideModal}
-						<button
-							type="button"
-							class="fixed inset-0 z-40 cursor-default"
-							onclick={() => (showModelOverrideModal = false)}
-							aria-label="Close popover"
-							tabindex="-1"
-						></button>
 						<div
-							class="absolute top-full right-0 z-50 mt-2 min-w-56 rounded-2xl border border-zinc-800 bg-[#0e0e0e] py-1.5 shadow-2xl"
+							class="absolute top-full right-0 z-50 mt-2 min-w-56 rounded-2xl border border-zinc-700 bg-[#0e0e0e] py-1.5 shadow-2xl"
 						>
 							<div
 								class="px-3 py-1 font-mono text-[9px] tracking-wider text-zinc-600 uppercase select-none"
@@ -1875,11 +1883,11 @@
 									type="button"
 									onclick={() => setModelChoice(choice)}
 									class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-900
-										{selectedModelChoice.id === choice.id ? 'font-medium text-purple-400' : 'text-zinc-300'}"
+										{selectedModelChoice.id === choice.id ? 'font-medium text-purple-400' : 'text-zinc-200'}"
 								>
 									<span class="flex flex-col leading-tight">
 										<span class="text-xs">{choice.label}</span>
-										<span class="font-mono text-[9px] text-zinc-500">{choice.sublabel}</span>
+										<span class="font-mono text-[9px] text-zinc-400">{choice.sublabel}</span>
 									</span>
 									{#if selectedModelChoice.id === choice.id}
 										<Check size={11} class="shrink-0" />
@@ -2130,7 +2138,7 @@
 				     intercepts the literal text and runs the command handler. -->
 				{#if slashMode}
 					<div
-						class="mb-1 flex flex-col gap-1 rounded-2xl border border-cyan-500/20 bg-[#0a1416] p-1.5"
+						class="mb-1 flex flex-col gap-1 rounded-2xl border border-zinc-700 bg-[#0e0e0e] p-1.5 shadow-2xl"
 						role="listbox"
 						aria-label="Slash commands"
 					>
@@ -2138,12 +2146,12 @@
 							<button
 								type="button"
 								onclick={() => pickSlash(cmd)}
-								class="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-cyan-500/10"
+								class="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-zinc-900"
 								role="option"
 								aria-selected="false"
 							>
 								<span class="flex flex-col leading-tight">
-									<span class="font-mono text-xs text-cyan-300">{cmd.usage}</span>
+									<span class="font-mono text-xs text-cyan-400">{cmd.usage}</span>
 									<span class="text-[10px] text-zinc-400">{cmd.description}</span>
 								</span>
 							</button>

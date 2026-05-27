@@ -13,13 +13,20 @@ const { subscribe, update } = writable<Toast[]>([]);
 
 export const toasts = {
 	subscribe,
-	add: (message: string, type: ToastType = 'info', duration = 3000) => {
+	add: (message: string, type: ToastType = 'info', duration?: number) => {
 		const id = crypto.randomUUID();
-		update((all) => [{ id, message, type, duration }, ...all]);
-		if (duration > 0) {
+		const defaultDuration = type === 'error' ? 8000 : 5000;
+		const actualDuration = duration !== undefined ? duration : defaultDuration;
+
+		update((all) => {
+			const next = [{ id, message, type, duration: actualDuration }, ...all];
+			return next.slice(0, 3);
+		});
+
+		if (actualDuration > 0) {
 			setTimeout(() => {
 				toasts.remove(id);
-			}, duration);
+			}, actualDuration);
 		}
 	},
 	remove: (id: string) => {
