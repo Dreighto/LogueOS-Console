@@ -76,15 +76,17 @@
 		};
 	});
 
-	// ── Header style (chat surface only) ────────────────────────────────────
+	// ── Header style (chat surfaces only) ───────────────────────────────────
 	// page.url.pathname includes the SvelteKit paths.base ('/console'), so we
 	// compare against the full path. Two modes:
-	//   'immersive' — /chat: full-bleed, NO global chrome at all. The page
-	//                 owns its own viewport (Conversational OS surface).
+	//   'immersive' — /chat and /chat/preview: full-bleed, NO global chrome
+	//                 at all. The page owns its own viewport.
 	//   'full'      — everything else.
 	// .endsWith() is defensive against future base changes.
 	const headerStyle = $derived(
-		page.url.pathname.endsWith('/chat') ? 'immersive' : 'full'
+		page.url.pathname.endsWith('/chat') || page.url.pathname.endsWith('/chat/preview')
+			? 'immersive'
+			: 'full'
 	);
 
 	// ── View transitions ─────────────────────────────────────────────────────
