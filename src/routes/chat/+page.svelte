@@ -2156,13 +2156,21 @@
 				     Conditions: a send is in flight AND the most recent message
 				     in the feed is from the operator (i.e. we're between their
 				     send and the LLM's response landing). -->
-				{#if sending && messages.length > 0 && messages[messages.length - 1].sender === 'operator'}
+				<!-- Thinking dots indicator. Renders during the gap between operator
+				     send and first LLM token arriving — that is, when there's a
+				     stream placeholder bubble whose text is still empty. Pre-2b.2
+				     the trigger was "last message is operator", but the SDK
+				     cutover now inserts an optimistic assistant placeholder
+				     immediately on send so the old check never fires. We instead
+				     gate on streamState (set when a stream starts) AND the
+				     placeholder message text being empty (no tokens yet). -->
+				{#if streamState && messages.find((m) => m.id === streamState!.placeholderId)?.message === ''}
 					<div class="flex flex-col items-start gap-1">
 						<div
 							class="mb-1.5 flex w-fit items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-950/20 px-2 py-0.5 font-mono text-[10px] font-medium tracking-wider text-cyan-400 uppercase select-none"
 						>
 							<Sparkles size={10} class="shrink-0 text-cyan-400" />
-							<span>AGY</span>
+							<span>{providerOverride === 'anthropic' ? 'CC' : 'AGY'}</span>
 						</div>
 						<div
 							class="flex items-center gap-1.5 rounded-2xl border border-zinc-900 bg-zinc-950/40 px-4 py-3.5"
