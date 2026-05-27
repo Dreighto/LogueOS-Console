@@ -53,13 +53,17 @@
 		}
 	}
 
-	// Auto-grow the composer textarea with the draft.
+	// Auto-grow the composer textarea with the draft. Resting state is one
+	// line (~40px — feels like a real input, not an essay). Grows up to
+	// ~480px before scrolling internally; matches mobile messaging defaults.
+	const COMPOSER_MIN_PX = 40;
+	const COMPOSER_MAX_PX = 480;
 	$effect(() => {
 		const _ = input;
 		void _;
 		if (!textareaEl) return;
 		textareaEl.style.height = 'auto';
-		const target = Math.min(Math.max(textareaEl.scrollHeight, 80), 480);
+		const target = Math.min(Math.max(textareaEl.scrollHeight, COMPOSER_MIN_PX), COMPOSER_MAX_PX);
 		textareaEl.style.height = `${target}px`;
 	});
 
@@ -192,7 +196,7 @@
 				bind:this={textareaEl}
 				bind:value={input}
 				onkeypress={handleKey}
-				rows="2"
+				rows="1"
 				placeholder={chat.status === 'error'
 					? 'Last send failed — try again'
 					: chat.status === 'streaming'
@@ -203,7 +207,7 @@
 				spellcheck="false"
 				disabled={chat.status === 'streaming' || chat.status === 'submitted'}
 				class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
-				style="min-height: 80px; max-height: 480px;"
+				style="min-height: 40px; max-height: 480px;"
 				data-testid="composer"
 			></textarea>
 
