@@ -41,6 +41,7 @@
 	} from 'lucide-svelte';
 	import { toasts } from '$lib/utils/toasts';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import Canvas from '$lib/components/Canvas.svelte';
 
 	let { data } = $props();
 
@@ -220,6 +221,16 @@
 		text?: string;
 	};
 	let attachments = $state<Attachment[]>([]);
+
+	// Canvas (Artifacts) side panel — PR A of #20 epic. View-only for now;
+	// multi-tab + persistence land in follow-up PRs.
+	let canvasArtifact = $state<{ code: string; language: string } | null>(null);
+	function openCanvas(code: string, language: string) {
+		canvasArtifact = { code, language };
+	}
+	function closeCanvas() {
+		canvasArtifact = null;
+	}
 	const PASTE_TO_ATTACHMENT_THRESHOLD = 5000;
 
 	// Scroll state
@@ -2250,7 +2261,7 @@
 							{#if m.sender === 'operator'}
 								<span class="whitespace-pre-wrap">{m.message}</span>
 							{:else}
-								<Markdown content={m.message} />
+								<Markdown content={m.message} oncanvas={openCanvas} />
 							{/if}
 						</div>
 
@@ -2724,6 +2735,14 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if canvasArtifact}
+	<Canvas
+		code={canvasArtifact.code}
+		language={canvasArtifact.language}
+		onclose={closeCanvas}
+	/>
 {/if}
 
 <style>

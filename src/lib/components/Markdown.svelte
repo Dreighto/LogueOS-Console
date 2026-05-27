@@ -80,7 +80,7 @@
 				}
 				const cls = lang ? `language-${lang}` : '';
 				const langLabel = lang ? lang : '';
-				return `<div class="md-codeblock-wrap"><div class="md-codeblock-bar"><span class="md-codeblock-lang">${langLabel}</span><button type="button" class="md-codeblock-copy" aria-label="Copy code"><span class="md-copy-icon" aria-hidden="true">📋</span><span class="md-copy-label">Copy</span></button></div><pre class="md-codeblock"><code class="hljs ${cls}">${body}</code></pre></div>`;
+				return `<div class="md-codeblock-wrap" data-lang="${escapeHtml(lang)}"><div class="md-codeblock-bar"><span class="md-codeblock-lang">${langLabel}</span><div class="md-codeblock-actions"><button type="button" class="md-codeblock-canvas" aria-label="Open in canvas"><span class="md-canvas-icon" aria-hidden="true">⌧</span><span class="md-canvas-label">Canvas</span></button><button type="button" class="md-codeblock-copy" aria-label="Copy code"><span class="md-copy-icon" aria-hidden="true">📋</span><span class="md-copy-label">Copy</span></button></div></div><pre class="md-codeblock"><code class="hljs ${cls}">${body}</code></pre></div>`;
 			}
 		}
 	});
@@ -94,7 +94,15 @@
 			.replace(/'/g, '&#39;');
 	}
 
-	let { content, inline = false }: { content: string; inline?: boolean } = $props();
+	let {
+		content,
+		inline = false,
+		oncanvas
+	}: {
+		content: string;
+		inline?: boolean;
+		oncanvas?: (code: string, language: string) => void;
+	} = $props();
 
 	let rendered = $state('');
 	let mounted = $state(false);
@@ -132,6 +140,24 @@
 		} catch {
 			/* clipboard unavailable */
 		}
+	}
+
+	// Canvas button — opens the code block in the side panel via the
+	// `oncanvas` callback. Same delegation pattern as Copy; the callback is
+	// optional, so chat surfaces that don't wire it stay silent (no error).
+	function handleContainerClick(e: Event) {
+		const target = e.target as HTMLElement | null;
+		const canvasBtn = target?.closest('.md-codeblock-canvas') as HTMLButtonElement | null;
+		if (canvasBtn && containerEl?.contains(canvasBtn)) {
+			const wrap = canvasBtn.closest('.md-codeblock-wrap') as HTMLElement | null;
+			const code = wrap?.querySelector('pre.md-codeblock code');
+			const text = code?.textContent ?? '';
+			const lang = wrap?.dataset.lang || '';
+			if (text && oncanvas) oncanvas(text, lang);
+			return;
+		}
+		// Fall through to Copy if not Canvas.
+		void handleCopyClick(e);
 	}
 
 	$effect(() => {
@@ -186,7 +212,8 @@
 				'alt',
 				'type',
 				'aria-label',
-				'aria-hidden'
+				'aria-hidden',
+				'data-lang'
 			],
 			ADD_ATTR: ['target'],
 			// Force all links to open in a new tab safely.
@@ -199,7 +226,7 @@
 	<div
 		bind:this={containerEl}
 		class="md-content {inline ? 'md-inline' : ''}"
-		onclick={handleCopyClick}
+		onclick={handleContainerClick}
 		role="presentation"
 	>
 		{@html rendered}
@@ -272,6 +299,35 @@
 	}
 	.md-content :global(.md-codeblock-lang) {
 		color: rgb(255 255 255 / 0.35);
+	}
+	.md-content :global(.md-codeblock-actions) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.md-content :global(.md-codeblock-canvas) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.15rem 0.4rem;
+		background: transparent;
+		border: 1px solid rgb(168 85 247 / 0.25);
+		border-radius: 0.25rem;
+		color: rgb(216 180 254);
+		font-family: inherit;
+		font-size: inherit;
+		letter-spacing: inherit;
+		text-transform: inherit;
+		cursor: pointer;
+		transition:
+			background 120ms,
+			color 120ms,
+			border-color 120ms;
+	}
+	.md-content :global(.md-codeblock-canvas:hover) {
+		background: rgb(168 85 247 / 0.12);
+		color: rgb(233 213 255);
+		border-color: rgb(168 85 247 / 0.5);
 	}
 	.md-content :global(.md-codeblock-copy) {
 		display: inline-flex;
