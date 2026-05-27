@@ -18,6 +18,7 @@
 	// replacing the legacy custom-streaming code, and deletes the preview.
 
 	import { Chat } from '@ai-sdk/svelte';
+	import { DefaultChatTransport } from 'ai';
 	import { resolve } from '$app/paths';
 	import { Send, ArrowLeft, Sparkles, AlertTriangle } from 'lucide-svelte';
 
@@ -28,9 +29,13 @@
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
 	let scrollSentinel = $state<HTMLDivElement | null>(null);
 
+	// SDK 6 Chat class does NOT accept `api`/`body` shorthand at the top
+	// level — those keys are silently ignored. Use DefaultChatTransport.
 	const chat = new Chat({
-		api: resolve('/api/chat/sdk-stream'),
-		body: () => ({ provider })
+		transport: new DefaultChatTransport({
+			api: resolve('/api/chat/sdk-stream'),
+			body: () => ({ provider })
+		})
 	});
 
 	function handleSubmit(event: SubmitEvent) {

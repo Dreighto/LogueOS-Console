@@ -10,10 +10,12 @@
 	//   - Dedicated collapsible left sidebar for threads & pinned sessions.
 	//   - 100% wired controls (Mic dictation, Paperclip uploads, Sparkles image mode, Talkback loop).
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { base, resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { Chat } from '@ai-sdk/svelte';
+	import { DefaultChatTransport } from 'ai';
 	import {
 		Send,
 		Mic,
@@ -164,6 +166,33 @@
 	let scrollSentinel = $state<HTMLDivElement | null>(null);
 	let textareaEl = $state<HTMLTextAreaElement | null>(null);
 	let fileInputEl = $state<HTMLInputElement | null>(null);
+
+	// SDK chat instance — handles streaming sends through /api/chat/sdk-stream.
+	// PR 2b.2 (this commit) uses it for the conversational happy path only.
+	// Dispatch (@cc/@agy), image-gen, and slash commands still go through the
+	// legacy non-streaming /api/chat. PR 2b.3 deletes the legacy stream path.
+	// Server assembles context from chat_messages DB on each request, so the
+	// SDK chat.messages is just a streaming pipe — reset between sends.
+	//
+	// IMPORTANT: SDK 6's Chat class does NOT accept `api`/`body` shorthand at
+	// the top level (those are ignored silently — caused PR 2b.2 first-run
+	// bug where sends went to the default `/api/chat`, not `/console/api/chat/
+	// sdk-stream`). Use `DefaultChatTransport` instead.
+	const sdkChat = new Chat({
+		transport: new DefaultChatTransport({
+			api: resolve('/api/chat/sdk-stream'),
+			body: () => ({
+				thread: activeThread,
+				target_repo: selectedRepo,
+				provider:
+					providerOverride === 'gemini' ? 'google' : providerOverride ?? undefined
+			})
+		})
+	});
+	// The placeholder bubble's id while a stream is active — null when idle.
+	// Used by the $effect below to mirror chat.messages into the local
+	// `messages` feed so the rest of the surface keeps a single render path.
+	let streamPlaceholderId = $state<number | null>(null);
 
 	// Pending attachments — uploads stage here as removable chips above the
 	// composer rather than getting injected as markdown into the textarea.
@@ -344,6 +373,13 @@
 		// exact symptom the operator reported: "old thread shows up instead
 		// of a clean slate."
 		const requestedThread = forThread ?? activeThread;
+		// Skip the reconciliation while an SDK stream is in flight — the
+		// placeholder bubble's partial text would get wiped by the DB-driven
+		// replacement (which doesn't yet contain the streaming reply). The
+		// stream's own finally{} block calls pollMessages once after the
+		// stream completes, so the canonical row lands then. Audit 2026-05-27
+		// caught this race live as "operator's send disappears from the UI".
+		if (streamPlaceholderId !== null && requestedThread === activeThread) return;
 		try {
 			const r = await fetch(
 				resolve('/api/chat') + `?thread=${encodeURIComponent(requestedThread)}`
@@ -576,6 +612,36 @@
 	// server persists the final assembled reply to DB before closing the
 	// stream, so pollMessages() at the end reconciles the optimistic bubble
 	// with the persisted row (replaces it with the canonical numeric-id row).
+	// Mirror SDK chat's streaming text into the placeholder bubble so the rest
+	// of the chat surface keeps a single render path off `messages`. While a
+	// stream is active, the last assistant message in chat.messages carries
+	// the in-progress reply — copy its text into the local placeholder row.
+	//
+	// Wrap the messages-write in untrack(): reading `messages` inside the
+	// effect would self-trigger every time we write, blowing up Svelte's
+	// effect_update_depth_exceeded guard. We only want the effect to re-run
+	// when sdkChat.messages changes, not when our own write lands.
+	$effect(() => {
+		if (streamPlaceholderId === null) return;
+		const list = sdkChat.messages;
+		const lastIdx = list.length - 1;
+		if (lastIdx < 0) return;
+		const last = list[lastIdx];
+		if (last.role !== 'assistant') return;
+		const txt = (last.parts || [])
+			.filter((p) => p.type === 'text')
+			.map((p) => (p as { type: 'text'; text: string }).text)
+			.join('');
+		if (!txt) return;
+		const id = streamPlaceholderId;
+		untrack(() => {
+			messages = messages.map((m) => (m.id === id ? { ...m, message: txt } : m));
+		});
+		if (userAtBottom) {
+			queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
+		}
+	});
+
 	async function runStreamingSend(messageBody: string) {
 		const STREAM_ID = Date.now() + 1; // distinct from the operator optimistic id
 		// Insert an empty placeholder; tokens will append. With this bubble
@@ -589,75 +655,37 @@
 				timestamp: new Date().toISOString()
 			}
 		];
+		streamPlaceholderId = STREAM_ID;
 
-		let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+		// Reset SDK chat history before each send — the server assembles the
+		// real context from chat_messages DB. We use sdkChat strictly as a
+		// streaming transport, not a context store. Without the reset, each
+		// send would carry the previous SDK turns as duplicate body.messages.
+		// (@ai-sdk/svelte exposes `messages` as a direct setter, not a
+		// setMessages() method — that's react-only.)
+		sdkChat.messages = [];
+
 		let errored = false;
-		let streamCompleteOk = false;
-
 		try {
-			const resp = await fetch(resolve('/api/chat/stream'), {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					message: messageBody,
-					thread: activeThread,
-					target_repo: selectedRepo
-				})
-			});
-			if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
-
-			reader = resp.body.getReader();
-			const decoder = new TextDecoder('utf-8');
-			let buf = '';
-			let assembled = '';
-
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done) {
-					streamCompleteOk = true;
-					break;
-				}
-				buf += decoder.decode(value, { stream: true });
-				let sep: number;
-				while ((sep = buf.indexOf('\n\n')) !== -1) {
-					const raw = buf.slice(0, sep);
-					buf = buf.slice(sep + 2);
-					const dataLine = raw.split('\n').find((l) => l.startsWith('data: '));
-					if (!dataLine) continue;
-					try {
-						const evt = JSON.parse(dataLine.slice(6)) as
-							| { type: 'token'; text: string }
-							| { type: 'done'; provider_used: string; model_used: string }
-							| { type: 'error'; message: string };
-						if (evt.type === 'token') {
-							assembled += evt.text;
-							messages = messages.map((m) => (m.id === STREAM_ID ? { ...m, message: assembled } : m));
-							if (userAtBottom) {
-								queueMicrotask(() => scrollSentinel?.scrollIntoView({ behavior: 'smooth' }));
-							}
-						} else if (evt.type === 'done') {
-							upsertThreadTier_local(evt.model_used);
-						} else if (evt.type === 'error') {
-							errored = true;
-							toasts.add(`LLM stream failed: ${evt.message}`, 'error');
-							messages = messages.map((m) =>
-								m.id === STREAM_ID ? { ...m, message: `⚠️ ${evt.message}` } : m
-							);
-						}
-					} catch {
-						/* skip malformed */
-					}
-				}
-			}
+			await sdkChat.sendMessage({ text: messageBody });
+		} catch (err) {
+			errored = true;
+			const msg = err instanceof Error ? err.message : 'unknown';
+			toasts.add(`LLM stream failed: ${msg}`, 'error');
+			messages = messages.map((m) =>
+				m.id === STREAM_ID ? { ...m, message: `⚠️ ${msg}` } : m
+			);
 		} finally {
-			if (reader) reader.cancel().catch(() => {});
-			if (errored || !streamCompleteOk) {
+			streamPlaceholderId = null;
+			if (errored) {
 				messages = messages.filter((m) => m.id !== STREAM_ID);
 			}
 		}
 
-		// Reconcile against the persisted DB state.
-		await pollMessages();
+		// Reconcile against the persisted DB state — the SDK endpoint's
+		// onFinish callback wrote the assistant row before closing the stream,
+		// so pollMessages picks up the canonical numeric-id row and the
+		// optimistic STREAM_ID placeholder gets replaced.
 		if (!errored) {
 			// pollMessages replaces the messages array from DB; the optimistic
 			// STREAM_ID row should now be gone (DB has the canonical row).
