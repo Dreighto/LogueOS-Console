@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 18767;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+// Console mounts at /console/ via kit.paths.base — root returns 404. Probe
+// the real mount point so reuseExistingServer works when the Console is
+// already running; otherwise webServer tries to spawn its own and the port
+// bind collides.
+const HEALTH_URL = `${BASE_URL}/console/`;
 
 export default defineConfig({
 	testDir: './tests/e2e',
@@ -32,7 +37,7 @@ export default defineConfig({
 	],
 	webServer: {
 		command: 'npm run dev',
-		url: BASE_URL,
+		url: HEALTH_URL,
 		reuseExistingServer: !process.env.CI,
 		timeout: 60_000,
 		stdout: 'pipe',
