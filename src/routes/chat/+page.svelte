@@ -145,7 +145,12 @@
 	let talkbackAudioCtx: AudioContext | null = null;
 	let talkbackProcessor: ScriptProcessorNode | null = null;
 	let talkbackWakeLock: WakeLockSentinel | null = null;
-	let talkbackWs: WebSocket | null = null;
+	// WebSocket path removed — talkback now uses Web Speech API (primary) or
+	// MediaRecorder → async AssemblyAI (fallback). Both work with/without headphones
+	// via browser echo cancellation. AssemblyAI realtime token endpoint returns 404
+	// on the current plan as of 2026-05-28.
+	let talkbackRecorder: MediaRecorder | null = null;
+	let talkbackRecognition: SpeechRecognition | null = null;
 	let talkbackTranscriptBuffer = '';
 	let talkbackTtsAbortController: AbortController | null = null;
 	let talkbackDispatchMsgId: number | null = null;
@@ -942,13 +947,12 @@
 		talkbackProcessor = null;
 		talkbackAudioCtx?.close().catch(() => {});
 		talkbackAudioCtx = null;
-		if (talkbackWs && talkbackWs.readyState === WebSocket.OPEN) {
-			try {
-				talkbackWs.send(JSON.stringify({ terminate_session: true }));
-			} catch {}
-			talkbackWs.close();
+		talkbackRecognition?.abort();
+		talkbackRecognition = null;
+		if (talkbackRecorder && talkbackRecorder.state !== 'inactive') {
+			try { talkbackRecorder.stop(); } catch { /* already stopped */ }
 		}
-		talkbackWs = null;
+		talkbackRecorder = null;
 	}
 
 	async function stopTalkback(reason?: string) {
@@ -1003,120 +1007,62 @@
 		talkbackTranscriptBuffer = '';
 
 		try {
-			talkbackStream = await navigator.mediaDevices.getUserMedia({
-				audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
-			});
+			// Primary path: Web Speech API — browser-native, no API cost, works with
+			// or without headphones (device echo cancellation handles speaker feedback).
+			// Available on iOS Safari 14.5+, Chrome, Edge. Falls back to MediaRecorder
+			// + async AssemblyAI transcription on unsupported browsers.
+			const SpeechRecognitionCtor =
+				(typeof window !== 'undefined') &&
+				(
+					(window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
+					(window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition
+				);
 
-			talkbackStream.getTracks().forEach((track) => {
-				track.onended = () => {
-					if (talkbackActive) {
-						void stopTalkback('Microphone disconnected — Talkback stopped');
-					}
-				};
-			});
+			if (SpeechRecognitionCtor) {
+				const recognition = new SpeechRecognitionCtor();
+				talkbackRecognition = recognition;
+				recognition.continuous = false;
+				recognition.interimResults = false;
+				recognition.lang = 'en-US';
+				recognition.maxAlternatives = 1;
 
-			const tokenResp = await fetch(resolve('/api/chat/transcribe/stream'));
-			if (!tokenResp.ok) {
-				if (tokenResp.status === 429) {
-					await stopTalkback('STT daily cap reached — Talkback stopped');
-					return;
-				}
-				throw new Error(`Token fetch ${tokenResp.status}`);
-			}
-			const { ws_url } = (await tokenResp.json()) as { token: string; ws_url: string };
-
-			talkbackAudioCtx = new AudioContext({ sampleRate: 16000 });
-			const source = talkbackAudioCtx.createMediaStreamSource(talkbackStream);
-
-			const bufferSize = 4096;
-			talkbackProcessor = talkbackAudioCtx.createScriptProcessor(bufferSize, 1, 1);
-			source.connect(talkbackProcessor);
-			talkbackProcessor.connect(talkbackAudioCtx.destination);
-
-			talkbackWs = new WebSocket(ws_url);
-			talkbackWs.binaryType = 'arraybuffer';
-
-			let captureEndResolve: (() => void) | null = null;
-			const capturePromise = new Promise<void>((res) => {
-				captureEndResolve = res;
-			});
-			let captureTimeout: ReturnType<typeof setTimeout> | null = null;
-			let localSilenceStart: number | null = null;
-			let wsReady = false;
-
-			talkbackWs.onopen = () => {
-				wsReady = true;
-				captureTimeout = setTimeout(() => {
-					captureEndResolve?.();
-				}, TALKBACK_MAX_CAPTURE_MS);
-			};
-
-			talkbackWs.onmessage = (event) => {
-				try {
-					const msg = JSON.parse(event.data as string) as {
-						message_type: string;
-						text?: string;
+				const heardText = await new Promise<string>((res) => {
+					let settled = false;
+					const finish = (t: string) => { if (!settled) { settled = true; res(t); } };
+					// Max capture guard
+					const maxTimer = setTimeout(() => finish(''), TALKBACK_MAX_CAPTURE_MS);
+					recognition.onresult = (e: SpeechRecognitionEvent) => {
+						clearTimeout(maxTimer);
+						finish(e.results[0][0].transcript);
 					};
-					if (msg.message_type === 'FinalTranscript' && msg.text?.trim()) {
-						talkbackTranscriptBuffer += (talkbackTranscriptBuffer ? ' ' : '') + msg.text.trim();
-						const lower = msg.text.toLowerCase();
-						if (lower.includes('stop talkback') || lower.includes('cancel talkback')) {
-							void stopTalkback('Stop word detected — Talkback stopped');
-							captureEndResolve?.();
-						}
-					}
-				} catch {}
-			};
+					recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+						clearTimeout(maxTimer);
+						// 'no-speech' and 'aborted' are not errors — just an empty turn
+						finish('');
+					};
+					recognition.onend = () => { clearTimeout(maxTimer); finish(''); };
+					recognition.start();
+				});
 
-			talkbackWs.onerror = () => captureEndResolve?.();
-			talkbackWs.onclose = () => captureEndResolve?.();
+				talkbackRecognition = null;
+				talkbackTranscriptBuffer = heardText;
+			} else {
+				// Fallback: MediaRecorder + VAD silence detection + async AssemblyAI
+				await beginTalkbackCaptureViaMediaRecorder();
+			}
 
-			talkbackProcessor.onaudioprocess = (e) => {
-				if (!talkbackActive) return;
-				const inputData = e.inputBuffer.getChannelData(0);
-
-				let sum = 0;
-				for (let i = 0; i < inputData.length; i++) {
-					sum += inputData[i] * inputData[i];
-				}
-				const rms = Math.sqrt(sum / inputData.length);
-				const now = Date.now();
-
-				if (rms < TALKBACK_SILENCE_THRESHOLD) {
-					if (localSilenceStart === null) localSilenceStart = now;
-					const silenceDur = now - localSilenceStart;
-					continuousSilenceMs += (inputData.length / 16000) * 1000;
-
-					if (continuousSilenceMs >= TALKBACK_SILENCE_AUTOSTOP_MS) {
-						void stopTalkback('3 minutes of silence — Talkback auto-stopped');
-						captureEndResolve?.();
-						return;
-					}
-					if (silenceDur >= TALKBACK_SILENCE_GATE_MS && talkbackTranscriptBuffer.trim()) {
-						captureEndResolve?.();
-					}
-				} else {
-					localSilenceStart = null;
-					continuousSilenceMs = 0;
-				}
-
-				if (wsReady && talkbackWs?.readyState === WebSocket.OPEN) {
-					const pcm16 = new Int16Array(inputData.length);
-					for (let i = 0; i < inputData.length; i++) {
-						pcm16[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
-					}
-					talkbackWs.send(pcm16.buffer);
-				}
-			};
-
-			await capturePromise;
-			if (captureTimeout) clearTimeout(captureTimeout);
-
-			talkbackStopCapture();
 			if (!talkbackActive) return;
+
+			// Stop-word check
+			const lower = talkbackTranscriptBuffer.toLowerCase();
+			if (lower.includes('stop talkback') || lower.includes('cancel talkback')) {
+				await stopTalkback('Stop word detected — Talkback stopped');
+				return;
+			}
 
 			const text = talkbackTranscriptBuffer.trim();
 			if (!text) {
+				// Nothing heard — loop immediately
 				void beginTalkbackCapture();
 				return;
 			}
@@ -1133,6 +1079,87 @@
 			toasts.add('Talkback error — retrying', 'error');
 			if (talkbackActive) await pSleep(500).then(() => beginTalkbackCapture());
 		}
+	}
+
+	// MediaRecorder fallback for browsers without Web Speech API.
+	// Records audio into chunks, uses a ScriptProcessor for VAD (silence
+	// detection), then POSTs the blob to the async AssemblyAI transcription
+	// endpoint when a pause is detected. Works the same with/without headphones.
+	async function beginTalkbackCaptureViaMediaRecorder() {
+		talkbackStream = await navigator.mediaDevices.getUserMedia({
+			audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+		});
+		talkbackStream.getTracks().forEach((track) => {
+			track.onended = () => {
+				if (talkbackActive) void stopTalkback('Microphone disconnected — Talkback stopped');
+			};
+		});
+
+		const chunks: BlobPart[] = [];
+		const recorder = new MediaRecorder(talkbackStream);
+		talkbackRecorder = recorder;
+		recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+		// VAD via ScriptProcessor
+		talkbackAudioCtx = new AudioContext({ sampleRate: 16000 });
+		const source = talkbackAudioCtx.createMediaStreamSource(talkbackStream);
+		talkbackProcessor = talkbackAudioCtx.createScriptProcessor(4096, 1, 1);
+		source.connect(talkbackProcessor);
+		talkbackProcessor.connect(talkbackAudioCtx.destination);
+
+		let silenceStart: number | null = null;
+		let hasVoice = false;
+
+		await new Promise<void>((resolve) => {
+			const maxTimer = setTimeout(resolve, TALKBACK_MAX_CAPTURE_MS);
+
+			talkbackProcessor!.onaudioprocess = (e) => {
+				if (!talkbackActive) { clearTimeout(maxTimer); resolve(); return; }
+				const data = e.inputBuffer.getChannelData(0);
+				let sum = 0;
+				for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+				const rms = Math.sqrt(sum / data.length);
+				const now = Date.now();
+
+				if (rms >= TALKBACK_SILENCE_THRESHOLD) {
+					silenceStart = null;
+					hasVoice = true;
+					continuousSilenceMs = 0;
+				} else {
+					if (silenceStart === null) silenceStart = now;
+					continuousSilenceMs += (data.length / 16000) * 1000;
+					if (continuousSilenceMs >= TALKBACK_SILENCE_AUTOSTOP_MS) {
+						void stopTalkback('3 minutes of silence — Talkback auto-stopped');
+						clearTimeout(maxTimer);
+						resolve();
+						return;
+					}
+					if (hasVoice && silenceStart !== null && now - silenceStart >= TALKBACK_SILENCE_GATE_MS) {
+						clearTimeout(maxTimer);
+						resolve();
+					}
+				}
+			};
+			recorder.start(100);
+		});
+
+		talkbackStopCapture();
+
+		if (!hasVoice || !talkbackActive || chunks.length === 0) return;
+
+		talkbackPhase = 'transcribe';
+		const blob = new Blob(chunks, { type: 'audio/webm' });
+		const fd = new FormData();
+		fd.append('file', blob, 'talkback.webm');
+
+		const resp = await fetch(resolve('/api/chat/transcribe'), { method: 'POST', body: fd });
+		if (resp.ok) {
+			const data = await resp.json() as { text?: string };
+			talkbackTranscriptBuffer = data.text ?? '';
+		} else if (resp.status === 429) {
+			await stopTalkback('STT daily cap reached — Talkback stopped');
+		}
+		// Other errors fall through — talkbackTranscriptBuffer stays '' → loops silently
 	}
 
 	async function dispatchTalkback(text: string) {

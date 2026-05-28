@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			authorization: apiKey,
 			'content-type': 'application/json'
 		},
-		body: JSON.stringify({ audio_url: upload_url })
+		body: JSON.stringify({ audio_url: upload_url, speech_models: ['universal-2'] })
 	});
 	if (!submitRes.ok) {
 		const body = await submitRes.text();
