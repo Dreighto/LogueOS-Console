@@ -35,6 +35,8 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { addChatMessage, getChatMessages, listChatThreads } from '$lib/server/chat';
+import { streamViaClaudeCLI } from '$lib/server/claude_cli_stream';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { classifyTier, type Tier } from '$lib/server/phase_classifier';
 import { getThreadState, upsertThreadTier } from '$lib/server/thread_state';
 import { touchLastActivity, upsertThreadMeta } from '$lib/server/thread_meta';
@@ -172,15 +174,40 @@ const TIER_MODELS: Record<Tier, Record<Provider, string>> = {
 	}
 };
 
-function getAnthropicAuth(): { authToken?: string; apiKey?: string } {
-	const oauth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-	if (oauth) return { authToken: oauth };
-	const apiKey =
+function getAnthropicApiKey(): string {
+	return (
 		process.env.LOGUEOS_ROUTING_KEY ||
 		process.env.MIRU_ROUTING_KEY ||
 		process.env.ANTHROPIC_API_KEY ||
-		'';
+		''
+	);
+}
+
+function getAnthropicOAuth(): string | undefined {
+	return process.env.CLAUDE_CODE_OAUTH_TOKEN || undefined;
+}
+
+/**
+ * Route auth based on the model. Anthropic's Claude Max OAuth token only
+ * grants API-style access to Haiku (and a subset of legacy models). Sonnet
+ * and Opus over the Max OAuth path return 429 rate_limit_error with
+ * `"message":"Error"` — that's NOT a real rate limit; it's Anthropic's
+ * mislabel for "wrong auth tier for this model". Verified 2026-05-27 with
+ * the operator at 6% of 5h / 25% of weekly quota.
+ *
+ * Sealed routing (operator directive — no band-aids):
+ *   Haiku  → OAuth-first (free Max quota), API-key fallback
+ *   Sonnet → API key only (billed)
+ *   Opus   → API key only (billed)
+ */
+function getAnthropicAuthForModel(modelId: string): { authToken?: string; apiKey?: string } {
+	const isHaiku = /haiku/i.test(modelId);
+	const oauth = getAnthropicOAuth();
+	const apiKey = getAnthropicApiKey();
+
+	if (isHaiku && oauth) return { authToken: oauth };
 	if (apiKey) return { apiKey };
+	if (oauth) return { authToken: oauth }; // last-resort fallback
 	return {};
 }
 
@@ -191,9 +218,11 @@ function getGoogleKey(): string {
 function pickModel(provider: Provider, tier: Tier, requestedModel?: string) {
 	const modelId = requestedModel || TIER_MODELS[tier][provider];
 	if (provider === 'anthropic') {
-		const auth = getAnthropicAuth();
+		const auth = getAnthropicAuthForModel(modelId);
 		if (!auth.authToken && !auth.apiKey) {
-			throw new Error('Anthropic credential unavailable');
+			throw new Error(
+				`Anthropic credential unavailable for ${modelId}. Sonnet/Opus require ANTHROPIC_API_KEY; Haiku also accepts CLAUDE_CODE_OAUTH_TOKEN.`
+			);
 		}
 		return { model: createAnthropic(auth)(modelId), modelId };
 	}
@@ -358,6 +387,79 @@ export const POST: RequestHandler = async ({ request }) => {
 	const tierImpliesLocal: Provider | null = currentTier === 'local' ? 'local' : null;
 	const provider: Provider = body.provider ?? overrideFromState ?? tierImpliesLocal ?? 'google';
 
+	// Resolve the model id up-front so we can decide between the direct API
+	// route and the Claude CLI bridge. Anthropic's Claude Max OAuth only
+	// grants direct API access to Haiku — Sonnet/Opus return 429 with a
+	// mislabel'd "rate_limit_error". The CLI binary is the authorized client
+	// that CAN reach Sonnet/Opus through OAuth. Operator directive 2026-05-27:
+	// "use the CLI bridge, do NOT prompt for a billed API key — defeats the
+	// purpose of paying for Max." So Sonnet/Opus ALWAYS route through CLI
+	// regardless of any API-key env presence.
+	const resolvedModelId = body.model || TIER_MODELS[currentTier][provider];
+	const useClaudeCLI = provider === 'anthropic' && /sonnet|opus/i.test(resolvedModelId);
+
+	const systemPrompt = buildSystemPrompt({ targetRepo, currentTier, threadId });
+
+	// ─── CLI bridge path (Sonnet/Opus over OAuth) ────────────────────────
+	if (useClaudeCLI) {
+		const senderLabel = 'cc' as const;
+		const stream = createUIMessageStream({
+			execute: async ({ writer }) => {
+				const messageId = generateId();
+				const textId = '0';
+				writer.write({ type: 'start', messageId });
+				writer.write({ type: 'start-step' });
+				writer.write({ type: 'text-start', id: textId });
+
+				// Flatten the conversation into a single text prompt for the
+				// stateless CLI. The CLI doesn't see prior turns otherwise.
+				const transcript = messages
+					.map((m) => {
+						const role = m.role === 'assistant' ? 'assistant' : 'user';
+						const text = (m.parts || [])
+							.filter((p) => p.type === 'text')
+							.map((p) => (p as { type: 'text'; text: string }).text)
+							.join('');
+						return text ? `[${role}]: ${text}` : '';
+					})
+					.filter(Boolean)
+					.join('\n\n');
+
+				let collected = '';
+				for await (const chunk of streamViaClaudeCLI({
+					model: resolvedModelId,
+					systemPrompt,
+					userPrompt: transcript || 'hello'
+				})) {
+					if (chunk.type === 'text-delta') {
+						collected += chunk.delta;
+						writer.write({ type: 'text-delta', id: textId, delta: chunk.delta });
+					} else if (chunk.type === 'error') {
+						writer.write({ type: 'error', errorText: chunk.message });
+					}
+					// 'finish' falls through to the writer.write below
+				}
+
+				writer.write({ type: 'text-end', id: textId });
+				writer.write({ type: 'finish-step' });
+				writer.write({ type: 'finish', finishReason: 'stop' });
+
+				// Persist the assistant reply mirroring the streamText onFinish path.
+				if (collected) {
+					addChatMessage(senderLabel, collected, null, null, null, 'sent', threadId);
+				}
+				upsertThreadTier(threadId, currentTier, resolvedModelId);
+				touchLastActivity(threadId);
+			},
+			onError: (error: unknown) => {
+				const m = (error as { message?: string })?.message || 'cli_stream_error';
+				return `Claude CLI bridge: ${m}`;
+			}
+		});
+		return createUIMessageStreamResponse({ stream });
+	}
+
+	// ─── Direct API path (Haiku, Gemini, Local) ──────────────────────────
 	let modelHandle: { model: ReturnType<ReturnType<typeof createAnthropic>>; modelId: string };
 	try {
 		modelHandle = pickModel(provider, currentTier, body.model);
@@ -367,8 +469,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			{ status: 503, headers: { 'Content-Type': 'application/json' } }
 		);
 	}
-
-	const systemPrompt = buildSystemPrompt({ targetRepo, currentTier, threadId });
 
 	const result = streamText({
 		model: modelHandle.model,
@@ -383,6 +483,68 @@ export const POST: RequestHandler = async ({ request }) => {
 	return result.toUIMessageStreamResponse({
 		originalMessages: messages,
 		generateMessageId: () => generateId(),
+		// Convert SDK error objects to actionable strings so the client can
+		// classify them. Without this, the stream emits
+		// `{"type":"error","errorText":"Failed after 3 attempts. Last error: Error"}`
+		// for everything — operator can't tell rate-limit from outage from auth.
+		// Audit 2026-05-27 caught Sonnet rate_limit_error surfacing as "Error".
+		//
+		// AI_RetryError wraps the final AI_APICallError; the upstream HTTP
+		// response body lives on `errors[last].responseBody`. Walk the chain
+		// to find it.
+		onError: (error: unknown) => {
+			type ApiCallError = {
+				message?: string;
+				responseBody?: string;
+				statusCode?: number;
+				url?: string;
+			};
+			type RetryError = ApiCallError & {
+				errors?: ApiCallError[];
+				lastError?: ApiCallError;
+				cause?: ApiCallError;
+			};
+			const err = error as RetryError;
+			// Surface the deepest API error we can find.
+			const apiErr: ApiCallError =
+				(err.errors && err.errors.length ? err.errors[err.errors.length - 1] : undefined) ??
+				err.lastError ??
+				err.cause ??
+				err;
+
+			const body = apiErr.responseBody;
+			if (body) {
+				try {
+					const parsed = JSON.parse(body) as { error?: { type?: string; message?: string } };
+					if (parsed.error?.type) {
+						const t = parsed.error.type;
+						const m = parsed.error.message;
+						if (t === 'rate_limit_error') {
+							return `Rate limited on ${modelHandle.modelId}. Wait ~30s or switch model (Haiku, Gemini, Local).`;
+						}
+						if (t === 'invalid_request_error') {
+							return `Invalid request to ${modelHandle.modelId}: ${m || t}`;
+						}
+						if (t === 'authentication_error' || t === 'permission_error') {
+							return `Auth failed for ${modelHandle.modelId} (${t}). Token expired or lacks access. ${m || ''}`;
+						}
+						if (t === 'not_found_error') {
+							return `Model not found: ${modelHandle.modelId}. ${m || ''}`;
+						}
+						if (t === 'overloaded_error') {
+							return `Provider overloaded (${modelHandle.modelId}). Try again in a moment or switch model.`;
+						}
+						return `${t}${m ? ': ' + m : ''} (${modelHandle.modelId})`;
+					}
+				} catch {
+					/* fall through */
+				}
+			}
+			if (apiErr.statusCode) {
+				return `HTTP ${apiErr.statusCode} from ${modelHandle.modelId}: ${apiErr.message || 'no detail'}`;
+			}
+			return apiErr.message || (err as { message?: string }).message || 'unknown_stream_error';
+		},
 		onFinish: ({ responseMessage }) => {
 			// Concatenate every text part of the response into a single string
 			// for the chat_messages row. Matches the legacy `addChatMessage`
@@ -410,9 +572,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				});
 
 			const finalText =
-				toolErrors.length > 0
-					? [replyText, ...toolErrors].filter(Boolean).join('\n\n')
-					: replyText;
+				toolErrors.length > 0 ? [replyText, ...toolErrors].filter(Boolean).join('\n\n') : replyText;
 
 			if (finalText) {
 				const senderLabel: 'cc' | 'agy' | 'local' =
