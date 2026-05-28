@@ -89,7 +89,7 @@
 				rows="8"
 				placeholder="e.g. Chat surface at src/routes/chat/+page.svelte. SDK endpoint /api/chat/sdk-stream. Test framework Playwright."
 				disabled={loadError}
-				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[13px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none disabled:opacity-50"
+				class="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-[16px] leading-snug text-white placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none disabled:opacity-50"
 				style="min-height: 160px;"
 			></textarea>
 			<div class="flex items-center justify-between gap-2">

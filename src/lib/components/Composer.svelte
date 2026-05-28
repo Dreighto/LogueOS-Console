@@ -312,7 +312,7 @@
 					autocapitalize="sentences"
 					spellcheck="false"
 					disabled={composerMode === 'recording' || composerMode === 'talkback'}
-					class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[14px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
+					class="w-full resize-none bg-transparent px-1 py-1 font-sans text-[16px] leading-snug tracking-[-0.005em] text-white placeholder:text-zinc-600 focus:outline-none disabled:text-zinc-500"
 					style="min-height: 40px; max-height: 480px;"
 				></textarea>
 			</div>
