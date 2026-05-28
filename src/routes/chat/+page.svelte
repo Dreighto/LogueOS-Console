@@ -12,7 +12,7 @@
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { goto, replaceState } from '$app/navigation';
+	import { replaceState } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
 	import { Sparkles, Check, Copy, RefreshCw } from 'lucide-svelte';
