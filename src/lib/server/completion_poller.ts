@@ -80,5 +80,9 @@ export function startCompletionPoller(): void {
 		// leave lastKnownSize at 0 — worst case we replay the tail on first poll
 	}
 
-	setInterval(poll, 30_000);
+	// unref() so this interval never keeps the event loop alive on its own.
+	// Otherwise the process won't exit on SIGTERM and systemd has to SIGKILL it
+	// (~15s stop hang every restart). The poll still fires every 30s while the
+	// server is running; it just no longer blocks a clean shutdown.
+	setInterval(poll, 30_000).unref();
 }
