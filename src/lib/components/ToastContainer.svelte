@@ -29,30 +29,33 @@
 	};
 </script>
 
+<!-- Toast stack — pushed below the Dynamic Island via safe-area-inset-top.
+     Capped at 320px on mobile so they don't eat the full width. -->
 <div
-	class="pointer-events-none fixed top-4 left-1/2 z-[100] flex w-full max-w-[400px] -translate-x-1/2 flex-col gap-2 px-4"
+	class="pointer-events-none fixed left-1/2 z-[100] flex w-full max-w-xs -translate-x-1/2 flex-col gap-1.5 px-3 sm:max-w-[400px] sm:gap-2 sm:px-4"
+	style="top: calc(env(safe-area-inset-top, 0px) + 8px)"
 >
 	{#each $toasts as toast (toast.id)}
 		{@const Icon = icons[toast.type]}
 		<div
-			animate:flip={{ duration: 300 }}
-			in:fly={{ y: -20, duration: 300 }}
-			out:fly={{ y: -20, duration: 200 }}
+			animate:flip={{ duration: 250 }}
+			in:fly={{ y: -16, duration: 250 }}
+			out:fly={{ y: -16, duration: 180 }}
 			data-toast
 			data-toast-type={toast.type}
-			class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 text-zinc-100 shadow-xl backdrop-blur-md {panel[toast.type]}"
+			class="pointer-events-auto flex items-start gap-2.5 rounded-lg border p-2.5 text-zinc-100 shadow-lg backdrop-blur-md sm:p-3 {panel[toast.type]}"
 		>
-			<Icon size={18} class="mt-0.5 shrink-0 {iconColor[toast.type]}" aria-hidden="true" />
-			<div class="flex-1 text-sm font-medium leading-tight">
+			<Icon size={16} class="mt-0.5 shrink-0 {iconColor[toast.type]}" aria-hidden="true" />
+			<div class="flex-1 text-xs font-medium leading-snug sm:text-sm">
 				{toast.message}
 			</div>
 			<button
 				type="button"
 				onclick={() => toasts.remove(toast.id)}
 				aria-label="Dismiss notification"
-				class="rounded-md p-1 text-zinc-400 opacity-60 transition-opacity hover:opacity-100"
+				class="shrink-0 rounded-md p-1 text-zinc-400 opacity-60 transition-opacity hover:opacity-100"
 			>
-				<X size={14} aria-hidden="true" />
+				<X size={12} aria-hidden="true" />
 			</button>
 		</div>
 	{/each}

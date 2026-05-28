@@ -271,7 +271,7 @@
 							console.warn('[draft] persist failed:', r.status);
 							toasts.add(
 								`Draft autosave failing (${r.status}) — finish your message before closing the tab.`,
-								'error'
+								'warning'
 							);
 							draftPersistFailing = true;
 						}
@@ -284,7 +284,7 @@
 						console.warn('[draft] network error:', err);
 						toasts.add(
 							'Draft autosave failing — finish your message before closing the tab.',
-							'error'
+							'warning'
 						);
 						draftPersistFailing = true;
 					}

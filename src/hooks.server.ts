@@ -1,52 +1,46 @@
-// Tailscale identity auth (PR 1c — D13).
+// Tailscale identity auth.
 //
-// The Console is only served over Tailscale. Two classes of request:
+// Two access paths to the Console:
 //
-//   tailnet-direct:  request comes from the operator's Tailscale IP, no
-//                    Tailscale-Funnel-Request header. Automatically treated
-//                    as authenticated operator.
+//   tailnet-direct:  no Tailscale-Funnel-Request header → operator on tailnet
+//                    → automatically trusted, no further check.
 //
-//   Funnel:          request came through Tailscale Funnel (public internet).
-//                    The Tailscale-Funnel-Request header is set. Sensitive
-//                    API routes (/api/chat/*) return 401. Frontend pages are
-//                    still served so the PWA shell loads.
-//
-// This is the minimal auth gate needed before paid-API endpoints go live.
-// Future PRs can add session tokens or HMAC-signed requests for multi-user.
+//   Funnel:          Tailscale-Funnel-Request header present → came through the
+//                    public Funnel URL (also set for tailnet clients using the
+//                    public hostname). Sensitive API routes require a valid
+//                    cc_operator cookie set by /console/operator-auth.
+//                    Frontend pages always served so the PWA shell loads.
 
 import type { Handle } from '@sveltejs/kit';
+import { env as privateEnv } from '$env/dynamic/private';
 import { startCompletionPoller } from '$lib/server/completion_poller';
 
-// Start the Web Push completion poller once at server boot (PR 6).
-// Tails cc_completion_log.jsonl and fires push on new chat-dispatched completions.
 startCompletionPoller();
 
-// Routes that require tailnet-direct access. Funnel requests to these
-// paths return 401 with a JSON error body. Note: event.url.pathname
-// INCLUDES the SvelteKit `paths.base` ('/console'), so the prefix must too.
 const SENSITIVE_PREFIXES = ['/console/api/chat/', '/api/chat/'];
+export const OPERATOR_COOKIE = 'cc_operator';
+
+function isAuthorizedViaCookie(event: Parameters<Handle>[0]['event']): boolean {
+	const token = privateEnv.LOGUEOS_OPERATOR_TOKEN;
+	if (!token) return false;
+	return event.cookies.get(OPERATOR_COOKIE) === token;
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
-
 	const isSensitive = SENSITIVE_PREFIXES.some((prefix) => path.startsWith(prefix));
 
-	if (isSensitive) {
-		const funnelHeader = event.request.headers.get('Tailscale-Funnel-Request');
-		if (funnelHeader !== null) {
-			// Request came through Funnel (public internet). Reject.
+	if (isSensitive && event.request.headers.get('Tailscale-Funnel-Request') !== null) {
+		if (!isAuthorizedViaCookie(event)) {
 			return new Response(
 				JSON.stringify({
 					error: 'unauthorized',
-					reason: 'This endpoint is not accessible via Tailscale Funnel. Connect via Tailscale tailnet.'
+					reason:
+						'Visit /console/operator-auth?token=YOUR_TOKEN from your phone to set the auth cookie, then retry.'
 				}),
-				{
-					status: 401,
-					headers: { 'Content-Type': 'application/json' }
-				}
+				{ status: 401, headers: { 'Content-Type': 'application/json' } }
 			);
 		}
-		// No Funnel header → tailnet-direct → automatically authenticated as operator.
 	}
 
 	return resolve(event);
