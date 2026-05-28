@@ -93,7 +93,7 @@
 	</div>
 
 	<!-- Context badges dropdown container -->
-	<div class="flex items-center gap-1.5">
+	<div class="flex min-w-0 flex-shrink items-center gap-1.5">
 		<!-- Repository selection chip -->
 		<div class="relative">
 			<button
@@ -104,12 +104,12 @@
 					oncloseAllPopovers();
 					openChip = next;
 				}}
-				class="flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0"
+				class="flex min-h-[44px] min-w-0 max-w-[40vw] shrink items-center gap-1 rounded-full border border-zinc-800 bg-[#0e0e0e] px-2 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0 sm:max-w-none sm:gap-1.5 sm:px-3"
 				aria-label="Target repository"
 			>
-				<span>{selectedWorkspace?.emoji ?? '📁'}</span>
-				<span>{selectedWorkspace?.display_name ?? selectedRepo}</span>
-				<ChevronDown size={10} class="text-zinc-500" />
+				<span class="shrink-0">{selectedWorkspace?.emoji ?? '📁'}</span>
+				<span class="truncate">{selectedWorkspace?.display_name ?? selectedRepo}</span>
+				<ChevronDown size={10} class="shrink-0 text-zinc-500" />
 			</button>
 
 			{#if openChip === 'repo'}
@@ -163,17 +163,17 @@
 					oncloseAllPopovers();
 					showModelOverrideModal = next;
 				}}
-				class="flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-800 bg-[#0e0e0e] px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0"
+				class="flex min-h-[44px] min-w-0 max-w-[44vw] shrink items-center gap-1 rounded-full border border-zinc-800 bg-[#0e0e0e] px-2 py-1.5 font-sans text-xs text-zinc-300 shadow-sm transition-all hover:border-zinc-700 hover:bg-[#161616] hover:text-white sm:min-h-0 sm:max-w-none sm:gap-1.5 sm:px-3"
 				aria-label="Model picker"
 				title="Pick a specific model or leave on Auto"
 			>
-				<span>{tierEmoji}</span>
-				<span class="max-w-[120px] truncate font-mono text-[10px] tracking-wide text-zinc-400"
+				<span class="shrink-0">{tierEmoji}</span>
+				<span class="truncate font-mono text-[10px] tracking-wide text-zinc-400"
 					>{selectedModelChoice.id === 'auto'
 						? lastModelUsed || 'Auto'
 						: selectedModelChoice.label}</span
 				>
-				<ChevronDown size={10} class="text-zinc-500" />
+				<ChevronDown size={10} class="shrink-0 text-zinc-500" />
 			</button>
 
 			{#if showModelOverrideModal}

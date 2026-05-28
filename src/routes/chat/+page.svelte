@@ -223,6 +223,35 @@
 	}
 	const PASTE_TO_ATTACHMENT_THRESHOLD = 5000;
 
+	// Watch sdkChat for stream-error chunks. The SDK 6 SvelteChatState sets
+	// `error` as a $state rune when the server emits a `{type:"error"}` UI
+	// message chunk — this $effect picks it up reactively. Without it, stream
+	// errors (rate limit, auth fail, provider down) leave the placeholder
+	// bubble stuck empty with no toast. Audit 2026-05-27 — Sonnet rate-limit
+	// was completely invisible to the operator.
+	let lastSdkErrorMsg = '';
+	$effect(() => {
+		const err = sdkChat.error;
+		if (!err) {
+			lastSdkErrorMsg = '';
+			return;
+		}
+		const msg = err.message || 'stream_error';
+		if (msg === lastSdkErrorMsg) return; // dedupe same error
+		lastSdkErrorMsg = msg;
+		toasts.add(msg, 'error');
+		untrack(() => {
+			if (streamState) {
+				const failedId = streamState.placeholderId;
+				messages = messages.map((m) =>
+					m.id === failedId ? { ...m, message: `⚠️ ${msg}` } : m
+				);
+				streamState = null;
+				sending = false;
+			}
+		});
+	});
+
 	// Scroll state
 	let userAtBottom = $state(true);
 	let unseenCount = $state(0);
@@ -1755,7 +1784,25 @@
 	let activityTimer: ReturnType<typeof setInterval>;
 	let sentinelObs: IntersectionObserver | null = null;
 
+	// Funnel-auth probe: if /api/chat/* returns 401, the operator's PWA cookie
+	// jar is missing the cc_operator cookie (iOS PWA standalones have isolated
+	// cookie storage from Safari). Redirect them to the token-entry page so
+	// they can authenticate inside the PWA. After auth, server redirects back
+	// to /chat with the cookie set, so this probe passes next load. Audit 2026-05-27.
+	async function probeFunnelAuth() {
+		try {
+			const r = await fetch(resolve('/api/chat/threads'));
+			if (r.status === 401) {
+				const cur = window.location.pathname + window.location.search;
+				window.location.href = resolve(`/operator-auth?return=${encodeURIComponent(cur)}`);
+			}
+		} catch {
+			/* network error — leave the page; toasts will surface specifics */
+		}
+	}
+
 	onMount(() => {
+		void probeFunnelAuth();
 		void loadTier(activeThread);
 		if (feedContainer && scrollSentinel) {
 			sentinelObs = new IntersectionObserver(
@@ -1817,6 +1864,7 @@
 
 <div
 	class="relative flex h-[100dvh] w-full overflow-hidden bg-[#050505] font-sans text-foreground"
+	style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
 	ondragenter={handleDragEnter}
 	ondragover={handleDragOver}
 	ondragleave={handleDragLeave}

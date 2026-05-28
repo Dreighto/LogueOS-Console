@@ -85,6 +85,7 @@
 {/if}
 
 <aside
+	style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
 	class="fixed top-0 bottom-0 left-0 z-[60] flex w-72 flex-col border-r border-zinc-800/60 bg-[#090909]/98 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out lg:static lg:z-auto lg:translate-x-0
 		{sidebarOpen
 		? 'translate-x-0 lg:w-72 lg:opacity-100'
