@@ -15,6 +15,10 @@ self.addEventListener('install', (event: any) => {
 		const cache = await caches.open(CACHE_NAME);
 		await cache.addAll(ASSETS);
 	}
+	// Activate the new SW immediately rather than waiting for every tab/PWA
+	// window to close. Without this, a deployed fix never reaches the operator's
+	// installed PWA until they fully kill the app — fixes appear to "not take".
+	(self as any).skipWaiting();
 	event.waitUntil(preCache());
 });
 
@@ -70,46 +74,79 @@ self.addEventListener('fetch', (event: any) => {
 
 	const url = new URL(event.request.url);
 
-	// Check if this is a static build asset or a pre-cached file
-	const isAsset = ASSETS.includes(url.pathname) || url.pathname.startsWith('/console/_app/immutable/');
+	// Only ever touch same-origin requests. Cross-origin (Anthropic, Gemini,
+	// AssemblyAI, ElevenLabs, etc.) must hit the network untouched.
+	if (url.origin !== self.location.origin) return;
 
+	// CRITICAL: never intercept API calls, SvelteKit data requests, or websockets.
+	// The previous handler returned a plain-text 503 ("Network connection
+	// unavailable.") on ANY failed non-asset fetch. For /api/* and SvelteKit's
+	// __data.json the client expects JSON — a text/plain body fails to parse and
+	// the raw string renders on screen as the page. Worse: on iOS PWA the SW can
+	// intercept a transient nav-data fetch and surface that string even when the
+	// server is healthy. Let these pass through to the network so SvelteKit's
+	// router and the app's own try/catch see the REAL result.
+	const isData =
+		url.pathname.includes('/api/') ||
+		url.pathname.endsWith('/__data.json') ||
+		url.searchParams.has('x-sveltekit-invalidated') ||
+		url.pathname.includes('/ws');
+	if (isData) return; // browser-default fetch, no SW involvement
+
+	// Cache-first for immutable build assets — instant load, safe to serve stale.
+	const isAsset =
+		ASSETS.includes(url.pathname) || url.pathname.startsWith('/console/_app/immutable/');
 	if (isAsset) {
-		// Cache-first strategy: serve cached copy directly for instant loading
 		event.respondWith(
-			caches.match(event.request).then((cachedResponse) => {
-				return cachedResponse || fetch(event.request);
-			})
+			caches.match(event.request).then((cached) => cached || fetch(event.request))
 		);
-	} else {
-		// Network-first strategy for APIs and active routing HTML
+		return;
+	}
+
+	// Navigation (HTML document) requests: network-first, fall back to the cached
+	// app shell so the PWA still boots offline. NEVER return a plain-text error
+	// body for a navigation — that's what painted "Network connection
+	// unavailable." across the whole screen.
+	if (event.request.mode === 'navigate') {
 		event.respondWith(
 			fetch(event.request)
 				.then((response) => {
-					// Cache the last known successful response for dynamic pages
-					const isHttp = url.protocol.startsWith('http');
-					const isStaticOrApi = !url.pathname.includes('/@vite/') && !url.pathname.includes('/node_modules/') && !url.pathname.includes('/ws');
-					if (response.status === 200 && isHttp && isStaticOrApi) {
+					if (response.status === 200) {
 						const clone = response.clone();
-						caches.open(CACHE_NAME).then((cache) => {
-							cache.put(event.request, clone);
-						});
+						caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
 					}
 					return response;
 				})
 				.catch(async () => {
-					// Network is offline / down. Fallback to cached pages and dynamic data
-					const cachedResponse = await caches.match(event.request);
-					if (cachedResponse) {
-						return cachedResponse;
-					}
-
-					// Return fallback response for un-cached endpoints when network is down
-					return new Response('Network connection unavailable.', {
-						status: 503,
-						statusText: 'Service Unavailable',
-						headers: { 'Content-Type': 'text/plain' }
-					});
+					const cached = await caches.match(event.request);
+					if (cached) return cached;
+					const shell =
+						(await caches.match('/console/chat')) || (await caches.match('/console'));
+					if (shell) return shell;
+					return new Response(
+						'<!doctype html><meta charset="utf-8"><body style="background:#050505;color:#a1a1aa;font-family:system-ui;padding:2rem">Offline — reconnect to load LogueOS.</body>',
+						{ status: 503, headers: { 'Content-Type': 'text/html' } }
+					);
 				})
 		);
+		return;
 	}
+
+	// Everything else (fonts, images, misc same-origin GETs): network-first with
+	// cache fallback, and on total failure return a real network error rather
+	// than a synthetic body that could be mis-parsed.
+	event.respondWith(
+		fetch(event.request)
+			.then((response) => {
+				if (response.status === 200) {
+					const clone = response.clone();
+					caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+				}
+				return response;
+			})
+			.catch(async () => {
+				const cached = await caches.match(event.request);
+				return cached || Response.error();
+			})
+	);
 });
