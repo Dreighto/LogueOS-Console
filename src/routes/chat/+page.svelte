@@ -12,7 +12,7 @@
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
 	import { Sparkles, Check, Copy, RefreshCw } from 'lucide-svelte';
@@ -1407,18 +1407,16 @@
 		// response if another switch happens before this fetch returns.
 		await pollMessages(threadId);
 		await loadTier(threadId);
-		// Sync the URL's ?thread= query param to the newly-active thread.
-		// Without this, the +page.server.ts load() reads the OLD thread on
-		// reload (it falls back to the query param, then getActiveThread()),
-		// bouncing the operator back to the wrong thread. Audit task #23.
-		// replaceState avoids polluting browser history with every switch;
-		// noScroll keeps the current scroll position.
+		// Sync the URL's ?thread= query param without triggering a server
+		// data re-fetch. goto() re-runs +page.server.ts load() which fires
+		// DB reads + a network round-trip every thread switch — and on iOS PWA,
+		// if that fetch hits the service worker while the network hiccups, the
+		// SW's fallback returns a plain-text 503 that SvelteKit can't parse,
+		// surfacing as "Network connection unavailable." to the operator.
+		// replaceState() does a shallow navigation: URL bar updates, no load()
+		// re-run, no network request.
 		try {
-			await goto(resolve('/chat') + '?thread=' + encodeURIComponent(threadId), {
-				replaceState: true,
-				noScroll: true,
-				keepFocus: true
-			});
+			replaceState(resolve('/chat') + '?thread=' + encodeURIComponent(threadId), {});
 		} catch {
 			/* navigation failure shouldn't break the in-page switch */
 		}
