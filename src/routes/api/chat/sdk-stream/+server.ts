@@ -426,15 +426,20 @@ export const POST: RequestHandler = async ({ request }) => {
 					.join('\n\n');
 
 				let collected = '';
+				let errored = false;
 				for await (const chunk of streamViaClaudeCLI({
 					model: resolvedModelId,
 					systemPrompt,
-					userPrompt: transcript || 'hello'
+					userPrompt: transcript || 'hello',
+					// Propagate client disconnect/abort so the CLI child is
+					// killed promptly instead of running on (burning Max quota).
+					signal: request.signal
 				})) {
 					if (chunk.type === 'text-delta') {
 						collected += chunk.delta;
 						writer.write({ type: 'text-delta', id: textId, delta: chunk.delta });
 					} else if (chunk.type === 'error') {
+						errored = true;
 						writer.write({ type: 'error', errorText: chunk.message });
 					}
 					// 'finish' falls through to the writer.write below
@@ -442,14 +447,17 @@ export const POST: RequestHandler = async ({ request }) => {
 
 				writer.write({ type: 'text-end', id: textId });
 				writer.write({ type: 'finish-step' });
-				writer.write({ type: 'finish', finishReason: 'stop' });
+				writer.write({ type: 'finish', finishReason: errored ? 'error' : 'stop' });
 
-				// Persist the assistant reply mirroring the streamText onFinish path.
-				if (collected) {
+				// Persist only a clean reply — don't record a half/failed
+				// generation or advance thread state on error.
+				if (collected && !errored) {
 					addChatMessage(senderLabel, collected, null, null, null, 'sent', threadId);
 				}
-				upsertThreadTier(threadId, currentTier, resolvedModelId);
-				touchLastActivity(threadId);
+				if (!errored) {
+					upsertThreadTier(threadId, currentTier, resolvedModelId);
+					touchLastActivity(threadId);
+				}
 			},
 			onError: (error: unknown) => {
 				const m = (error as { message?: string })?.message || 'cli_stream_error';

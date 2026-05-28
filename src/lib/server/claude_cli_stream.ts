@@ -274,13 +274,31 @@ export async function* streamViaClaudeCLI(
 		rl.close();
 	}
 
-	// Wait for the child to exit cleanly so we don't leak processes.
+	// Wait for the child to settle so we don't leak processes — but never
+	// hang the request. On a spawn failure (ENOENT/EACCES) 'exit' never fires,
+	// so we also resolve on 'close'/'error', and a timeout backstops a wedged
+	// child.
 	await new Promise<void>((resolve) => {
-		if (child.exitCode !== null) {
+		if (child.exitCode !== null || spawnError) {
 			resolve();
-		} else {
-			child.once('exit', () => resolve());
+			return;
 		}
+		let settled = false;
+		const finish = () => {
+			if (settled) return;
+			settled = true;
+			resolve();
+		};
+		// Backstop a wedged child so the request never hangs.
+		const timer = setTimeout(finish, 5000);
+		if (typeof timer.unref === 'function') timer.unref();
+		const onSettled = () => {
+			clearTimeout(timer);
+			finish();
+		};
+		child.once('exit', onSettled);
+		child.once('close', onSettled);
+		child.once('error', onSettled);
 	});
 
 	// Clean up the temp system-prompt file.
