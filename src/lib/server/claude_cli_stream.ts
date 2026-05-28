@@ -289,8 +289,16 @@ export async function* streamViaClaudeCLI(
 			settled = true;
 			resolve();
 		};
-		// Backstop a wedged child so the request never hangs.
-		const timer = setTimeout(finish, 5000);
+		// Backstop a wedged child so the request never hangs. If it fires the
+		// child is still alive — kill it so we don't leak the process.
+		const timer = setTimeout(() => {
+			try {
+				child.kill('SIGKILL');
+			} catch {
+				/* already gone */
+			}
+			finish();
+		}, 5000);
 		if (typeof timer.unref === 'function') timer.unref();
 		const onSettled = () => {
 			clearTimeout(timer);

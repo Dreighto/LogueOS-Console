@@ -19,8 +19,9 @@
 //   - slash commands (client-side intercept before send)
 //   - Ollama / local routing (task #11)
 //
-// Auth: route falls under /api/chat/* so hooks.server.ts SENSITIVE_PREFIXES
-// already covers it. Tailnet-direct passes; Funnel requests 401.
+// Auth: no app-level gate. The Tailscale Funnel + undisclosed *.ts.net
+// hostname is the security boundary; the cookie gate was removed (broken on
+// iOS — see hooks.server.ts). All provider credentials are server-side.
 //
 // Provider auth (Anthropic OAuth via Claude Max quota — FREE — is preferred
 // to billed API key; Gemini API key only for now):
