@@ -21,6 +21,7 @@
 		ProviderPref,
 		ModelChoice
 	} from '$lib/types/chat-ui';
+	import { MODEL_CHOICES } from '$lib/chat/model-choices';
 	import { replaceState } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
@@ -314,56 +315,6 @@
 	}
 
 	let providerOverride = $state<ProviderPref>(null);
-
-	// Concrete model picker — operator picks a specific model and we
-	// translate it to a (tier, provider) pair that the router will pin.
-	// 'auto' = no overrides (smart routing).
-	const MODEL_CHOICES: ModelChoice[] = [
-		{ id: 'auto', label: 'Auto', sublabel: 'smart tier routing', tier: null, provider: null },
-		{
-			id: 'claude-haiku',
-			label: 'Claude Haiku 4.5',
-			sublabel: 'fast · chat tier',
-			tier: 'chat',
-			provider: 'anthropic'
-		},
-		{
-			id: 'claude-sonnet',
-			label: 'Claude Sonnet 4.6',
-			sublabel: 'planning',
-			tier: 'planning',
-			provider: 'anthropic'
-		},
-		{
-			id: 'claude-opus',
-			label: 'Claude Opus 4.7',
-			sublabel: 'deep',
-			tier: 'deep',
-			provider: 'anthropic'
-		},
-		{
-			id: 'gemini-flash-lite',
-			label: 'Gemini 2.5 Flash-lite',
-			sublabel: 'fast · chat tier',
-			tier: 'chat',
-			provider: 'gemini'
-		},
-		{
-			id: 'gemini-flash',
-			label: 'Gemini 2.5 Flash',
-			sublabel: 'planning',
-			tier: 'planning',
-			provider: 'gemini'
-		},
-		{
-			id: 'gemini-pro',
-			label: 'Gemini 2.5 Pro',
-			sublabel: 'deep',
-			tier: 'deep',
-			provider: 'gemini'
-		},
-		{ id: 'local', label: 'Local (Ollama)', sublabel: 'offline', tier: 'local', provider: 'local' }
-	];
 
 	// Chip-display tier: prefer the operator's explicit override over the
 	// classifier-driven `currentTier`. Server keeps current_tier untouched
