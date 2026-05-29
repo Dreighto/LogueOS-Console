@@ -24,7 +24,8 @@
 	// sizes (h-11 w-11 on mobile, sm:h-9 sm:w-9 on desktop) are load-bearing
 	// for the chat e2e suite and PR #143's mobile spec. Do not change.
 
-	import { resolve } from '$app/paths';
+	import { base } from '$app/paths';
+	import type { SlashCmd } from '$lib/types/slash';
 	import { Send, Mic, Paperclip, Sparkles, Headphones, Square, X, Loader2 } from 'lucide-svelte';
 
 	type ComposerMode = 'idle' | 'focused' | 'recording' | 'talkback';
@@ -38,12 +39,6 @@
 		size: number;
 		uploading?: boolean;
 		text?: string;
-	};
-
-	type SlashCmd = {
-		key: string;
-		usage: string;
-		description: string;
 	};
 
 	const TALKBACK_PHASE_LABELS: Record<TalkbackPhase, string> = {
@@ -250,7 +245,7 @@
 						<div class="relative h-8 w-8 shrink-0">
 							{#if att.mime?.startsWith('image/') && att.url}
 								<img
-									src={att.url.startsWith('./') ? resolve('/' + att.url.slice(2)) : att.url}
+									src={att.url.startsWith('./') ? base + '/' + att.url.slice(2) : att.url}
 									alt={att.filename}
 									class="h-full w-full rounded-md object-cover"
 								/>

@@ -12,6 +12,7 @@
 
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
+	import type { SlashCmd } from '$lib/types/slash';
 	import { replaceState } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
@@ -398,9 +399,7 @@
 		workspaceContextLoaded = false;
 		workspaceContextLoadError = false;
 		try {
-			const r = await fetch(
-				resolve('/api/chat/workspaces/' + encodeURIComponent(selectedRepo) + '/context')
-			);
+			const r = await fetch(resolve('/api/chat/workspaces/[name]/context', { name: selectedRepo }));
 			if (r.ok) {
 				const body = (await r.json()) as { addendum?: string };
 				workspaceContextDraft = body.addendum ?? '';
@@ -429,7 +428,7 @@
 		workspaceContextSaving = true;
 		try {
 			const r = await fetch(
-				resolve('/api/chat/workspaces/' + encodeURIComponent(selectedRepo) + '/context'),
+				resolve('/api/chat/workspaces/[name]/context', { name: selectedRepo }),
 				{
 					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
@@ -950,7 +949,11 @@
 		talkbackRecognition?.abort();
 		talkbackRecognition = null;
 		if (talkbackRecorder && talkbackRecorder.state !== 'inactive') {
-			try { talkbackRecorder.stop(); } catch { /* already stopped */ }
+			try {
+				talkbackRecorder.stop();
+			} catch {
+				/* already stopped */
+			}
 		}
 		talkbackRecorder = null;
 	}
@@ -1012,11 +1015,11 @@
 			// Available on iOS Safari 14.5+, Chrome, Edge. Falls back to MediaRecorder
 			// + async AssemblyAI transcription on unsupported browsers.
 			const SpeechRecognitionCtor =
-				(typeof window !== 'undefined') &&
-				(
-					(window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
-					(window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition
-				);
+				typeof window !== 'undefined' &&
+				((window as unknown as { SpeechRecognition?: new () => SpeechRecognition })
+					.SpeechRecognition ||
+					(window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition })
+						.webkitSpeechRecognition);
 
 			if (SpeechRecognitionCtor) {
 				const recognition = new SpeechRecognitionCtor();
@@ -1028,7 +1031,12 @@
 
 				const heardText = await new Promise<string>((res) => {
 					let settled = false;
-					const finish = (t: string) => { if (!settled) { settled = true; res(t); } };
+					const finish = (t: string) => {
+						if (!settled) {
+							settled = true;
+							res(t);
+						}
+					};
 					// Max capture guard
 					const maxTimer = setTimeout(() => finish(''), TALKBACK_MAX_CAPTURE_MS);
 					recognition.onresult = (e: SpeechRecognitionEvent) => {
@@ -1040,7 +1048,10 @@
 						// 'no-speech' and 'aborted' are not errors — just an empty turn
 						finish('');
 					};
-					recognition.onend = () => { clearTimeout(maxTimer); finish(''); };
+					recognition.onend = () => {
+						clearTimeout(maxTimer);
+						finish('');
+					};
 					recognition.start();
 				});
 
@@ -1098,7 +1109,9 @@
 		const chunks: BlobPart[] = [];
 		const recorder = new MediaRecorder(talkbackStream);
 		talkbackRecorder = recorder;
-		recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+		recorder.ondataavailable = (e) => {
+			if (e.data.size > 0) chunks.push(e.data);
+		};
 
 		// VAD via ScriptProcessor
 		talkbackAudioCtx = new AudioContext({ sampleRate: 16000 });
@@ -1114,7 +1127,11 @@
 			const maxTimer = setTimeout(resolve, TALKBACK_MAX_CAPTURE_MS);
 
 			talkbackProcessor!.onaudioprocess = (e) => {
-				if (!talkbackActive) { clearTimeout(maxTimer); resolve(); return; }
+				if (!talkbackActive) {
+					clearTimeout(maxTimer);
+					resolve();
+					return;
+				}
 				const data = e.inputBuffer.getChannelData(0);
 				let sum = 0;
 				for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
@@ -1154,7 +1171,7 @@
 
 		const resp = await fetch(resolve('/api/chat/transcribe'), { method: 'POST', body: fd });
 		if (resp.ok) {
-			const data = await resp.json() as { text?: string };
+			const data = (await resp.json()) as { text?: string };
 			talkbackTranscriptBuffer = data.text ?? '';
 		} else if (resp.status === 429) {
 			await stopTalkback('STT daily cap reached — Talkback stopped');
@@ -1634,12 +1651,6 @@
 	// click on row) runs the command's handler instead of sending the
 	// literal text to the LLM.
 	// ─────────────────────────────────────────────────────────────────────
-	type SlashCmd = {
-		key: string; // text after the slash, e.g. 'clear'
-		usage: string; // display form: '/clear' or '/new <name>'
-		description: string;
-		run: (rest: string) => Promise<void> | void;
-	};
 
 	function addLocalSystemMessage(text: string) {
 		messages = [
