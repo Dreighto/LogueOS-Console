@@ -14,6 +14,19 @@
 
 export type Tier = 'chat' | 'planning' | 'deep' | 'local';
 
+// Client view-model for a rendered chat row. This is the NARROW UI shape the
+// page + voice controller share — deliberately NOT the server/DB `ChatMessage`
+// from `$lib/types/chat` (sender union, trace_id, status, thread_id). `sender`
+// is a free string here because the renderer only branches on a few known
+// values ('operator' / 'system' / agent ids) and tolerates anything else.
+export type ChatMessage = {
+	id: number;
+	sender: string;
+	message: string;
+	timestamp: string;
+	image_path?: string | null;
+};
+
 export type Attachment = {
 	id: string;
 	filename: string;
