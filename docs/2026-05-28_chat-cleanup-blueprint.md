@@ -95,5 +95,5 @@ remaining extraction. Continue pulling cohesive units out of `+page.svelte`:
 - `chat/+page.svelte`: 2,194 LOC → < ~1,200 (thin composition).
 - `svelte-check` errors: 9 → 0.
 - `eslint` problems: 76 → 0.
-- Legacy chat routes: 2 → 0.
+- Dead chat routes: 1 removed (`/api/chat/stream` custom-SSE); `/api/chat` retained (GET/DELETE/POST still in use).
 - `TIER_MODELS` copies: 2 → 1.
