@@ -98,6 +98,7 @@ export function createVoiceController(deps: VoiceDeps): VoiceController {
 	let talkbackRecognition: SpeechRecognition | null = null;
 	let talkbackTranscriptBuffer = '';
 	let talkbackTtsAbortController: AbortController | null = null;
+	let talkbackTtsUrl: string | null = null;
 	let talkbackDispatchMsgId: number | null = null;
 	let talkbackConsecutiveFailures = 0;
 	let continuousSilenceMs = 0;
@@ -189,6 +190,17 @@ export function createVoiceController(deps: VoiceDeps): VoiceController {
 		});
 	}
 
+	// Revoke the in-flight TTS blob URL on EVERY teardown path, not just the
+	// happy-path `onended`. Without this, stopping talkback early (manual stop,
+	// stop-word, error streak, cap hit) or a playback error leaks a blob URL per
+	// turn. (Pre-existed inline before this extraction; sealed here.)
+	function revokeTtsUrl() {
+		if (talkbackTtsUrl) {
+			URL.revokeObjectURL(talkbackTtsUrl);
+			talkbackTtsUrl = null;
+		}
+	}
+
 	function talkbackStopCapture() {
 		talkbackStream?.getTracks().forEach((t) => t.stop());
 		talkbackStream = null;
@@ -221,6 +233,7 @@ export function createVoiceController(deps: VoiceDeps): VoiceController {
 			audioEl.pause();
 			audioEl.currentTime = 0;
 		}
+		revokeTtsUrl();
 		if (talkbackWakeLock) {
 			await talkbackWakeLock.release().catch(() => {});
 			talkbackWakeLock = null;
@@ -518,10 +531,13 @@ export function createVoiceController(deps: VoiceDeps): VoiceController {
 			if (!resp.ok) throw new Error(`TTS ${resp.status}`);
 
 			const audioBlob = await resp.blob();
+			revokeTtsUrl(); // drop any prior turn's URL before staging a new one
 			const url = URL.createObjectURL(audioBlob);
+			talkbackTtsUrl = url;
 			audioEl.src = url;
 
 			audioEl.onended = () => {
+				if (talkbackTtsUrl === url) talkbackTtsUrl = null;
 				URL.revokeObjectURL(url);
 				if (active) {
 					phase = 'loop';
@@ -529,6 +545,10 @@ export function createVoiceController(deps: VoiceDeps): VoiceController {
 						if (active) void beginTalkbackCapture();
 					});
 				}
+			};
+			audioEl.onerror = () => {
+				if (talkbackTtsUrl === url) talkbackTtsUrl = null;
+				URL.revokeObjectURL(url);
 			};
 
 			await audioEl.play();
