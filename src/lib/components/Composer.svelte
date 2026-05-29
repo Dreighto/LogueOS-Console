@@ -26,20 +26,8 @@
 
 	import { base } from '$app/paths';
 	import type { SlashCmd } from '$lib/types/slash';
+	import type { Attachment, ComposerMode, TalkbackPhase } from '$lib/types/chat-ui';
 	import { Send, Mic, Paperclip, Sparkles, Headphones, Square, X, Loader2 } from 'lucide-svelte';
-
-	type ComposerMode = 'idle' | 'focused' | 'recording' | 'talkback';
-	type TalkbackPhase = 'capture' | 'transcribe' | 'dispatch' | 'speak' | 'loop';
-
-	type Attachment = {
-		id: string;
-		filename: string;
-		url: string;
-		mime: string;
-		size: number;
-		uploading?: boolean;
-		text?: string;
-	};
 
 	const TALKBACK_PHASE_LABELS: Record<TalkbackPhase, string> = {
 		capture: '🔴 Capture',
