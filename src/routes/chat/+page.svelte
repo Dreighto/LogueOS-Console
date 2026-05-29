@@ -13,6 +13,14 @@
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { SlashCmd } from '$lib/types/slash';
+	import type {
+		Tier,
+		Attachment,
+		ComposerMode,
+		TalkbackPhase,
+		ProviderPref,
+		ModelChoice
+	} from '$lib/types/chat-ui';
 	import { replaceState } from '$app/navigation';
 	import { Chat } from '@ai-sdk/svelte';
 	import { DefaultChatTransport } from 'ai';
@@ -30,7 +38,6 @@
 	// ─────────────────────────────────────────────────────────────────────
 	// State Declarations
 	// ─────────────────────────────────────────────────────────────────────
-	type Tier = 'chat' | 'planning' | 'deep' | 'local';
 	type ChatMessage = {
 		id: number;
 		sender: string;
@@ -76,7 +83,7 @@
 	let activityFadeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Composer states
-	let composerMode = $state<'idle' | 'focused' | 'recording' | 'talkback'>('idle');
+	let composerMode = $state<ComposerMode>('idle');
 	let openChip = $state<null | 'repo' | 'thread'>(null);
 
 	// Sidebar / thread-management state — declared up here (not next to the
@@ -139,7 +146,6 @@
 
 	// Talkback state machine variables (PR 5)
 	let talkbackActive = $state(false);
-	type TalkbackPhase = 'capture' | 'transcribe' | 'dispatch' | 'speak' | 'loop';
 	let talkbackPhase = $state<TalkbackPhase | null>(null);
 
 	let talkbackStream: MediaStream | null = null;
@@ -207,15 +213,6 @@
 	// a fenced code block on send. See [[reference_chat_app_competitive_borrows]]
 	// for the ChatGPT-borrow rationale (long pastes auto-convert to keep
 	// composer clean + prevent context-window blowout).
-	type Attachment = {
-		id: string;
-		filename: string;
-		url: string;
-		mime: string;
-		size: number;
-		uploading?: boolean;
-		text?: string;
-	};
 	let attachments = $state<Attachment[]>([]);
 
 	// Canvas (Artifacts) side panel — PR A of #20 epic. View-only for now;
@@ -316,19 +313,11 @@
 		}
 	}
 
-	type ProviderPref = 'anthropic' | 'gemini' | 'local' | null;
 	let providerOverride = $state<ProviderPref>(null);
 
 	// Concrete model picker — operator picks a specific model and we
 	// translate it to a (tier, provider) pair that the router will pin.
 	// 'auto' = no overrides (smart routing).
-	type ModelChoice = {
-		id: string;
-		label: string;
-		sublabel: string;
-		tier: Tier | null;
-		provider: ProviderPref;
-	};
 	const MODEL_CHOICES: ModelChoice[] = [
 		{ id: 'auto', label: 'Auto', sublabel: 'smart tier routing', tier: null, provider: null },
 		{
