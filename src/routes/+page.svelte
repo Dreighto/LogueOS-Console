@@ -18,7 +18,8 @@
 		Power,
 		Activity,
 		Clock,
-		ExternalLink
+		ExternalLink,
+		Film
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { formatRelativeTime } from '$lib/utils/format';
@@ -251,6 +252,35 @@
 						<span class="text-xs text-muted-foreground uppercase italic">No workers</span>
 					</div>
 				{/each}
+			</div>
+		</section>
+
+		<!-- Media Section -->
+		<section class="flex flex-col gap-2">
+			<div class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
+				<span>Media</span>
+				<a
+					href={resolve('/plex')}
+					class="flex items-center gap-1 transition-colors hover:text-status-blue"
+				>
+					Plex <ExternalLink size={8} />
+				</a>
+			</div>
+			<div class="flex flex-col gap-1">
+				<a
+					href={resolve('/plex')}
+					class="group active-trigger flex w-full items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-status-purple/40 hover:bg-surface/50"
+				>
+					<Film size={14} class="shrink-0 text-status-purple" />
+					<div class="flex min-w-0 flex-1 flex-col">
+						<div class="flex items-center justify-between">
+							<span class="text-xs font-bold text-foreground truncate">logueos-media-01</span>
+							<span class="text-[10px] text-status-green font-bold uppercase">Online</span>
+						</div>
+						<div class="truncate text-[10px] text-muted-foreground">3 Active Streams • 1,242 Movies</div>
+					</div>
+					<ChevronRight size={12} class="text-muted-foreground group-hover:text-muted-foreground" />
+				</a>
 			</div>
 		</section>
 
