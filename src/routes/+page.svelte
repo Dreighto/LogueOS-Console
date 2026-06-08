@@ -162,7 +162,9 @@
 
 	<!-- Q3: Is anything stuck? (MOVED TO TOP FOR TRIAGE VISIBILITY) -->
 	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
+		<div
+			class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase"
+		>
 			<span>Blockers & Reviews</span>
 			<span class="flex gap-2">
 				<span class={s.failures.count > 0 ? 'text-status-red' : ''}
@@ -179,19 +181,24 @@
 						href={resolve('/activity')}
 						class="group active-trigger flex w-full items-center gap-3 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-border hover:bg-surface/50"
 					>
-					{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
-						<AlertTriangle size={14} class="shrink-0 text-status-red" />
-					{:else}
-						<Clock size={14} class="shrink-0 text-status-amber" />
-					{/if}
-					<div class="flex min-w-0 flex-1 flex-col">
-						<div class="flex items-center gap-2">
-							<span class="text-xs font-bold text-foreground">{item.ticket_id || 'unknown'}</span>
-							<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
+						{#if item.status === 'FAILED' || item.status === 'ESCALATE'}
+							<AlertTriangle size={14} class="shrink-0 text-status-red" />
+						{:else}
+							<Clock size={14} class="shrink-0 text-status-amber" />
+						{/if}
+						<div class="flex min-w-0 flex-1 flex-col">
+							<div class="flex items-center gap-2">
+								<span class="text-xs font-bold text-foreground">{item.ticket_id || 'unknown'}</span>
+								<span class="text-xs text-muted-foreground"
+									>{formatRelativeTime(item.timestamp)}</span
+								>
+							</div>
+							<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
 						</div>
-						<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
-					</div>
-						<ChevronRight size={12} class="text-muted-foreground group-hover:text-muted-foreground" />
+						<ChevronRight
+							size={12}
+							class="text-muted-foreground group-hover:text-muted-foreground"
+						/>
 					</a>
 				</div>
 			{:else}
@@ -205,7 +212,9 @@
 	<div class="grid grid-cols-1 gap-4">
 		<!-- Workers Section -->
 		<section class="flex flex-col gap-2">
-			<div class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
+			<div
+				class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase"
+			>
 				<span>Workers</span>
 				<span>{s.workers.active} / {s.workers.total} active</span>
 			</div>
@@ -216,34 +225,44 @@
 							href={resolve('/workers')}
 							class="group active-trigger flex w-full flex-col gap-1 rounded-sm border border-border bg-surface p-2 transition-colors hover:border-status-blue/40 hover:bg-surface/50"
 						>
-						<div class="flex items-center justify-between">
-							<span
-								class="text-xs font-bold tracking-tight uppercase {w.state === 'busy'
-									? 'text-status-blue'
-									: w.state === 'idle'
-										? 'text-muted-foreground'
-										: 'text-muted-foreground'}">{workerLabel(w.id)}</span
-							>
-							<span class="text-xs text-muted-foreground uppercase"
-								>{w.since ? formatRelativeTime(w.since) : w.state}</span
-							>
-						</div>
-						{#if w.state === 'busy'}
-							<div class="truncate text-xs tracking-tight text-foreground uppercase">
-								<span class="text-status-blue">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
-									w.step
-								)}
+							<div class="flex items-center justify-between">
+								<span
+									class="text-xs font-bold tracking-tight uppercase {w.state === 'busy'
+										? 'text-status-blue'
+										: w.state === 'idle'
+											? 'text-muted-foreground'
+											: 'text-muted-foreground'}">{workerLabel(w.id)}</span
+								>
+								<span class="text-xs text-muted-foreground uppercase"
+									>{w.since ? formatRelativeTime(w.since) : w.state}</span
+								>
 							</div>
-							{#if w.branch}
-								<div class="truncate text-xs text-muted-foreground italic">
-									{formatBranch(w.branch)}
-								</div>
-							{/if}
-						{:else}
-							<div class="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-								{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
-							</div>
-						{/if}
+							{#key `${w.id}:${w.state}`}
+								{#if w.state === 'busy'}
+									<div
+										in:fade={{ duration: 150 }}
+										out:fade={{ duration: 150 }}
+										class="truncate text-xs tracking-tight text-foreground uppercase"
+									>
+										<span class="text-status-blue">{sanitizeTicketId(w.ticket_id)}</span> • {humanizeStep(
+											w.step
+										)}
+									</div>
+									{#if w.branch}
+										<div class="truncate text-xs text-muted-foreground italic">
+											{formatBranch(w.branch)}
+										</div>
+									{/if}
+								{:else}
+									<div
+										in:fade={{ duration: 150 }}
+										out:fade={{ duration: 150 }}
+										class="text-xs font-bold tracking-widest text-muted-foreground uppercase"
+									>
+										{w.state === 'idle' ? '[ IDLE ]' : '[ OFFLINE ]'}
+									</div>
+								{/if}
+							{/key}
 						</a>
 					</div>
 				{:else}
@@ -275,7 +294,9 @@
 
 		<!-- Q5: How much did this cost? -->
 		<section class="flex flex-col gap-2">
-			<div class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
+			<div
+				class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase"
+			>
 				<span>Today's Spend</span>
 				<a
 					href={resolve('/usage')}
@@ -299,7 +320,9 @@
 
 	<!-- Q4: What just got done? -->
 	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
+		<div
+			class="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase"
+		>
 			<span>Today's Shipments</span>
 			<span>{s.completions.today} total</span>
 		</div>
@@ -314,8 +337,12 @@
 						<CheckCircle2 size={14} class="shrink-0 text-status-green" />
 						<div class="flex min-w-0 flex-col">
 							<div class="flex items-center gap-2">
-								<span class="text-xs font-bold text-status-green">{item.ticket_id || 'shipped'}</span>
-								<span class="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</span>
+								<span class="text-xs font-bold text-status-green"
+									>{item.ticket_id || 'shipped'}</span
+								>
+								<span class="text-xs text-muted-foreground"
+									>{formatRelativeTime(item.timestamp)}</span
+								>
 							</div>
 							<div class="truncate text-xs text-muted-foreground">{item.summary}</div>
 						</div>
@@ -324,7 +351,9 @@
 				</div>
 			{:else}
 				<div class="rounded-sm border border-dashed border-border p-2 text-center">
-					<span class="text-xs text-muted-foreground uppercase italic">Nothing shipped yet today</span>
+					<span class="text-xs text-muted-foreground uppercase italic"
+						>Nothing shipped yet today</span
+					>
 				</div>
 			{/each}
 		</div>
@@ -357,7 +386,7 @@
 			</div>
 
 			{#if shipmentLoading}
-				<div class="flex flex-col gap-1.5 animate-pulse">
+				<div class="flex animate-pulse flex-col gap-1.5">
 					<div class="h-3 w-32 rounded bg-muted"></div>
 					<div class="h-4 w-full rounded bg-surface"></div>
 					<div class="h-4 w-5/6 rounded bg-surface"></div>
