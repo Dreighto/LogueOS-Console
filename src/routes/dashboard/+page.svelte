@@ -39,7 +39,7 @@
 	// dependency. Guarded behind visibility so it idles in a background tab.
 	let now = $state('—');
 	function paintClock() {
-		now = new Date().toLocaleTimeString('en-US', { hour12: false });
+		now = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' });
 	}
 	$effect(() => {
 		paintClock();
