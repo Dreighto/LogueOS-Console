@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 
 // Absolute path so this doesn't depend on the console server process having
 // `gh` on its PATH; falls back to a PATH lookup if gh lives elsewhere.
-const GH_ABS = 'C:\\Program Files\\GitHub CLI\\gh.exe';
+const GH_ABS = 'gh';
 const GH = existsSync(GH_ABS) ? GH_ABS : 'gh';
 
 const REPOS = ['Dreighto/project-miru', 'Dreighto/LogueOS-Console', 'Dreighto/LogueOS-Orchestrator'];

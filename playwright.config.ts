@@ -33,6 +33,14 @@ export default defineConfig({
 		{
 			name: 'chromium',
 			use: { ...devices['Desktop Chrome'] }
+		},
+		{
+			// WebKit binary lives at ~/.cache/ms-playwright/webkit-2287 (installed 2026-06-01).
+			// Desktop WebKit on Linux — catches engine-level issues; NOT iOS Mobile Safari.
+			// For iOS-specific behavior (URL-bar resize, input-zoom), verify on the real
+			// iPhone 16 Pro Max over Tailscale.
+			name: 'iphone-webkit',
+			use: { ...devices['iPhone 15 Pro Max'] }
 		}
 	],
 	webServer: {
