@@ -43,19 +43,19 @@ const parsePositiveInt = (raw: string, name: string): number => {
 export const serverConfig = {
 	completionLogPath: getEnv(
 		'LOGUEOS_COMPLETION_LOG_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_completion_log.jsonl'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/cc_completion_log.jsonl'
 	),
 	decisionsLogPath: getEnv(
 		'LOGUEOS_DECISIONS_LOG_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\agent_decisions.jsonl'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/agent_decisions.jsonl'
 	),
 	workerLogPath: getEnv(
 		'LOGUEOS_WORKER_LOG_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\logs\\dispatch_listener_stdout.log'
+		'/home/dreighto/dev/LogueOS-Orchestrator/logs/dispatch_listener_stdout.log'
 	),
 	heartbeatsLogPath: getEnv(
 		'LOGUEOS_HEARTBEATS_LOG_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\cc_heartbeat_log.jsonl'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/cc_heartbeat_log.jsonl'
 	),
 	// Kill switch contract (tools/check_kill_switch.py): file presence at
 	// killSwitchPath = ACTIVE. File absence = CLEAR. Contents are free-form;
@@ -66,15 +66,15 @@ export const serverConfig = {
 	// on clear).
 	killSwitchPath: getEnv(
 		'LOGUEOS_KILL_SWITCH_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\system_halt'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/system_halt'
 	),
 	killSwitchLogPath: getEnv(
 		'LOGUEOS_KILL_SWITCH_LOG_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\kill_switch_log.jsonl'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/kill_switch_log.jsonl'
 	),
 	memoryDbPath: getEnv(
 		'LOGUEOS_MEMORY_DB_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\data\\logueos_memory.db'
+		'/home/dreighto/dev/LogueOS-Orchestrator/data/logueos_memory.db'
 	),
 	// Directory for operator-pasted images in the Chat tab. Files are written
 	// here by POST /api/chat/uploads and streamed back by GET
@@ -94,7 +94,7 @@ export const serverConfig = {
 	),
 	adoptedLessonsPath: getEnv(
 		'LOGUEOS_ADOPTED_LESSONS_PATH',
-		'D:\\dev\\LogueOS-Orchestrator\\.logueos\\overlays\\adopted-lessons.md'
+		'/home/dreighto/dev/LogueOS-Orchestrator/.logueos/overlays/adopted-lessons.md'
 	),
 	// Dispatch listener address (Console -> listener for /kill and future
 	// /restart). Same machine in production; configurable for dev so we can
