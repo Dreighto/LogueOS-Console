@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Pre-push gate. Install once per clone:  git config core.hooksPath tools/git-hooks
+# Emergency bypass:  git push --no-verify
+exec "$(git rev-parse --show-toplevel)/tools/preflight.sh"
