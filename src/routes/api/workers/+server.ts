@@ -9,7 +9,12 @@ import readline from 'node:readline';
 
 // worktree_leases.json is keyed by slot path. Reading it per-slot (not per
 // worker) is what lets the console show concurrent dispatches — see LOS-125.
-const LEASES_PATH = 'D:\\dev\\LogueOS-Orchestrator\\data\\worktree_leases.json';
+// Linux path post-migration (the old `D:\dev\...` literal was missed when
+// config.ts was migrated, so this endpoint silently returned no live jobs).
+// Override with LOGUEOS_LEASES_PATH if the data dir ever moves.
+const LEASES_PATH =
+	process.env.LOGUEOS_LEASES_PATH ??
+	'/home/dreighto/dev/LogueOS-Orchestrator/data/worktree_leases.json';
 const HEARTBEAT_RECENCY_MS = 30 * 60 * 1000;
 
 interface Lease {
@@ -45,9 +50,7 @@ export const GET: RequestHandler = async () => {
 				// Lane: the orchestrator-recorded lane wins (LOS-126); until that
 				// lands, fall back to the worker's home role.
 				const lane: Lane =
-					lease.lane === 'frontend' || lease.lane === 'backend'
-						? lease.lane
-						: (def.role as Lane);
+					lease.lane === 'frontend' || lease.lane === 'backend' ? lease.lane : (def.role as Lane);
 				jobs.push({
 					slot: slotPath.split(/[\\/]/).slice(-2).join('/'),
 					trace_id: lease.trace_id,
