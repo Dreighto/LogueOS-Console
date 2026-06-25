@@ -88,10 +88,14 @@
 			suggestions = suggestions.slice(1);
 			currentIndex = 0;
 
-			// Show success toast
+			// Show success toast in operator-friendly language.
 			const action =
-				decision === 'accept' ? 'accepted' : decision === 'reject' ? 'rejected' : 'edited';
-			toasts.add(`Suggestion ${action} successfully`, 'success');
+				decision === 'accept'
+					? 'Agreed'
+					: decision === 'reject'
+						? 'Overridden'
+						: 'Custom label saved';
+			toasts.add(action, 'success');
 
 			// If no more suggestions, show completion
 			if (suggestions.length === 0) {
@@ -197,8 +201,8 @@
 
 				<!-- Keyboard shortcuts hint -->
 				<div class="space-y-1 text-center text-xs text-zinc-600">
-					<div>Keyboard shortcuts:</div>
-					<div class="font-mono">← Reject • → Accept • ↑ Edit</div>
+					<div>Keyboard shortcuts</div>
+					<div class="font-mono">← Override · → Agree · ↑ Different label</div>
 				</div>
 			</div>
 		{/if}
