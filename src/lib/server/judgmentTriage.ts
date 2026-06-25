@@ -2,43 +2,52 @@ import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { serverConfig } from './config';
 import { emitObservation } from './observation_emit';
-import type { 
-	JudgmentSuggestion, 
-	WorkerRun, 
-	TriageSuggestion, 
-	TriageResponse, 
+import type {
+	JudgmentSuggestion,
+	WorkerRun,
+	TriageSuggestion,
+	TriageResponse,
 	TriageSubmission,
-	AllowedOperatorJudgment,
-	ALLOWED_OPERATOR_JUDGMENTS 
+	AllowedOperatorJudgment
 } from '$lib/types/judgment';
 
 function getDb(): Database.Database {
 	return new Database(serverConfig.memoryDbPath, { readonly: false });
 }
 
+function getDbReadOnly(): Database.Database {
+	return new Database(serverConfig.memoryDbPath, { readonly: true });
+}
+
 /**
- * Fetch the next batch of unconfirmed suggestions, ordered by 
+ * Fetch the next batch of unconfirmed suggestions, ordered by
  * operator_confirmed IS NULL, created_at ASC so reload = continue.
  */
 export function getTriageSuggestions(limit = 25): TriageResponse {
 	if (!fs.existsSync(serverConfig.memoryDbPath)) {
-		return { 
-			suggestions: [], 
-			total_unconfirmed: 0, 
-			progress: { reviewed: 0, total: 0 } 
+		return {
+			suggestions: [],
+			total_unconfirmed: 0,
+			progress: { reviewed: 0, total: 0 }
 		};
 	}
 
-	const db = getDb();
+	const db = getDbReadOnly();
 	try {
 		// Get total counts for progress tracking
-		const totalCount = db.prepare('SELECT COUNT(*) as count FROM worker_run_judgment_suggestions').get() as { count: number };
-		const unconfirmedCount = db.prepare(
-			'SELECT COUNT(*) as count FROM worker_run_judgment_suggestions WHERE operator_confirmed IS NULL'
-		).get() as { count: number };
+		const totalCount = db
+			.prepare('SELECT COUNT(*) as count FROM worker_run_judgment_suggestions')
+			.get() as { count: number };
+		const unconfirmedCount = db
+			.prepare(
+				'SELECT COUNT(*) as count FROM worker_run_judgment_suggestions WHERE operator_confirmed IS NULL'
+			)
+			.get() as { count: number };
 
 		// Get the next batch of unconfirmed suggestions with their associated runs
-		const suggestions = db.prepare(`
+		const suggestions = db
+			.prepare(
+				`
 			SELECT 
 				s.id, s.run_id, s.trace_id, s.suggested_label, s.rationale, 
 				s.derived_from, s.confidence, s.source, s.created_at,
@@ -53,9 +62,11 @@ export function getTriageSuggestions(limit = 25): TriageResponse {
 			WHERE s.operator_confirmed IS NULL
 			ORDER BY s.created_at ASC
 			LIMIT ?
-		`).all(limit) as any[];
+		`
+			)
+			.all(limit) as any[];
 
-		const triageSuggestions: TriageSuggestion[] = suggestions.map(row => ({
+		const triageSuggestions: TriageSuggestion[] = suggestions.map((row) => ({
 			suggestion: {
 				id: row.id,
 				run_id: row.run_id,
@@ -100,10 +111,10 @@ export function getTriageSuggestions(limit = 25): TriageResponse {
 		};
 	} catch (e: unknown) {
 		console.error('getTriageSuggestions error:', e);
-		return { 
-			suggestions: [], 
-			total_unconfirmed: 0, 
-			progress: { reviewed: 0, total: 0 } 
+		return {
+			suggestions: [],
+			total_unconfirmed: 0,
+			progress: { reviewed: 0, total: 0 }
 		};
 	} finally {
 		db.close();
@@ -152,30 +163,23 @@ export function submitTriageDecision(submission: TriageSubmission): boolean {
 
 		if (submission.decision === 'accept') {
 			// Use the suggested_label from the database
-			const suggestion = db.prepare(
-				'SELECT suggested_label FROM worker_run_judgment_suggestions WHERE id = ?'
-			).get(submission.suggestion_id) as { suggested_label: string } | undefined;
-			
+			const suggestion = db
+				.prepare('SELECT suggested_label FROM worker_run_judgment_suggestions WHERE id = ?')
+				.get(submission.suggestion_id) as { suggested_label: string } | undefined;
+
 			if (!suggestion) {
 				return false; // suggestion_id not found
 			}
-			
+
 			operatorJudgment = 'accepted';
 			operatorLabel = suggestion.suggested_label;
 		} else if (submission.decision === 'reject') {
 			operatorJudgment = 'rejected';
 			operatorLabel = 'rejected'; // Standard rejected label
-		} else { // edit
+		} else {
+			// edit
 			operatorJudgment = 'edited';
 			operatorLabel = submission.operator_label!; // Already validated above
-		}
-
-		// Validate operator_label is one of allowed values for accept/reject,
-		// or non-empty string for edit
-		if (submission.decision !== 'edit') {
-			// For accept/reject, we control the operator_label value
-		} else {
-			// For edit, just ensure it's not empty (already checked above)
 		}
 
 		// Execute in transaction
@@ -184,21 +188,31 @@ export function submitTriageDecision(submission: TriageSubmission): boolean {
 			updateRun.run(operatorJudgment, submission.suggestion_id);
 		})();
 
-		// Emit Tier 0 observation for the triage decision
-		const suggestion = db.prepare(
-			'SELECT trace_id, suggested_label FROM worker_run_judgment_suggestions WHERE id = ?'
-		).get(submission.suggestion_id) as { trace_id: string; suggested_label: string } | undefined;
+		// Emit Tier 0 observation for the triage decision. Use the actual run's
+		// project_id so the observation lands in the right project bucket — fall
+		// back to 'logueos-orchestrator' for runs that pre-date project tagging.
+		const meta = db
+			.prepare(
+				`SELECT s.trace_id, s.suggested_label, r.project_id AS run_project_id
+				 FROM worker_run_judgment_suggestions s
+				 LEFT JOIN worker_runs r ON s.run_id = r.id
+				 WHERE s.id = ?`
+			)
+			.get(submission.suggestion_id) as
+			| { trace_id: string; suggested_label: string; run_project_id: string | null }
+			| undefined;
 
-		if (suggestion) {
-			const body = `Operator ${submission.decision} worker run judgment for trace ${suggestion.trace_id}. ` +
-				`Suggested: "${suggestion.suggested_label}", Decision: "${operatorJudgment}", Final: "${operatorLabel}".`;
+		if (meta) {
+			const body =
+				`Operator ${submission.decision} worker run judgment for trace ${meta.trace_id}. ` +
+				`Suggested: "${meta.suggested_label}", Decision: "${operatorJudgment}", Final: "${operatorLabel}".`;
 
 			emitObservation({
 				source: 'console_triage',
 				thread_id: 'judgment-triage-ui',
 				tier_at_emit: 'tier-0',
 				models_used: [],
-				project_id: 'logueos-console',
+				project_id: meta.run_project_id ?? 'logueos-orchestrator',
 				task_shape: ['judgment-triage', 'operator-decision', 'corpus-building'],
 				body,
 				observation_kind: 'what-worked'
@@ -222,11 +236,15 @@ export function getSuggestionById(suggestionId: number): JudgmentSuggestion | nu
 		return null;
 	}
 
-	const db = getDb();
+	const db = getDbReadOnly();
 	try {
-		const row = db.prepare(`
+		const row = db
+			.prepare(
+				`
 			SELECT * FROM worker_run_judgment_suggestions WHERE id = ?
-		`).get(suggestionId) as any;
+		`
+			)
+			.get(suggestionId) as any;
 
 		if (!row) return null;
 
