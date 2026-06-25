@@ -7,6 +7,7 @@
 		Home,
 		Cpu,
 		Activity,
+		ListChecks,
 		Brain,
 		MessageSquare,
 		Settings,
@@ -30,6 +31,7 @@
 		{ name: 'Home', path: '/', icon: Home },
 		{ name: 'Team', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
+		{ name: 'Triage', path: '/runs/triage', icon: ListChecks },
 		{ name: 'Memory', path: '/memory', icon: Brain },
 		{ name: 'Chat', path: '/chat', icon: MessageSquare }
 	] as const;
@@ -116,11 +118,11 @@
 		<ToastContainer />
 	</div>
 {:else}
-<div
-	data-sveltekit-preload-data="hover"
-	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
-	style="padding-top: env(safe-area-inset-top, 0px);"
->
+	<div
+		data-sveltekit-preload-data="hover"
+		class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
+		style="padding-top: env(safe-area-inset-top, 0px);"
+	>
 		<!-- Full header — all non-chat routes. Chat ('/chat') uses the immersive
 		     branch above and renders no global header at all. -->
 		<header
@@ -209,52 +211,52 @@
 			</button>
 		</div>
 
-	<!-- Main Content.
+		<!-- Main Content.
 	     Optimized for PWA: The container is now the scroll parent, and the nav
 	     is part of the flex flow, ensuring it sits at the true bottom.
 	     Page transitions: fly in from the right/left or simple fade. -->
-	<main class="custom-scrollbar relative flex-1 overflow-x-hidden overflow-y-auto">
-		{#key page.url.pathname}
-			<div class="h-full p-4">
-				{@render children()}
+		<main class="custom-scrollbar relative flex-1 overflow-x-hidden overflow-y-auto">
+			{#key page.url.pathname}
+				<div class="h-full p-4">
+					{@render children()}
+				</div>
+			{/key}
+		</main>
+
+		<!-- Bottom Navigation. Compact 32px height for PWA — maximises content area. -->
+		<nav
+			class="z-20 w-full border-t border-border bg-background/95 backdrop-blur-xl"
+			style="padding-bottom: env(safe-area-inset-bottom, 0px);"
+		>
+			<div class="flex h-8 items-center justify-around overflow-hidden">
+				{#each tabs as tab (tab.path)}
+					<a
+						href={resolve(tab.path)}
+						aria-current={page.url.pathname === tab.path ? 'page' : undefined}
+						class="group active-trigger relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
+						class:text-cta={page.url.pathname === tab.path}
+						class:text-muted-foreground={page.url.pathname !== tab.path}
+					>
+						<tab.icon
+							size={18}
+							class="transition-all duration-300 {page.url.pathname === tab.path
+								? 'scale-110'
+								: 'scale-100 group-hover:scale-110 group-active:scale-95'}"
+						/>
+
+						{#if page.url.pathname === tab.path}
+							<div
+								in:fly={{ y: 4, duration: 150 }}
+								class="absolute bottom-0 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_8px_rgba(163,230,53,1)]"
+							></div>
+						{/if}
+					</a>
+				{/each}
 			</div>
-		{/key}
-	</main>
+		</nav>
 
-	<!-- Bottom Navigation. Compact 32px height for PWA — maximises content area. -->
-	<nav
-		class="z-20 w-full border-t border-border bg-background/95 backdrop-blur-xl"
-		style="padding-bottom: env(safe-area-inset-bottom, 0px);"
-	>
-		<div class="flex h-8 items-center justify-around overflow-hidden">
-			{#each tabs as tab (tab.path)}
-				<a
-					href={resolve(tab.path)}
-					aria-current={page.url.pathname === tab.path ? 'page' : undefined}
-					class="group active-trigger relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
-					class:text-cta={page.url.pathname === tab.path}
-					class:text-muted-foreground={page.url.pathname !== tab.path}
-				>
-					<tab.icon
-						size={18}
-						class="transition-all duration-300 {page.url.pathname === tab.path
-							? 'scale-110'
-							: 'scale-100 group-hover:scale-110 group-active:scale-95'}"
-					/>
-
-					{#if page.url.pathname === tab.path}
-						<div
-							in:fly={{ y: 4, duration: 150 }}
-							class="absolute bottom-0 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-cta shadow-[0_0_8px_rgba(163,230,53,1)]"
-						></div>
-					{/if}
-				</a>
-			{/each}
-		</div>
-	</nav>
-
-	<ToastContainer />
-</div>
+		<ToastContainer />
+	</div>
 {/if}
 
 <style>
