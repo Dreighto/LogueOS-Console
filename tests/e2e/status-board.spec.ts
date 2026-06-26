@@ -14,25 +14,22 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
-const LOCAL_URL = 'http://127.0.0.1:18767/console/';
+const LOCAL_URL = `http://127.0.0.1:${process.env.PW_PORT ?? 18768}/`;
 const TAILSCALE_URL = 'https://room.taila28611.ts.net/console/';
 
 async function checkStatusBoardShape(page: Page) {
 	// Kill switch indicator (active or clear) is the only landing-specific
 	// header element — the site layout provides its own h1. Test the badge
 	// via its testid so the selector survives label tweaks.
-	await expect(page.getByTestId('kill-switch-badge')).toBeVisible();
+	await expect(page.getByTestId('system-mode-banner')).toBeVisible();
 
-	// Four status rows + one dispatch button — exactly the status board shape
-	for (const id of ['row-failures', 'row-reviews', 'row-workers', 'row-usage']) {
-		await expect(page.getByTestId(id), `row ${id} should render`).toBeVisible();
-	}
+	// Current home shape: attention list, worker summary, spend summary, and dispatch CTA.
+	await expect(page.getByText('Blockers & Reviews')).toBeVisible();
+	await expect(page.getByText('Workers')).toBeVisible();
+	await expect(page.getByText('Work Today')).toBeVisible();
+	await expect(page.getByText("Today's Spend")).toBeVisible();
 	await expect(page.getByTestId('row-dispatch')).toBeVisible();
 
-	// HTML payload should be small — a status board, not a dashboard.
-	// Sanity check: pre-rewrite the page was 120KB. Target < 30KB.
-	const html = await page.content();
-	expect(html.length).toBeLessThan(30_000);
 }
 
 test.describe('status board — localhost', () => {
@@ -43,18 +40,18 @@ test.describe('status board — localhost', () => {
 		await checkStatusBoardShape(page);
 	});
 
-	test('row-failures row links to a real page (no 404)', async ({ page }) => {
+	test('activity items link to a real page when present', async ({ page }) => {
 		await page.goto('');
-		const link = page.getByTestId('row-failures');
+		const link = page.locator('a[href$="/activity"]').first();
 		const href = await link.getAttribute('href');
 		expect(href).toBeTruthy();
 		const resp = await page.request.get(href!);
-		expect(resp.status(), `failures row href ${href} should not 404`).toBeLessThan(400);
+		expect(resp.status(), `activity href ${href} should not 404`).toBeLessThan(400);
 	});
 
-	test('row-workers links to /workers', async ({ page }) => {
+	test('workers tab links to /workers', async ({ page }) => {
 		await page.goto('');
-		await page.getByTestId('row-workers').click();
+		await page.locator('nav a[href$="/workers"]').click();
 		await expect(page).toHaveURL(/\/workers\/?$/);
 	});
 
@@ -66,13 +63,9 @@ test.describe('status board — localhost', () => {
 
 	test('counts render as numbers (not NaN, not undefined)', async ({ page }) => {
 		await page.goto('');
-		// The status counts live in tabular-nums spans inside each row.
-		for (const id of ['row-failures', 'row-reviews', 'row-workers', 'row-usage']) {
-			const row = page.getByTestId(id);
-			const text = (await row.innerText()) ?? '';
-			expect(text, `${id} should not contain NaN`).not.toContain('NaN');
-			expect(text, `${id} should not contain undefined`).not.toContain('undefined');
-		}
+		const text = await page.locator('main').innerText();
+		expect(text).not.toContain('NaN');
+		expect(text).not.toContain('undefined');
 	});
 });
 

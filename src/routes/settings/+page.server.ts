@@ -9,8 +9,6 @@
 import type { PageServerLoad } from './$types';
 import { clientSafeConfig } from '$lib/server/config';
 import { readKillSwitchStateSafe } from '$lib/server/kill-switch';
-import { getPendingDeadSubs, getSubscriptionCount } from '$lib/server/web_push';
-import { listChatObservations } from '$lib/server/observation_emit';
 
 export const load: PageServerLoad = async ({ fetch }) => {
 	let services: Array<{ id: string; name: string; status: 'online' | 'offline' }> = [];
@@ -24,64 +22,9 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.error('Settings: /api/system load failed', e);
 	}
 
-	type SpendEntry = { provider: string; tokens_used: number; cap: number; pct: number };
-	let spendProviders: SpendEntry[] = [];
-	try {
-		const usageRes = await fetch('/api/chat/usage');
-		if (usageRes.ok) {
-			const data = await usageRes.json();
-			spendProviders = Array.isArray(data.providers) ? data.providers : [];
-		}
-	} catch (e) {
-		console.error('Settings: /api/chat/usage load failed', e);
-	}
-
-	type VoiceStatus = {
-		chars_used: number;
-		char_cap: number;
-		minutes_used: number;
-		minute_cap: number;
-	};
-	let voiceStatus: VoiceStatus | null = null;
-	try {
-		const voiceRes = await fetch('/api/chat/speak/status');
-		if (voiceRes.ok) {
-			voiceStatus = await voiceRes.json();
-		}
-	} catch (e) {
-		console.error('Settings: /api/chat/speak/status load failed', e);
-	}
-
-	// Web Push status (PR 6). Dead subs surface as a re-subscribe banner.
-	let pushDeadSubs: Array<{ device_id: string; endpoint: string; detected_at: string }> = [];
-	let pushSubCount = 0;
-	try {
-		pushDeadSubs = getPendingDeadSubs();
-		pushSubCount = getSubscriptionCount();
-	} catch (e) {
-		console.error('Settings: push status load failed', e);
-	}
-
-	// Team Memory stats (PR 8). Today + lifetime counts for the Settings banner.
-	let obsToday = 0;
-	let obsLifetime = 0;
-	try {
-		const stats = listChatObservations(0, 0);
-		obsToday = stats.today_count;
-		obsLifetime = stats.lifetime_count;
-	} catch (e) {
-		console.error('Settings: observation stats load failed', e);
-	}
-
 	return {
 		...clientSafeConfig,
 		killSwitch: await readKillSwitchStateSafe(),
-		services,
-		spendProviders,
-		voiceStatus,
-		pushDeadSubs,
-		pushSubCount,
-		obsToday,
-		obsLifetime
+		services
 	};
 };

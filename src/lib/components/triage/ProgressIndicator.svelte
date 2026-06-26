@@ -8,6 +8,7 @@
 	} = $props();
 
 	const percentage = $derived(total > 0 ? Math.round((reviewed / total) * 100) : 0);
+	const progressWidth = $derived(percentage > 0 ? `${percentage}%` : '2px');
 </script>
 
 <!-- Sticky progress bar that stays at top on mobile -->
@@ -27,8 +28,8 @@
 		<!-- Progress bar -->
 		<div class="h-2 w-full overflow-hidden rounded-full bg-zinc-900">
 			<div
-				class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 transition-all duration-500 ease-out"
-				style="width: {percentage}%"
+				class="progress-fill h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 transition-all duration-500 ease-out"
+				style="--p: {progressWidth}"
 			></div>
 		</div>
 
@@ -38,3 +39,9 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	.progress-fill {
+		width: var(--p);
+	}
+</style>

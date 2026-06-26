@@ -2,14 +2,13 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { resolve, base } from '$app/paths';
-	import { onNavigate } from '$app/navigation';
+	import { afterNavigate, onNavigate } from '$app/navigation';
 	import {
 		Home,
 		Cpu,
 		Activity,
 		ListChecks,
 		Brain,
-		MessageSquare,
 		Settings,
 		DollarSign,
 		AlertOctagon,
@@ -32,8 +31,7 @@
 		{ name: 'Team', path: '/workers', icon: Cpu },
 		{ name: 'Activity', path: '/activity', icon: Activity },
 		{ name: 'Triage', path: '/runs/triage', icon: ListChecks },
-		{ name: 'Memory', path: '/memory', icon: Brain },
-		{ name: 'Chat', path: '/chat', icon: MessageSquare }
+		{ name: 'Memory', path: '/memory', icon: Brain }
 	] as const;
 
 	// Seed kill-switch state from SSR. Client polls so the header stays in
@@ -78,18 +76,11 @@
 		};
 	});
 
-	// ── Header style (chat surfaces only) ───────────────────────────────────
-	// page.url.pathname includes the SvelteKit paths.base ('/console'), so we
-	// compare against the full path. Two modes:
-	//   'immersive' — /chat and /chat/preview: full-bleed, NO global chrome
-	//                 at all. The page owns its own viewport.
-	//   'full'      — everything else.
-	// .endsWith() is defensive against future base changes.
-	const headerStyle = $derived(
-		page.url.pathname.endsWith('/chat') || page.url.pathname.endsWith('/chat/preview')
-			? 'immersive'
-			: 'full'
-	);
+	function trimSvelteAnnouncerWidthStyle() {
+		document.getElementById('svelte-announcer')?.style.removeProperty('width');
+	}
+
+	afterNavigate(trimSvelteAnnouncerWidthStyle);
 
 	// ── View transitions ─────────────────────────────────────────────────────
 	// Butter-smooth, hardware-accelerated view transitions for route swaps (native GPU view-transitions)
@@ -109,22 +100,11 @@
 	<link rel="manifest" href="{base}/manifest.webmanifest" />
 </svelte:head>
 
-{#if headerStyle === 'immersive'}
-	<!-- Conversational OS surface (V2): no global chrome at all. The page
-	     owns its own viewport, header, composer, everything. Layout just
-	     provides safe-area-aware full-bleed canvas. -->
-	<div class="flex min-h-[100dvh] flex-col bg-background text-foreground">
-		{@render children()}
-		<ToastContainer />
-	</div>
-{:else}
-	<div
-		data-sveltekit-preload-data="hover"
-		class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
-		style="padding-top: env(safe-area-inset-top, 0px);"
-	>
-		<!-- Full header — all non-chat routes. Chat ('/chat') uses the immersive
-		     branch above and renders no global header at all. -->
+<div
+	data-sveltekit-preload-data="hover"
+	class="mx-auto flex h-[100dvh] max-w-[480px] flex-col overflow-hidden border-x border-border bg-background text-foreground shadow-2xl sm:max-w-[640px] md:max-w-[820px] lg:max-w-[960px]"
+	style="padding-top: env(safe-area-inset-top, 0px);"
+>
 		<header
 			class="z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur-md"
 		>
@@ -191,20 +171,20 @@
 			>
 			<div class="h-3 w-px bg-border"></div>
 			<button
-				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
+				class="active-trigger flex min-h-10 items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
 			>
 				<Pause size={10} />
 				Pause
 			</button>
 			<button
-				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
+				class="active-trigger flex min-h-10 items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
 			>
 				<RefreshCw size={10} />
 				Sync
 			</button>
 			<div class="flex-1"></div>
 			<button
-				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-status-amber uppercase transition-colors hover:bg-status-amber/10"
+				class="active-trigger flex min-h-10 items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-status-amber uppercase transition-colors hover:bg-status-amber/10"
 			>
 				<Power size={10} />
 				Restart
@@ -232,6 +212,7 @@
 				{#each tabs as tab (tab.path)}
 					<a
 						href={resolve(tab.path)}
+						aria-label={tab.name}
 						aria-current={page.url.pathname === tab.path ? 'page' : undefined}
 						class="group active-trigger relative flex h-full flex-1 items-center justify-center transition-colors duration-200"
 						class:text-cta={page.url.pathname === tab.path}
@@ -256,8 +237,7 @@
 		</nav>
 
 		<ToastContainer />
-	</div>
-{/if}
+</div>
 
 <style>
 	:global(html) {

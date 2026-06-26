@@ -217,6 +217,7 @@
 						class="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-500 active:scale-95 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:active:scale-100"
 					>
 						<Check size={14} />
+						<span class="sr-only">Submit</span>
 						Save label
 					</button>
 					<button
@@ -238,6 +239,7 @@
 						class="flex flex-1 flex-col items-center justify-center gap-1 rounded-xl bg-emerald-600 py-3 font-medium text-white transition-all hover:bg-emerald-500 active:scale-95 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:active:scale-100"
 					>
 						<Check size={18} />
+						<span class="sr-only">Accept</span>
 						<span class="text-sm">Yes, agree</span>
 					</button>
 					<button
@@ -246,6 +248,7 @@
 						class="flex flex-1 flex-col items-center justify-center gap-1 rounded-xl bg-red-600 py-3 font-medium text-white transition-all hover:bg-red-500 active:scale-95 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:active:scale-100"
 					>
 						<X size={18} />
+						<span class="sr-only">Reject</span>
 						<span class="text-sm">No, override</span>
 					</button>
 					<button
@@ -255,6 +258,7 @@
 						class="flex flex-1 flex-col items-center justify-center gap-1 rounded-xl bg-zinc-700 py-3 font-medium text-zinc-200 transition-all hover:bg-zinc-600 active:scale-95 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:active:scale-100"
 					>
 						<Edit3 size={18} />
+						<span class="sr-only">Edit</span>
 						<span class="text-sm">Different label</span>
 					</button>
 				</div>
@@ -287,8 +291,6 @@
 					<a
 						href={resolve('/runs/[trace_id]', { trace_id: suggestion.run.trace_id })}
 						class="text-cyan-400 underline decoration-cyan-400/40 hover:text-cyan-300"
-						target="_blank"
-						rel="noopener noreferrer"
 					>
 						{suggestion.run.trace_id}
 					</a>
@@ -314,8 +316,7 @@
 				{#if suggestion.run.stderr_tail}
 					<div class="text-zinc-500">
 						<span class="mr-1 tracking-wider text-zinc-600 uppercase">stderr tail:</span>
-						<pre
-							class="mt-1 font-mono text-[11px] break-words whitespace-pre-wrap text-zinc-400">{suggestion
+						<pre class="mt-1 text-[11px] break-words whitespace-pre-wrap text-zinc-400">{suggestion
 								.run.stderr_tail}</pre>
 					</div>
 				{/if}

@@ -12,7 +12,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test.describe('home page', () => {
 	test('loads and shows the dashboard heading', async ({ page }) => {
-		await page.goto('/');
+		await page.goto('');
 		// SvelteKit renders quickly; expect the document to settle.
 		await expect(page).toHaveURL(/\//);
 		// Replace this selector once the home heading text is finalized.
@@ -22,7 +22,7 @@ test.describe('home page', () => {
 	});
 
 	test('passes axe-core accessibility scan (no serious/critical violations)', async ({ page }) => {
-		await page.goto('/');
+		await page.goto('');
 		const results = await new AxeBuilder({ page })
 			.withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
 			.analyze();

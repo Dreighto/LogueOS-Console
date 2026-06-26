@@ -53,7 +53,7 @@
 				type="button"
 				onclick={() => toasts.remove(toast.id)}
 				aria-label="Dismiss notification"
-				class="shrink-0 rounded-md p-1 text-zinc-400 opacity-60 transition-opacity hover:opacity-100"
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md p-1 text-zinc-400 opacity-60 transition-opacity hover:opacity-100"
 			>
 				<X size={12} aria-hidden="true" />
 			</button>
