@@ -1,6 +1,8 @@
 import adapter from '@sveltejs/adapter-node';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
+const base = process.env.LOGUEOS_CONSOLE_BASELESS === '1' ? '' : '/console';
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: vitePreprocess(),
@@ -54,7 +56,7 @@ const config = {
 			// THIS works. SvelteKit's kit.paths.base STILL needs to be '/console' so
 			// internal hrefs (resolve('/runs/abc')) come out as /console/runs/abc.
 			// The combination is: kit.paths.base for app links + vite.base for asset URLs.
-			base: '/console'
+			base
 		},
 		// SvelteKit's built-in CSRF check compares the request's Origin header
 		// against the URL the server thinks it's running at — and adapter-node

@@ -120,8 +120,7 @@ self.addEventListener('fetch', (event: any) => {
 				.catch(async () => {
 					const cached = await caches.match(event.request);
 					if (cached) return cached;
-					const shell =
-						(await caches.match('/console/chat')) || (await caches.match('/console'));
+					const shell = await caches.match('/console');
 					if (shell) return shell;
 					return new Response(
 						'<!doctype html><meta charset="utf-8"><body style="background:#050505;color:#a1a1aa;font-family:system-ui;padding:2rem">Offline — reconnect to load LogueOS.</body>',

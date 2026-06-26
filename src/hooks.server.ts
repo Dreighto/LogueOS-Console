@@ -13,9 +13,6 @@
 // for a single-operator personal dashboard. No app-level auth layer needed.
 
 import type { Handle } from '@sveltejs/kit';
-import { startCompletionPoller } from '$lib/server/completion_poller';
-
-startCompletionPoller();
 
 export const handle: Handle = async ({ event, resolve }) => {
 	return resolve(event);

@@ -4,13 +4,13 @@
 // vite.config.ts) and waits for /__health probe before running tests.
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 18767;
+const PORT = Number(process.env.PW_PORT ?? 18768);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 // Console mounts at /console/ via kit.paths.base — root returns 404. Probe
 // the real mount point so reuseExistingServer works when the Console is
 // already running; otherwise webServer tries to spawn its own and the port
 // bind collides.
-const HEALTH_URL = `${BASE_URL}/console/`;
+const HEALTH_URL = `${BASE_URL}/`;
 
 // iphone-webkit is an OPT-IN local project — the WebKit browser is a local
 // install (~/.cache/ms-playwright/webkit-2287, 2026-06-01) and is NOT present
@@ -57,7 +57,9 @@ export default defineConfig({
 		// In CI, run against the production build (no HMR, no hydration race).
 		// Local dev uses `vite dev` so HMR keeps working when iterating on tests.
 		// The workflow runs `npm run build` BEFORE test:e2e so preview has output.
-		command: process.env.CI ? 'npm run preview' : 'npm run dev',
+		command: process.env.CI
+			? `LOGUEOS_CONSOLE_BASELESS=1 SVELTE_INSPECTOR_OPTIONS=false npm run preview -- --port ${PORT}`
+			: `LOGUEOS_CONSOLE_BASELESS=1 SVELTE_INSPECTOR_OPTIONS=false npm run dev -- --port ${PORT}`,
 		url: HEALTH_URL,
 		reuseExistingServer: !process.env.CI,
 		timeout: 60_000,

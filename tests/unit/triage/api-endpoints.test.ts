@@ -41,13 +41,6 @@ vi.mock('$lib/server/env_redactor', () => ({
 	redactEnvValues: (s: string) => ({ redacted: s, redactions: 0 })
 }));
 
-// thread_meta is only used by emitDispatchLinkObservation/maybeMarkDeepCandidate
-// (not by the triage path) but observation_emit imports it at module load.
-vi.mock('$lib/server/thread_meta', () => ({
-	setRememberFlag: vi.fn(),
-	getThreadMeta: vi.fn(() => null)
-}));
-
 // Import AFTER the mocks above.
 import {
 	getTriageSuggestions,

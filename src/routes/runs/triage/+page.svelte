@@ -158,7 +158,7 @@
 			<button
 				onclick={refreshData}
 				disabled={isLoading}
-				class="flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-200 transition-all hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
+				class="flex min-h-10 items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-200 transition-all hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
 			>
 				<RefreshCw size={14} class={isLoading ? 'animate-spin' : ''} />
 				Refresh
@@ -208,3 +208,9 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	:global(button) {
+		min-height: 40px;
+	}
+</style>
