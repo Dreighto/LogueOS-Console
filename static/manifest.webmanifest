@@ -1,10 +1,10 @@
 {
-	"id": "/console/",
+	"id": "./",
 	"name": "LogueOS Console",
 	"short_name": "LogueOS",
 	"description": "Operator-facing dashboard for the LogueOS dispatch loop. Mobile-first, real-time worker status.",
-	"start_url": "/console/",
-	"scope": "/console/",
+	"start_url": "./",
+	"scope": "./",
 	"display": "standalone",
 	"orientation": "portrait",
 	"background_color": "#0d1117",
@@ -12,31 +12,31 @@
 	"prefer_related_applications": false,
 	"icons": [
 		{
-			"src": "/console/apple-touch-icon.png",
+			"src": "./apple-touch-icon.png",
 			"sizes": "180x180",
 			"type": "image/png",
 			"purpose": "any"
 		},
 		{
-			"src": "/console/favicon.png",
+			"src": "./favicon.png",
 			"sizes": "192x192",
 			"type": "image/png",
 			"purpose": "any"
 		},
 		{
-			"src": "/console/icon-512.png",
+			"src": "./icon-512.png",
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "any"
 		},
 		{
-			"src": "/console/icon-512-maskable.png",
+			"src": "./icon-512-maskable.png",
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "maskable"
 		},
 		{
-			"src": "/console/los_logo.png",
+			"src": "./los_logo.png",
 			"sizes": "1024x1024",
 			"type": "image/png",
 			"purpose": "any"
