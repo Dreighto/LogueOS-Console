@@ -197,7 +197,18 @@
 						: ''}
 				</div>
 
-				<TriageCard suggestion={suggestions[currentIndex]} onDecision={handleDecision} />
+				<!--
+					{#key} on the suggestion id forces Svelte to teardown + remount
+					TriageCard whenever the prop's underlying row changes. Without
+					this, the component instance is reused across rows and its local
+					$state (isProcessing, isEditing, customLabel, detailsOpen) does
+					NOT reset — operator sees the buttons stuck disabled and the
+					page "doesn't advance" even though the server-side decision
+					actually persisted. LOS-247.
+				-->
+				{#key suggestions[currentIndex]?.suggestion?.id}
+					<TriageCard suggestion={suggestions[currentIndex]} onDecision={handleDecision} />
+				{/key}
 
 				<!-- Keyboard shortcuts hint -->
 				<div class="space-y-1 text-center text-xs text-zinc-600">
