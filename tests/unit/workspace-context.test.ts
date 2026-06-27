@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Unit tests for workspace_context helpers — the Projects-light borrow.
 // Uses an isolated in-process SQLite DB via the serverConfig.memoryDbPath
 // override so the real chat_state.db is not touched.
