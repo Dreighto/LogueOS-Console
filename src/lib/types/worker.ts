@@ -21,6 +21,10 @@ export interface ActiveJob {
 	/** Live progress step, enriched from the heartbeat log. */
 	step?: string;
 	last_file_written?: string;
+	/** PG control-plane state — enriched from dispatch listener /fleet when available. */
+	state?: string;
+	state_since?: string;
+	health?: string;
 }
 
 /** A non-clean last exit for a worker with no active job — surfaced as a note. */

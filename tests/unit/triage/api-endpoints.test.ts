@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Real-sqlite tests for the judgment triage server lib + HTTP handlers.
  *

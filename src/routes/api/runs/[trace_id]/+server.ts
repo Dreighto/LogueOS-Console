@@ -1,12 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { serverConfig } from '$lib/server/config';
+import { fetchFleet, fetchRunTransitions } from '$lib/server/dispatch-listener';
 import fs from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { deriveWorkerFromTraceId } from '$lib/utils/format';
 import type { Run } from '$lib/types/run';
 import { coerceRunStatus } from '$lib/types/run';
+
+const DIAGNOSTIC_TAIL_LINES = 50;
 
 // Per-spec trace_id format: prefix-shape worker tags + hex hashes. Allowing
 // alphanumeric + hyphen + underscore. 6-char floor rules out trivially-short
@@ -96,5 +99,29 @@ export const GET: RequestHandler = async ({ params }) => {
 	if (match === null) {
 		return json({ error: 'run_not_found', trace_id }, { status: 404 });
 	}
-	return json({ run: match });
+
+	// Enrich with live PG state from /fleet and transition history.
+	// Both degrade gracefully — fleet miss leaves run as-is; transitions miss yields [].
+	const [fleet, transitions] = await Promise.all([fetchFleet(), fetchRunTransitions(trace_id)]);
+	const fleetRun = fleet.runs.find((r) => r.trace_id === trace_id);
+	if (fleetRun) {
+		match.state = fleetRun.state;
+		match.state_since = fleetRun.state_since;
+		match.health = fleetRun.health;
+	}
+
+	// diagnostic_tail: last N lines of the worker's stdout log for this trace.
+	let diagnostic_tail = '';
+	const stdoutLog = path.join(serverConfig.traceLogDir, `${trace_id}.stdout.log`);
+	if (fs.existsSync(stdoutLog)) {
+		try {
+			const raw = fs.readFileSync(stdoutLog, 'utf-8');
+			const lines = raw.split('\n').filter((l) => l.trim());
+			diagnostic_tail = lines.slice(-DIAGNOSTIC_TAIL_LINES).join('\n');
+		} catch {
+			// non-fatal — leave as empty string
+		}
+	}
+
+	return json({ run: match, transitions, diagnostic_tail });
 };
