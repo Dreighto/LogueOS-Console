@@ -10,6 +10,32 @@
 import crypto from 'node:crypto';
 import { serverConfig } from './config';
 
+// Shape of one run entry from the listener's GET /fleet.
+export interface FleetRun {
+	trace_id: string;
+	ticket_id: string | null;
+	worker: string | null;
+	target_repo: string | null;
+	state: string;
+	state_since: string;
+	seconds_in_state: number;
+	branch: string | null;
+	health: string;
+}
+
+export interface FleetResponse {
+	status: string;
+	mode?: string;
+	runs: FleetRun[];
+}
+
+export interface RunTransition {
+	state: string;
+	entered_at: string;
+	exited_at: string | null;
+	note: string | null;
+}
+
 export interface ListenerKillResponse {
 	ok: boolean;
 	killed_pid: number | null;
@@ -45,11 +71,9 @@ async function readBody(resp: Response): Promise<unknown> {
 export async function killWorker(traceId: string): Promise<ListenerKillResponse> {
 	const secret = serverConfig.dispatchListenerHmacSecret;
 	if (!secret) {
-		throw new DispatchListenerError(
-			'dispatch_listener_hmac_secret_not_configured',
-			500,
-			{ hint: 'Set LOGUEOS_LISTENER_HMAC_SECRET or W4_LISTENER_HMAC_SECRET in Console env to match the listener.' }
-		);
+		throw new DispatchListenerError('dispatch_listener_hmac_secret_not_configured', 500, {
+			hint: 'Set LOGUEOS_LISTENER_HMAC_SECRET or W4_LISTENER_HMAC_SECRET in Console env to match the listener.'
+		});
 	}
 
 	const url = `${serverConfig.dispatchListenerUrl.replace(/\/+$/, '')}/kill`;
@@ -69,11 +93,10 @@ export async function killWorker(traceId: string): Promise<ListenerKillResponse>
 	} catch (e) {
 		// Network failure — listener may be down. Surface as 502 to the
 		// caller; the API handler decides how to present this to the UI.
-		throw new DispatchListenerError(
-			'dispatch_listener_unreachable',
-			502,
-			{ url, cause: e instanceof Error ? e.message : String(e) }
-		);
+		throw new DispatchListenerError('dispatch_listener_unreachable', 502, {
+			url,
+			cause: e instanceof Error ? e.message : String(e)
+		});
 	}
 
 	const parsedBody = await readBody(resp);
@@ -89,4 +112,43 @@ export async function killWorker(traceId: string): Promise<ListenerKillResponse>
 	// both sides. If the listener changes the shape, the listener's tests
 	// catch it before it ships.
 	return parsedBody as ListenerKillResponse;
+}
+
+// GET /fleet — no auth required (read-only, localhost-only endpoint).
+// Returns an empty run list on any failure so callers can degrade cleanly.
+export async function fetchFleet(): Promise<FleetResponse> {
+	const url = `${serverConfig.dispatchListenerUrl.replace(/\/+$/, '')}/fleet`;
+	try {
+		const resp = await fetch(url, {
+			headers: { Accept: 'application/json' },
+			signal: AbortSignal.timeout(3000)
+		});
+		if (!resp.ok) return { status: 'error', runs: [] };
+		const data = (await resp.json()) as FleetResponse;
+		return {
+			status: data.status ?? 'ok',
+			mode: data.mode,
+			runs: Array.isArray(data.runs) ? data.runs : []
+		};
+	} catch {
+		return { status: 'unreachable', runs: [] };
+	}
+}
+
+// GET /runs/:traceId/transitions — may not yet be HTTP-exposed by the listener
+// (LOS-252 added getTransitionHistory server-side; the HTTP route is a dependency
+// tracked as a kernel-side follow-up). Degrades to [] on 404 or network failure.
+export async function fetchRunTransitions(traceId: string): Promise<RunTransition[]> {
+	const url = `${serverConfig.dispatchListenerUrl.replace(/\/+$/, '')}/runs/${encodeURIComponent(traceId)}/transitions`;
+	try {
+		const resp = await fetch(url, {
+			headers: { Accept: 'application/json' },
+			signal: AbortSignal.timeout(3000)
+		});
+		if (!resp.ok) return [];
+		const data = (await resp.json()) as { transitions?: RunTransition[] };
+		return Array.isArray(data.transitions) ? data.transitions : [];
+	} catch {
+		return [];
+	}
 }

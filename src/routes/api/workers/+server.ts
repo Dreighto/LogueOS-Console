@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { serverConfig } from '$lib/server/config';
 import type { ActiveJob, WorkerNote, Lane } from '$lib/types/worker';
 import { getDispatchWorkers, resolveWorker } from '$lib/config/workers';
+import { fetchFleet } from '$lib/server/dispatch-listener';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -31,6 +32,10 @@ export const GET: RequestHandler = async () => {
 	const jobs: ActiveJob[] = [];
 	const notes: WorkerNote[] = [];
 
+	// Fetch fleet state upfront so we can enrich jobs below. Fails gracefully.
+	const fleet = await fetchFleet();
+	const fleetByTrace = new Map(fleet.runs.map((r) => [r.trace_id, r]));
+
 	try {
 		// 1. Active leases — ONE job per non-null slot. The file is keyed by slot,
 		//    so concurrent leases for the same worker are all preserved. The old
@@ -51,14 +56,18 @@ export const GET: RequestHandler = async () => {
 				// lands, fall back to the worker's home role.
 				const lane: Lane =
 					lease.lane === 'frontend' || lease.lane === 'backend' ? lease.lane : (def.role as Lane);
+				const fleetRun = lease.trace_id ? fleetByTrace.get(lease.trace_id) : undefined;
 				jobs.push({
 					slot: slotPath.split(/[\\/]/).slice(-2).join('/'),
 					trace_id: lease.trace_id,
 					worker_id: def.id,
 					lane,
 					ticket_id: lease.ticket_id,
-					branch: lease.branch,
-					since: lease.leased_at
+					branch: lease.branch ?? fleetRun?.branch ?? undefined,
+					since: lease.leased_at,
+					state: fleetRun?.state,
+					state_since: fleetRun?.state_since,
+					health: fleetRun?.health
 				});
 			}
 		}
