@@ -83,7 +83,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					? `Dispatch timed out after ${GATEWAY_TIMEOUT_MS}ms`
 					: `Dispatch failed: ${String(err)}`
 			},
-			{ status: 504 }
+			{ status: isAbort ? 504 : 502 }
 		);
 	}
 
