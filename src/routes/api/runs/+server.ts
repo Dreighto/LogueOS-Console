@@ -20,7 +20,9 @@ function parseRun(comp: any): Run {
 		pr_number: comp.pr_number ?? null,
 		branch: comp.branch || null,
 		files_touched: comp.files_touched || [],
-		project_id: comp.project_id || null
+		project_id: comp.project_id || null,
+		synthetic: comp.synthetic === true,
+		synthetic_reason: comp.synthetic_reason ?? null
 	};
 }
 
