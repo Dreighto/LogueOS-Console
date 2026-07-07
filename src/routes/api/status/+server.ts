@@ -4,6 +4,7 @@ import { resolve } from '$app/paths';
 import { getTodayShipments, type Shipment } from '$lib/server/shipments';
 import { getDispatchWorkers } from '$lib/config/workers';
 import type { ActiveJob } from '$lib/types/worker';
+import { realFailures, realReviews } from '$lib/utils/runNoise';
 
 interface WorkerState {
 	id: string;
@@ -16,6 +17,7 @@ interface WorkerState {
 
 interface Run {
 	timestamp: string;
+	synthetic?: boolean;
 	ticket_id: string | null;
 	status: string;
 	summary: string;
@@ -85,17 +87,18 @@ export const GET: RequestHandler = async ({ fetch }) => {
 		const allRuns: Run[] = runsData.runs || [];
 		const roster = rosterFromJobs(workersData.jobs || []);
 
+		const failures = realFailures(allRuns);
+		const reviews = realReviews(allRuns);
+
 		const status: StatusBoardData = {
 			killSwitch: { active: kill.active === true },
 			failures: {
-				count: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').length,
-				items: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').slice(0, 3)
+				count: failures.length,
+				items: failures.slice(0, 3)
 			},
 			reviews: {
-				count: allRuns.filter((r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown').length,
-				items: allRuns
-					.filter((r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown')
-					.slice(0, 3)
+				count: reviews.length,
+				items: reviews.slice(0, 3)
 			},
 			workers: {
 				active: roster.filter((w) => w.state === 'busy').length,

@@ -38,6 +38,9 @@ export interface Run {
 	// (legacy rows pre-agnosticism), the UI degrades to plain text instead of
 	// guessing a default that could misroute the link.
 	project_id: string | null;
+	/** True for spawn.js bookkeeping backfills — not a real run outcome. */
+	synthetic?: boolean;
+	synthetic_reason?: string | null;
 	/** PG control-plane state — present when enriched from dispatch listener /fleet. */
 	state?: string;
 	state_since?: string;
