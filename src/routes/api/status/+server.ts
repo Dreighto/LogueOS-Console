@@ -85,11 +85,23 @@ export const GET: RequestHandler = async ({ fetch }) => {
 		const allRuns: Run[] = runsData.runs || [];
 		const roster = rosterFromJobs(workersData.jobs || []);
 
+		// A clean-exit synthetic backfill is bookkeeping (spawn.js writes it when
+		// a session ends cleanly but no ticket_id is parseable from the trace —
+		// interactive CC sessions, probes, ad-hoc voice runs). Counting those as
+		// "agents stuck" put a false red alarm on the Sully Ops board (38 phantom
+		// failures on 2026-07-07). Timeout backfills stay visible — a worker that
+		// died mid-run is a real signal even without a ticket.
+		const isBookkeepingNoise = (r: Run) =>
+			(r.summary || '').includes('synthetic backfill, reason=exit_clean') && !r.ticket_id;
+		const realFailures = allRuns.filter(
+			(r) => (r.status === 'FAILED' || r.status === 'ESCALATE') && !isBookkeepingNoise(r)
+		);
+
 		const status: StatusBoardData = {
 			killSwitch: { active: kill.active === true },
 			failures: {
-				count: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').length,
-				items: allRuns.filter((r) => r.status === 'FAILED' || r.status === 'ESCALATE').slice(0, 3)
+				count: realFailures.length,
+				items: realFailures.slice(0, 3)
 			},
 			reviews: {
 				count: allRuns.filter((r) => r.status === 'INCONCLUSIVE' || r.status === 'unknown').length,
