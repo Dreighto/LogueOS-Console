@@ -15,10 +15,17 @@ export interface NoiseCheckableRun {
 	status: string;
 	summary: string;
 	synthetic?: boolean;
+	synthetic_reason?: string | null;
 }
 
 export function isBookkeepingNoise(run: NoiseCheckableRun): boolean {
-	return run.synthetic === true && run.summary.includes('reason=exit_clean');
+	if (run.synthetic !== true) return false;
+	// Kernel silent-death sweeper rows record that a sibling worker's
+	// heartbeat vanished — kernel bookkeeping, not a task awaiting operator
+	// review. A backfill flooded the last-50 window with these and put a
+	// false "48 tasks are waiting for you" on the Sully Ops board (2026-07-09).
+	if (run.synthetic_reason === 'untracked_silent_death') return true;
+	return run.summary.includes('reason=exit_clean');
 }
 
 /** FAILED/ESCALATE runs that represent real failures (noise stripped). */
