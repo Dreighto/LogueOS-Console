@@ -8,7 +8,7 @@ session rather than a headless dispatch).
 
 It is a thin repo overlay. The interactive-session rules, ticket/PR authority, close-out
 protocol, and boot context all live in the global skill `~/.gemini/skills/interactive-co-working.md`
-and in `D:\dev\LogueOS-Orchestrator\.logueos\overlays\workflow-interactive.md`. Don't
+and in `~/dev/LogueOS-Orchestrator/.logueos/overlays/workflow-interactive.md`. Don't
 duplicate them here.
 
 ---
@@ -17,16 +17,18 @@ duplicate them here.
 
 `Dreighto/LogueOS-Console` — the operator's mobile-first PWA console for the LogueOS
 multi-agent system: worker cards, kill switch, usage tracker, Team Memory feed,
-state-handoff-log viewer. SvelteKit. Local checkout `D:\dev\LogueOS-Console`.
+state-handoff-log viewer. SvelteKit. Local checkout `~/dev/LogueOS-Console`.
 
 ## MCP servers in this workspace
 
 `.gemini/settings.json` here wires the audited `logueos-gateway` (sole writes path: git /
-Linear / docs / Notion, gated per the `X-LogueOS-Tool-Profile` header set at spawn time)
+Linear / docs, gated per the `X-LogueOS-Tool-Profile` header set at spawn time)
 plus the frontend toolkit (`svelte`, `shadcn-svelte`, `lucide-icons`, `vitest`, `playwright`)
 and `sequential-thinking`. Interactive sessions launched via the operator's `gmi` shorthand
 already carry the full toolkit from the global config; this workspace config is what makes
-the frontend toolkit available to dispatched workers landing in a worktree here.
+the frontend toolkit available to dispatched workers landing in a worktree here. Notion is
+retired as of 2026-07-12 and is no longer a write target — repo canon is the sole source of
+truth.
 
 ## Frontend craft
 
@@ -42,7 +44,7 @@ When touching Console UI:
   - Use coordinated `fly` and `fade` transitions for page transitions in `+layout.svelte`.
   - Prefer tactile micro-interactions (e.g., `active:scale-95`, `hover:scale-[1.01]`) for
     navigational and interactive elements.
-  - Use the unified `Drawer.svelte` for detail views and `ToastContainer.svelte` for 
+  - Use the unified `Drawer.svelte` for detail views and `ToastContainer.svelte` for
     ephemeral system notifications.
   - Animate state transitions (e.g., Idle ↔ Busy) to maintain spatial awareness.
 - Prefer SSR (`+page.server.ts` load functions) over client-side fetch-on-mount where it
@@ -54,12 +56,12 @@ When touching Console UI:
 
 To prevent "stale code" and 500 errors, every worker must perform the following steps after a merge to the `main` branch:
 
-1.  **Rebuild:** Run `npm run build` in `D:\dev\LogueOS-Console`.
-2.  **Restart Services:** Restart the Console server (port 18080) and the Dispatch Listener (port 19100). If PM2 is available, use `pm2 restart all`. If not, manually kill and restart the processes via the provided windows startup scripts (e.g., `startup_all.ps1`).
-3.  **Verify:** Perform a manual health check (`curl http://127.0.0.1:18080/console/`) to ensure the new build is live and responding correctly.
+1.  **Rebuild:** Run `npm run build` in `~/dev/LogueOS-Console`.
+2.  **Restart Services:** `sudo systemctl restart logueos-console.service logueos-dispatch-listener.service` (systemd-managed since the 2026-05-25 Linux migration; no pm2, no Windows startup scripts).
+3.  **Verify:** Perform a manual health check (`curl http://127.0.0.1:18767/console/`) to ensure the new build is live and responding correctly.
 
 ## Repo boundary
 
-Working on other repos under `D:\dev` from an interactive session is fine (you launched at
+Working on other repos under `~/dev` from an interactive session is fine (you launched at
 the umbrella). A headless worker dispatched into a Console worktree stays in that worktree —
 if a task requires leaving it, stop and report.
