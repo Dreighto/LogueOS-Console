@@ -1,7 +1,9 @@
 # Gemini CLI — LogueOS-Console Repo Overlay
 
 This file applies when a Gemini session's working directory is inside the LogueOS-Console
-repo (or one of its `LogueOS-Console-w*` worktrees) — most often a dispatch_listener worker
+repo (or one of its pool worktrees, `~/dev/worktrees/LogueOS-Console/w1` and `w2`, parking
+branches `_parking_LogueOS-Console-w<n>`; corrected 2026-07-21, the old `LogueOS-Console-w*`
+sibling naming is retired) — most often a dispatch_listener worker
 spawned in to do Console UI work. It layers on top of the global Gemini foundations in
 `~/.gemini/skills/` (including the interactive co-working protocol, if this is an interactive
 session rather than a headless dispatch).
@@ -57,7 +59,7 @@ When touching Console UI:
 To prevent "stale code" and 500 errors, every worker must perform the following steps after a merge to the `main` branch:
 
 1.  **Rebuild:** Run `npm run build` in `~/dev/LogueOS-Console`.
-2.  **Restart Services:** `sudo systemctl restart logueos-console.service logueos-dispatch-listener.service` (systemd-managed since the 2026-05-25 Linux migration; no pm2, no Windows startup scripts).
+2.  **Restart Services:** `sudo systemctl restart logueos-console.service` (systemd-managed since the 2026-05-25 Linux migration; no pm2, no Windows startup scripts). The `logueos-dispatch-listener.service` restart was removed here deliberately (2026-07-21): the listener is unrelated to a Console deploy and restarting it kills any in-flight dispatch.
 3.  **Verify:** Perform a manual health check (`curl http://127.0.0.1:18767/console/`) to ensure the new build is live and responding correctly.
 
 ## Repo boundary
