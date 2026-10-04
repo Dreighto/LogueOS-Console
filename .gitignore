@@ -75,3 +75,4 @@ logs/
 .tmp-*/
 .venv-tools/
 *.bak.pre-linux
+.serena/
