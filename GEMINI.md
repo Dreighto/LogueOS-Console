@@ -1,3 +1,9 @@
+> **RETIRED PROJECT.** The operator retired LogueOS-Console (2026-07); Sully
+> is the operator interface now. `logueos-console.service` no longer exists
+> and port 18767 has no listener -- the Post-Ship Protocol below is historical
+> and must not be executed. Verify: `systemctl is-active logueos-console.service`.
+> (Banner added 2026-08-25.)
+
 # Gemini CLI — LogueOS-Console Repo Overlay
 
 This file applies when a Gemini session's working directory is inside the LogueOS-Console
