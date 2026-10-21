@@ -40,6 +40,14 @@ export default defineConfig({
 			name: 'chromium',
 			use: { ...devices['Desktop Chrome'] }
 		},
+		// Always-on mobile viewport project (Chromium engine, so it runs in CI
+		// with no extra browser install — unlike iphone-webkit below). Covers
+		// mobile-first surfaces like /mobile-dashboard at a real phone
+		// viewport/DPR/touch profile, not just a shrunk desktop window.
+		{
+			name: 'mobile-chromium',
+			use: { ...devices['Pixel 7'] }
+		},
 		// Opt-in only (PW_IPHONE=1) — see INCLUDE_IPHONE above. Desktop WebKit on
 		// Linux catches engine-level issues; it is NOT iOS Mobile Safari. For real
 		// iOS behaviour (URL-bar resize, input-zoom), verify on the iPhone over
