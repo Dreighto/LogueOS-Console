@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LogueOS Worker Icon Set — Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #050505;
+      --surface:    #111111;
+      --surface-2:  #18181b;
+      --border:     #27272a;
+      --text:       #ffffff;
+      --muted:      #8b949e;
+      --cc:         #D97757;
+      --agy:        #AD89EB;
+      --cta:        #a3e635;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', ui-sans-serif, sans-serif;
+      min-height: 100vh;
+      padding: 48px 32px;
+    }
+
+    /* ── Layout ── */
+    .page { max-width: 960px; margin: 0 auto; }
+
+    header {
+      margin-bottom: 56px;
+    }
+    header .eyebrow {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--cta);
+      margin-bottom: 12px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header p {
+      margin-top: 10px;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    section { margin-bottom: 56px; }
+    section > .section-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Worker hero cards ── */
+    .worker-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 600px) { .worker-grid { grid-template-columns: 1fr; } }
+
+    .worker-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .worker-card.cc  { border-color: #D9775722; background: linear-gradient(145deg, #1a0e0a, #111111); }
+    .worker-card.agy { border-color: #AD89EB22; background: linear-gradient(145deg, #110e1a, #111111); }
+
+    .worker-icon-hero { width: 96px; height: 96px; }
+
+    .worker-meta .name {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .worker-meta .role {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-family: 'IBM Plex Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .worker-meta .model {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .color-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      width: fit-content;
+    }
+    .color-chip .swatch {
+      width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── Size scale ── */
+    .size-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .size-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .size-cell img, .size-cell svg { display: block; }
+    .size-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* ── Badge variants ── */
+    .badge-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'IBM Plex Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+    }
+    .badge img { border-radius: 3px; }
+    .badge.cc-solid  { background: #D9775722; color: #D97757; border: 1px solid #D9775740; }
+    .badge.agy-solid { background: #AD89EB22; color: #AD89EB; border: 1px solid #AD89EB40; }
+    .badge.cc-ghost  { background: transparent; color: #D97757; border: 1px solid #D9775750; }
+    .badge.agy-ghost { background: transparent; color: #AD89EB; border: 1px solid #AD89EB50; }
+
+    /* ── Avatar circle variants ── */
+    .avatar-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .avatar {
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .avatar img { display: block; width: 100%; height: 100%; }
+
+    /* ── Run card context ── */
+    .mock-run-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 360px;
+    }
+    .mock-run-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mock-status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .mock-ticket {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .mock-summary {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .mock-meta {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+    }
+    .mock-meta span::before { content: '· '; }
+    .mock-meta span:first-child::before { content: ''; }
+
+    .run-cards-row { display: flex; gap: 20px; flex-wrap: wrap; }
+
+    /* ── Dispatch UI context ── */
+    .dispatch-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      max-width: 320px;
+    }
+    .dispatch-item.active-cc  { border-color: #D9775730; }
+    .dispatch-item.active-agy { border-color: #AD89EB30; }
+    .dispatch-info { flex: 1; min-width: 0; }
+    .dispatch-info .d-name { font-size: 13px; font-weight: 500; }
+    .dispatch-info .d-status {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      margin-top: 2px;
+    }
+    .dispatch-live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .dispatch-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* ── Inline SVG icons ── */
+    .icon-cc-svg, .icon-agy-svg { display: block; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">LogueOS Console · Icon System</p>
+    <h1>Worker Icon Set — Mockup</h1>
+    <p>Proposed icons for Claude Code (CC) and Antigravity/Gemini (AGY) workers.<br>
+       These live in <code style="font-family: monospace; color: var(--cta);">static/worker-icons/</code> as standalone SVGs.</p>
+  </header>
+
+  <!-- ── 01 · Worker overview ── -->
+  <section>
+    <p class="section-label">01 · Worker overview</p>
+    <div class="worker-grid">
+
+      <!-- CC card -->
+      <div class="worker-card cc">
+        <img class="worker-icon-hero" src="worker-icons/claude-code.svg" alt="Claude Code icon">
+        <div class="worker-meta">
+          <div class="name" style="color: var(--cc);">Claude Code</div>
+          <div class="role">Backend · Slot backend-1</div>
+          <div class="model">Claude Opus 4.7 · dispatch: claude-code</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: #D97757;"></div>
+          <span style="color: #D97757;">#D97757</span>
+          <span style="color: var(--muted);">— Terracotta</span>
+        </div>
+      </div>
+
+      <!-- AGY card -->
+      <div class="worker-card agy">
+        <img class="worker-icon-hero" src="worker-icons/antigravity.svg" alt="Antigravity icon">
+        <div class="worker-meta">
+          <div class="name" style="color: var(--agy);">Antigravity</div>
+          <div class="role">Frontend · Slot frontend-1</div>
+          <div class="model">Gemini · dispatch: gemini / agy</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: #AD89EB;"></div>
+          <span style="color: #AD89EB;">#AD89EB</span>
+          <span style="color: var(--muted);">— Lavender</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 02 · Size scale ── -->
+  <section>
+    <p class="section-label">02 · Size scale</p>
+
+    <p style="font-size: 12px; color: var(--muted); margin-bottom: 20px;">Claude Code</p>
+    <div class="size-row" style="margin-bottom: 32px;">
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="128" height="128" alt="">
+        <span class="size-label">128 px<br>hero</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="64" height="64" alt="">
+        <span class="size-label">64 px<br>card</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="48" height="48" alt="">
+        <span class="size-label">48 px<br>list</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="32" height="32" alt="">
+        <span class="size-label">32 px<br>badge</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="24" height="24" alt="">
+        <span class="size-label">24 px<br>dense</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/claude-code.svg" width="16" height="16" alt="">
+        <span class="size-label">16 px<br>micro</span>
+      </div>
+    </div>
+
+    <p style="font-size: 12px; color: var(--muted); margin-bottom: 20px;">Antigravity</p>
+    <div class="size-row">
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="128" height="128" alt="">
+        <span class="size-label">128 px<br>hero</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="64" height="64" alt="">
+        <span class="size-label">64 px<br>card</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="48" height="48" alt="">
+        <span class="size-label">48 px<br>list</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="32" height="32" alt="">
+        <span class="size-label">32 px<br>badge</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="24" height="24" alt="">
+        <span class="size-label">24 px<br>dense</span>
+      </div>
+      <div class="size-cell">
+        <img src="worker-icons/antigravity.svg" width="16" height="16" alt="">
+        <span class="size-label">16 px<br>micro</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 03 · Avatar (circle crop) ── -->
+  <section>
+    <p class="section-label">03 · Avatar — circle crop</p>
+    <div class="avatar-row">
+      <div class="avatar" style="width: 64px; height: 64px;">
+        <img src="worker-icons/claude-code.svg" alt="CC">
+      </div>
+      <div class="avatar" style="width: 48px; height: 48px;">
+        <img src="worker-icons/claude-code.svg" alt="CC">
+      </div>
+      <div class="avatar" style="width: 36px; height: 36px;">
+        <img src="worker-icons/claude-code.svg" alt="CC">
+      </div>
+      <div class="avatar" style="width: 28px; height: 28px;">
+        <img src="worker-icons/claude-code.svg" alt="CC">
+      </div>
+
+      <div style="width: 1px; height: 48px; background: var(--border); margin: 0 8px;"></div>
+
+      <div class="avatar" style="width: 64px; height: 64px;">
+        <img src="worker-icons/antigravity.svg" alt="AGY">
+      </div>
+      <div class="avatar" style="width: 48px; height: 48px;">
+        <img src="worker-icons/antigravity.svg" alt="AGY">
+      </div>
+      <div class="avatar" style="width: 36px; height: 36px;">
+        <img src="worker-icons/antigravity.svg" alt="AGY">
+      </div>
+      <div class="avatar" style="width: 28px; height: 28px;">
+        <img src="worker-icons/antigravity.svg" alt="AGY">
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 04 · Badge variants ── -->
+  <section>
+    <p class="section-label">04 · Badge variants</p>
+    <div class="badge-row">
+      <div class="badge cc-solid">
+        <img src="worker-icons/claude-code.svg" width="14" height="14" alt="">
+        Claude Code
+      </div>
+      <div class="badge cc-solid">
+        <img src="worker-icons/claude-code.svg" width="14" height="14" alt="">
+        CC
+      </div>
+      <div class="badge cc-ghost">CC</div>
+
+      <div style="width: 1px; height: 24px; background: var(--border);"></div>
+
+      <div class="badge agy-solid">
+        <img src="worker-icons/antigravity.svg" width="14" height="14" alt="">
+        Antigravity
+      </div>
+      <div class="badge agy-solid">
+        <img src="worker-icons/antigravity.svg" width="14" height="14" alt="">
+        AGY
+      </div>
+      <div class="badge agy-ghost">AGY</div>
+    </div>
+  </section>
+
+  <!-- ── 05 · Run cards in context ── -->
+  <section>
+    <p class="section-label">05 · Run cards — usage in context</p>
+    <div class="run-cards-row">
+
+      <!-- CC run card -->
+      <div class="mock-run-card">
+        <div class="mock-run-card-header">
+          <div class="badge cc-solid" style="gap: 6px;">
+            <img src="worker-icons/claude-code.svg" width="14" height="14" alt="">
+            Claude Code
+          </div>
+          <div class="mock-status-dot" style="background: #22c55e;"></div>
+        </div>
+        <div>
+          <div class="mock-ticket">LOS-114</div>
+          <div class="mock-summary" style="margin-top: 4px;">
+            Refactor worker registry to support multi-slot dispatch with lease management.
+          </div>
+        </div>
+        <div class="mock-meta">
+          <span>cc-LOS-114-a3f2</span>
+          <span>2m ago</span>
+          <span>PR #109</span>
+        </div>
+      </div>
+
+      <!-- AGY run card -->
+      <div class="mock-run-card">
+        <div class="mock-run-card-header">
+          <div class="badge agy-solid" style="gap: 6px;">
+            <img src="worker-icons/antigravity.svg" width="14" height="14" alt="">
+            Antigravity
+          </div>
+          <div class="mock-status-dot" style="background: #f59e0b;"></div>
+        </div>
+        <div>
+          <div class="mock-ticket">LOS-115</div>
+          <div class="mock-summary" style="margin-top: 4px;">
+            Redesign DispatchCenter worker lane cards with new icon set and status animations.
+          </div>
+        </div>
+        <div class="mock-meta">
+          <span>gmi-LOS-115-b7e1</span>
+          <span>just now</span>
+          <span>running</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 06 · Dispatch roster ── -->
+  <section>
+    <p class="section-label">06 · Dispatch roster — online indicator</p>
+    <div class="dispatch-row">
+
+      <div class="dispatch-item active-cc">
+        <img src="worker-icons/claude-code.svg" width="40" height="40" alt="CC">
+        <div class="dispatch-info">
+          <div class="d-name">Claude Code</div>
+          <div class="d-status">backend · w1 available</div>
+        </div>
+        <div class="dispatch-live-dot" style="background: #22c55e;"></div>
+      </div>
+
+      <div class="dispatch-item active-agy">
+        <img src="worker-icons/antigravity.svg" width="40" height="40" alt="AGY">
+        <div class="dispatch-info">
+          <div class="d-name">Antigravity</div>
+          <div class="d-status">frontend · LOS-115 running</div>
+        </div>
+        <div class="dispatch-live-dot" style="background: #f59e0b;"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 07 · Light-surface test ── -->
+  <section>
+    <p class="section-label">07 · Light surface test (console panels, hover)</p>
+    <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; display: flex; gap: 32px; align-items: center; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <img src="worker-icons/claude-code.svg" width="48" height="48" alt="CC">
+        <div>
+          <div style="font-size: 14px; font-weight: 500;">Claude Code</div>
+          <div style="font-size: 11px; color: var(--muted); font-family: monospace;">claude-code · backend-1</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <img src="worker-icons/antigravity.svg" width="48" height="48" alt="AGY">
+        <div>
+          <div style="font-size: 14px; font-weight: 500;">Antigravity</div>
+          <div style="font-size: 11px; color: var(--muted); font-family: monospace;">gemini · frontend-1</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <footer style="font-size: 12px; color: var(--muted); font-family: monospace; text-align: center; padding-bottom: 32px;">
+    LogueOS-Console · Icon Mockup · CC build · static/worker-icons/
+  </footer>
+
+</div>
+</body>
+</html>
