@@ -188,6 +188,14 @@
 				>System</span
 			>
 			<div class="h-3 w-px bg-border"></div>
+			<a
+				href={resolve('/orchestration')}
+				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
+				class:text-cta={page.url.pathname.endsWith('/orchestration')}
+			>
+				<Network size={10} />
+				Orchestration
+			</a>
 			<button
 				class="active-trigger flex items-center gap-1 rounded px-2 py-1 font-mono text-[10px] font-bold tracking-widest text-foreground uppercase transition-colors hover:bg-white/5"
 			>
